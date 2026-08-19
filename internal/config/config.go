@@ -45,6 +45,15 @@ type Config struct {
 		MaxEvents   int
 		TestCommand string
 	}
+	Ask struct {
+		// Route is how a question from the explore UI gets answered:
+		// "tmux" hands it to an agent session already running in a pane,
+		// "api" calls the synthesis provider, "context-only" answers with the
+		// assembled evidence and nothing else.
+		Route      string
+		TmuxTarget string
+		TimeoutSec int
+	}
 }
 
 func Default(root string) *Config {
@@ -68,6 +77,8 @@ func Default(root string) *Config {
 	c.Synthesis.MaxDiff = 120000
 	c.Trace.Enabled = true
 	c.Trace.MaxEvents = 200000
+	c.Ask.Route = "tmux"
+	c.Ask.TimeoutSec = 300
 	return c
 }
 
@@ -144,6 +155,9 @@ func (c *Config) apply(d Doc) {
 	bl("trace.enabled", &c.Trace.Enabled)
 	inum("trace.max_events", &c.Trace.MaxEvents)
 	str("trace.test_command", &c.Trace.TestCommand)
+	str("ask.route", &c.Ask.Route)
+	str("ask.tmux_target", &c.Ask.TmuxTarget)
+	inum("ask.timeout_seconds", &c.Ask.TimeoutSec)
 	if c.Trace.TestCommand == "" {
 		c.Trace.TestCommand = c.Repo.TestCommand
 	}
@@ -233,4 +247,14 @@ model    = "claude-sonnet-5"
 [trace]
 enabled    = true
 max_events = 200000
+
+[ask]
+# How a question asked in plum explore gets answered.
+#   tmux         hand it to the agent session already running in a pane
+#   api          call the synthesis provider directly (needs ANTHROPIC_API_KEY)
+#   context-only answer with the assembled evidence and nothing else
+route = "tmux"
+# Leave empty to auto-detect the pane; set "session:window.pane" to pin it.
+tmux_target     = ""
+timeout_seconds = 300
 `

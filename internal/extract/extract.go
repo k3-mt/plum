@@ -89,6 +89,7 @@ func (e *Extractor) Extract(ctx context.Context, sess bundle.Session, journal []
 	e.risks(b, states)
 	e.deps(ctx, b, sess)
 	e.divergence(ctx, b, states)
+	e.linkConfig(ctx, b, states)
 	e.coverage(b, states)
 	e.gate(b)
 	b.Sort()
@@ -305,8 +306,8 @@ func (e *Extractor) coverage(b *bundle.Bundle, states map[string]*fileState) {
 		if s.Change == "deleted" {
 			continue
 		}
-		if isTestFile(s.File) {
-			s.Tested = true // a test is not itself comprehension debt
+		if isTestFile(s.File) || s.Kind == "config_key" {
+			s.Tested = true // a test, or a setting: neither is comprehension debt of this kind
 			continue
 		}
 		b.Coverage.SymbolCount++

@@ -142,7 +142,7 @@ func deriveChain(events []Event, b *bundle.Bundle, pick Chain) Landscape {
 		if cost < 0 {
 			cost = 0
 		}
-		l.Barriers = append(l.Barriers, Barrier{
+		bar := Barrier{
 			FromIdx:   len(l.Wells) - 2,
 			ToIdx:     len(l.Wells) - 1,
 			Direction: dir,
@@ -150,8 +150,14 @@ func deriveChain(events []Event, b *bundle.Bundle, pick Chain) Landscape {
 			Frames:    frames,
 			Height:    logNorm(cost, minCost, maxCost),
 			Kind:      classify(b.Lookup(ev.Symbol), cost, dir),
-			Rationale: b.CallSiteComment(parent, ev.Symbol),
-		})
+		}
+		// A call-site comment explains why the call was made, so it belongs on
+		// the way in. Repeating it on the return would claim it explains the
+		// cost of coming back, which it does not.
+		if dir != "ascend" {
+			bar.Rationale = b.CallSiteComment(parent, ev.Symbol)
+		}
+		l.Barriers = append(l.Barriers, bar)
 	}
 
 	for i := 0; i < len(chain); i++ {

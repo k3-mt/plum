@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kelalaike/plum/internal/ask"
 	"github.com/kelalaike/plum/internal/bundle"
 	"github.com/kelalaike/plum/internal/claims"
 	"github.com/kelalaike/plum/internal/explore"
@@ -298,14 +299,36 @@ func cmdExplore(ctx context.Context, env *Env, args []string) error {
 	cs, _ := claims.Load(env.Store.ClaimsPath(id))
 	synthesis, _ := os.ReadFile(env.Store.SynthesisPath(id))
 
-	var p synth.Provider
-	if env.Cfg.Synthesis.Provider == "anthropic" {
+	opts := server.Config{
+		JournalDir: env.Cfg.Repo.JournalDir,
+		ClaimsPath: env.Store.ClaimsPath(id),
+	}
+	switch env.Cfg.Ask.Route {
+	case "tmux":
+		if ask.Available(ctx) {
+			opts.Ask = ask.NewStore(env.Cfg.Root)
+			opts.Bridge = &ask.Tmux{Target: env.Cfg.Ask.TmuxTarget}
+			target := env.Cfg.Ask.TmuxTarget
+			if target == "" {
+				if pane, err := ask.FindPane(ctx, env.Cfg.Root); err == nil {
+					target = pane.Target + " (" + pane.Command + ")"
+				} else {
+					target = "no agent pane found yet — " + err.Error()
+				}
+			}
+			fmt.Println("questions route to tmux:", target)
+		} else {
+			fmt.Println("tmux is not running; questions will return the assembled context only")
+		}
+	case "api", "anthropic":
 		if ap, err := synth.NewAnthropic(env.Cfg.Synthesis.Model); err == nil {
-			p = ap
+			opts.Provider = ap
+		} else {
+			fmt.Println("ask route is \"api\" but:", err)
 		}
 	}
 	tel := explore.NewStore(store.StateDir(env.Cfg.Root))
-	s := server.New(env.Cfg, b, l, events, cs, string(synthesis), tel, p)
+	s := server.New(env.Cfg, b, l, events, cs, string(synthesis), tel, opts)
 	return s.Serve(ctx, *addr, !*noOpen)
 }
 

@@ -56,6 +56,7 @@ plum range HEAD~3..HEAD             # any commit range, after the fact
 | `plum trace` | `traces/`, `landscape.json` | Only the changed symbols are instrumented, in a scratch copy. Your repo is never written to. |
 | `plum landscape` | terminal round trip | Descent is entering a call, ascent is returning, a panic is a cliff. |
 | `plum explore` | localhost UI | Click a frame, see its real recorded arguments, ask a question grounded in them. |
+| `plum ask` | grounded answer | Context assembled from the bundle, routed to your agent session. A question the evidence cannot answer is itself a finding. |
 | `plum quiz` | terminal Q&A | Every question comes from a recorded invocation. Misses accumulate in your state dir. |
 | `plum claims verify` | exit 1 on failure | A failing claim means the doc is wrong or the code is. Both worth knowing. |
 
@@ -88,11 +89,108 @@ plum gate || tmux display-popup -E -w 80% -h 80% "plum report"
 
 ## Languages
 
-Go is native (`go/ast`): exact symbols, signatures, docs, call-site comments,
-fingerprints, risk predicates, and full tracing. Python and TypeScript/JavaScript
-run on a line-based fallback adapter — useful for symbols, surface and comments,
-honest about what it cannot resolve — plus standalone trace shims under `shims/`.
-Swapping in tree-sitter-under-wazero is a drop-in behind `lang.Adapter`.
+| | Parsing | Tracing | Notes |
+|---|---|---|---|
+| **Go** | native `go/ast` | source-rewritten scratch copy | exact everything |
+| **Python** | the interpreter's own `ast` + `tokenize` | `sys.monitoring` shim | needs python3 on PATH; falls back to a line-based adapter without it |
+| **Config** | YAML, TOML, JSON, `.env`, INI | n/a — config is read, not executed | see below |
+| **TypeScript / JS** | line-based fallback | shim written, not yet wired | honest about what it cannot resolve |
+
+Python gets the same treatment Go does: exact signatures including defaults,
+keyword-only markers and annotations; docstrings; the comment above a call site;
+module-level state (but only when something can actually write it); mutable
+default arguments; `except: pass` however many lines it spans; and real recorded
+arguments and return values from `sys.monitoring`. The shim attaches through
+`sitecustomize.py` on `PYTHONPATH`, so pytest, unittest and plain scripts all
+work without knowing plum exists.
+
+## Configuration files are part of the code
+
+A YAML key is not code, but changing one changes behaviour exactly as surely as
+editing a function — and it does so invisibly, because no compiler and no test
+signature moves. So config keys become symbols with the same SymbolID shape as
+everything else:
+
+```
+config/app.yaml::server.timeout
+```
+
+which means they carry fingerprints, appear in the public-surface diff as
+**value changed**, can be claimed about, go stale, and — the part that matters —
+get linked to the code that reads them:
+
+```
+- modified `config/app.yaml::auth.AUTH_REALM` — `auth.AUTH_REALM = prod`
+    - comment: the suffix appended to every issued token
+    - read by `app/cache.py::Cache.decorate` (matched by env)
+```
+
+Three bindings are recognised, and each records how it was found so you can
+judge it: `env` (code reads an environment variable the config defines),
+`literal` (code contains a string equal to a key or its leaf), and `filename`
+(code opens the config file by name). The search runs over the whole tree at
+`EndSHA`, not over the diff — the code that reads a setting is almost never the
+code that changed in the same session. Settings with no reader anywhere are
+reported as such rather than quietly omitted.
+
+Config also carries its own risk predicates: hardcoded secrets (a `${VAR}`
+reference is the fix, not an instance), disabled verification, `0.0.0.0` binds,
+`timeout: 0`, debug left on. Secret *values* are redacted before they reach
+bundle.json — the key stays visible, the value does not.
+
+## Asking questions from the landscape
+
+Click a frame in `plum explore`, type a question, and it goes to the Claude Code
+session already running in a tmux pane:
+
+```
+browser ──ask──▶ plum ──writes .plum/ask/<id>.md──▶ tmux send-keys ──▶ Claude Code
+                                                                          │
+        browser ◀──polls /api/ask/<id>──── plum ◀── .plum/ask/<id>.answer.md
+```
+
+What travels with the question is the whole point. It is not a search result: it
+is the exact declaration text, the real recorded arguments and return values for
+that frame, its callers and callees, its risk markers, whatever rationale was
+journalled, and any claims about it — assembled mechanically from the bundle.
+The prompt tells the agent to answer only from that, and to say what is missing
+rather than guess.
+
+Configure the route in `.plum/config.toml`:
+
+```toml
+[ask]
+route           = "tmux"   # tmux | api | context-only
+tmux_target     = ""       # empty to auto-detect the agent pane
+timeout_seconds = 300
+```
+
+`tmux` needs no API key and uses the session you already have open. `api` calls
+the Anthropic API directly with `ANTHROPIC_API_KEY`. `context-only` returns the
+assembled evidence and nothing else — which is still useful, because it is
+exactly what a model would have been given.
+
+Same thing from a terminal or a tmux popup:
+
+```sh
+plum ask -symbol 'app/cache.py::Cache.get' "what does this return when the key is absent?"
+plum ask -pending                     # questions still waiting for an answer
+```
+
+### Keeping an answer
+
+An answer nobody keeps is a chat message. Three buttons appear under an answer,
+and each turns it into something durable:
+
+| Keep as | Writes | Why it survives |
+|---|---|---|
+| **rationale** | a journal entry against that file | appears in every future report — this is the P3 loss, recovered |
+| **a claim** | `claims.yaml`, fingerprinted at write time | goes stale automatically when the symbol changes (P5) |
+| **a comment** | `.plum/patches/<id>.diff` | a reviewable unified diff in that language's comment syntax |
+
+Source is never edited in place. The comment option writes a patch you read and
+then `git apply` — or delete. A tool that silently rewrites your code is a tool
+you stop trusting.
 
 ## Deviations from the spec, and why
 

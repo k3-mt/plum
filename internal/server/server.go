@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kelalaike/plum/internal/ask"
 	"github.com/kelalaike/plum/internal/bundle"
 	"github.com/kelalaike/plum/internal/claims"
 	"github.com/kelalaike/plum/internal/config"
@@ -29,22 +30,37 @@ import (
 var assets embed.FS
 
 type Server struct {
-	Cfg       *config.Config
-	Bundle    *bundle.Bundle
-	Landscape trace.Landscape
-	Events    []trace.Event
-	Claims    []claims.Claim
-	Synthesis string
-	Telemetry *explore.Store
-	Provider  synth.Provider
-	mux       *http.ServeMux
-	done      chan struct{}
+	Cfg        *config.Config
+	Bundle     *bundle.Bundle
+	Landscape  trace.Landscape
+	Events     []trace.Event
+	Claims     []claims.Claim
+	Synthesis  string
+	Telemetry  *explore.Store
+	Provider   synth.Provider
+	Ask        *ask.Store
+	Bridge     *ask.Tmux
+	JournalDir string
+	ClaimsPath string
+	mux        *http.ServeMux
+	done       chan struct{}
 }
 
-func New(cfg *config.Config, b *bundle.Bundle, l trace.Landscape, ev []trace.Event, cs []claims.Claim, synthesis string, tel *explore.Store, p synth.Provider) *Server {
+// Config bundles what the server needs beyond the session data itself.
+type Config struct {
+	Ask        *ask.Store
+	Bridge     *ask.Tmux
+	Provider   synth.Provider
+	JournalDir string
+	ClaimsPath string
+}
+
+func New(cfg *config.Config, b *bundle.Bundle, l trace.Landscape, ev []trace.Event, cs []claims.Claim, synthesis string, tel *explore.Store, opts Config) *Server {
 	s := &Server{
 		Cfg: cfg, Bundle: b, Landscape: l, Events: ev, Claims: cs,
-		Synthesis: synthesis, Telemetry: tel, Provider: p,
+		Synthesis: synthesis, Telemetry: tel, Provider: opts.Provider,
+		Ask: opts.Ask, Bridge: opts.Bridge,
+		JournalDir: opts.JournalDir, ClaimsPath: opts.ClaimsPath,
 		mux: http.NewServeMux(), done: make(chan struct{}),
 	}
 	sub, _ := fs.Sub(assets, "assets")
@@ -52,6 +68,8 @@ func New(cfg *config.Config, b *bundle.Bundle, l trace.Landscape, ev []trace.Eve
 	s.mux.HandleFunc("/api/landscape", s.handleLandscape)
 	s.mux.HandleFunc("/api/symbol/", s.handleSymbol)
 	s.mux.HandleFunc("/api/ask", s.handleAsk)
+	s.mux.HandleFunc("/api/ask/", s.handleAskPoll)
+	s.mux.HandleFunc("/api/keep", s.handleKeep)
 	s.mux.HandleFunc("/api/telemetry", s.handleTelemetry)
 	s.mux.HandleFunc("/api/done", s.handleDone)
 	return s
@@ -85,6 +103,7 @@ func (s *Server) Serve(ctx context.Context, addr string, open bool) error {
 }
 
 type landscapePayload struct {
+	AskRoute    string          `json:"ask_route"`
 	Session     bundle.Session  `json:"session"`
 	Landscape   trace.Landscape `json:"landscape"`
 	Gate        bundle.Gate     `json:"gate"`
@@ -97,7 +116,8 @@ type landscapePayload struct {
 
 func (s *Server) handleLandscape(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, landscapePayload{
-		Session: s.Bundle.Session, Landscape: s.Landscape, Gate: s.Bundle.Gate,
+		AskRoute: s.askRoute(),
+		Session:  s.Bundle.Session, Landscape: s.Landscape, Gate: s.Bundle.Gate,
 		Synthesis: s.Synthesis, Claims: s.Claims, Symbols: s.Bundle.Symbols,
 		Notes: s.Landscape.Notes(), Unannotated: s.Landscape.UnannotatedExpensive(),
 	})
@@ -185,12 +205,19 @@ type askRequest struct {
 }
 
 type askResponse struct {
-	Answer     string `json:"answer"`
+	AskID      string `json:"ask_id,omitempty"`
+	Status     string `json:"status"` // pending | answered | failed
+	Answer     string `json:"answer,omitempty"`
 	Grounded   bool   `json:"grounded"`
-	Provider   string `json:"provider"`
+	Route      string `json:"route"`
+	Target     string `json:"target,omitempty"`
 	Unanswered bool   `json:"unanswered"`
+	Error      string `json:"error,omitempty"`
 }
 
+// handleAsk routes a question. The context it carries is assembled mechanically
+// from the bundle — never retrieved by a search — which is what makes the answer
+// worth grounding a decision on (spec §10.2).
 func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	var req askRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -207,21 +234,136 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	// Journal rationale alone is file-level and does not qualify.
 	grounded := len(pc.Invocations) > 0 ||
 		(pc.Source != "" && (pc.Doc != "" || len(pc.Rationale) > 0 || len(pc.Seams) > 0))
-
-	answer, err := s.answer(r.Context(), pc, req.Question)
-	if err != nil {
-		answer = "could not reach the synthesis provider: " + err.Error()
-	}
-	resp := askResponse{Answer: answer, Grounded: grounded, Provider: s.providerName()}
 	if !grounded {
 		// A question that cannot be answered from the assembled context is itself
 		// a finding: the rationale was never recorded (spec §10.2).
-		resp.Unanswered = true
 		_ = s.Telemetry.Append(explore.Event{
 			SessionID: s.Bundle.Session.ID, Symbol: req.Symbol, Action: "unanswerable", Query: req.Question,
 		})
 	}
+
+	resp := askResponse{Grounded: grounded, Unanswered: !grounded}
+	ctxText := renderContext(pc)
+
+	// Preferred route: hand the question to the agent session already running in
+	// a tmux pane. It answers with the developer's own tools and quota, and the
+	// answer arrives as a file plum can watch.
+	if s.Ask != nil && s.Bridge != nil {
+		id := ask.NextID(time.Now())
+		areq := ask.Request{
+			ID: id, SessionID: s.Bundle.Session.ID, Symbol: req.Symbol,
+			Question: req.Question, CreatedAt: time.Now().UTC(), Grounded: grounded, Route: "tmux",
+		}
+		if err := s.Ask.Write(areq, ctxText); err != nil {
+			resp.Status, resp.Error = "failed", err.Error()
+			writeJSON(w, resp)
+			return
+		}
+		target, err := s.Bridge.Send(r.Context(), s.Cfg.Root, areq)
+		if err != nil {
+			// The prompt file is on disk either way, so the question is never lost.
+			resp.Status = "failed"
+			resp.AskID = id
+			resp.Error = err.Error() + "\n\nThe question and its full context are waiting in " +
+				ask.Dir + "/" + id + ".md — answer it from any agent and it will appear here."
+			writeJSON(w, resp)
+			return
+		}
+		areq.Target = target
+		_ = s.Ask.Write(areq, ctxText)
+		resp.AskID, resp.Status, resp.Route, resp.Target = id, "pending", "tmux", target
+		writeJSON(w, resp)
+		return
+	}
+
+	// Fallbacks: a configured API provider, or the raw assembled context, which
+	// is exactly what a model would have been given.
+	if s.Provider != nil {
+		answer, err := s.Provider.Complete(r.Context(), askSystemPrompt, ctxText+"\n\n## Question\n"+req.Question)
+		if err != nil {
+			resp.Status, resp.Error = "failed", err.Error()
+		} else {
+			resp.Status, resp.Answer, resp.Route = "answered", answer, s.providerName()
+		}
+		writeJSON(w, resp)
+		return
+	}
+	resp.Status = "answered"
+	resp.Route = "context-only"
+	resp.Answer = "No answering route is configured, so here is the assembled context, unedited.\n\n" + ctxText
 	writeJSON(w, resp)
+}
+
+const askSystemPrompt = `You answer questions about one function, grounded only in the context supplied.
+The context is assembled mechanically from an AST bundle and recorded executions —
+it is not a search result. If the context does not contain the answer, say exactly
+what is missing and stop. Never guess intent that was not recorded. Cite recorded
+invocations by their argument and return values when they support the answer.`
+
+// handleAskPoll reports whether the agent has written its answer yet.
+func (s *Server) handleAskPoll(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/api/ask/")
+	if id == "" || s.Ask == nil {
+		http.Error(w, "unknown question", http.StatusNotFound)
+		return
+	}
+	a := s.Ask.Poll(id)
+	writeJSON(w, askResponse{AskID: id, Status: a.Status, Answer: a.Text, Route: "tmux"})
+}
+
+type keepRequest struct {
+	AskID   string          `json:"ask_id"`
+	Symbol  bundle.SymbolID `json:"symbol"`
+	Answer  string          `json:"answer"`
+	Journal bool            `json:"journal"`
+	Claim   bool            `json:"claim"`
+	Comment bool            `json:"comment"`
+}
+
+// handleKeep turns an answer worth keeping into something durable: rationale in
+// the journal, a fingerprinted claim, or a patch proposing the comment. Source
+// is never edited in place.
+func (s *Server) handleKeep(w http.ResponseWriter, r *http.Request) {
+	var req keepRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if s.Ask == nil {
+		http.Error(w, "no ask store configured", http.StatusBadRequest)
+		return
+	}
+	areq := ask.Request{ID: req.AskID, Symbol: req.Symbol, Question: "asked while exploring"}
+	if meta, err := s.Ask.Meta(req.AskID); err == nil {
+		areq = *meta
+	}
+	answer := req.Answer
+	if answer == "" {
+		answer = s.Ask.Poll(req.AskID).Text
+	}
+	res, err := ask.Keep(s.Cfg.Root, s.JournalDir, s.ClaimsPath, areq, answer,
+		s.Bundle.Lookup(req.Symbol),
+		ask.Enrichment{Journal: req.Journal, Claim: req.Claim, Comment: req.Comment})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	_ = s.Telemetry.Append(explore.Event{
+		SessionID: s.Bundle.Session.ID, Symbol: req.Symbol, Action: "keep", Query: req.AskID,
+	})
+	writeJSON(w, res)
+}
+
+// askRoute names how questions will be answered, so the UI can say so plainly
+// rather than leaving the developer guessing where their question went.
+func (s *Server) askRoute() string {
+	if s.Ask != nil && s.Bridge != nil {
+		return "tmux"
+	}
+	if s.Provider != nil {
+		return s.providerName()
+	}
+	return "context-only"
 }
 
 func (s *Server) providerName() string {
@@ -231,17 +373,11 @@ func (s *Server) providerName() string {
 	return s.Provider.Name()
 }
 
-func (s *Server) answer(ctx context.Context, pc PromptContext, question string) (string, error) {
-	ctxText := renderContext(pc)
-	if s.Provider == nil {
-		return "No synthesis provider configured — here is the assembled context, unedited.\n\n" + ctxText, nil
-	}
-	system := `You answer questions about one function, grounded only in the context supplied.
-The context is assembled mechanically from an AST bundle and recorded executions —
-it is not a search result. If the context does not contain the answer, say exactly
-what is missing and stop. Never guess intent that was not recorded. Cite recorded
-invocations by their argument and return values when they support the answer.`
-	return s.Provider.Complete(ctx, system, ctxText+"\n\n## Question\n"+question)
+// AssembleContext builds the same mechanically-assembled brief the UI sends,
+// for callers outside the server (the `plum ask` command).
+func AssembleContext(cfg *config.Config, b *bundle.Bundle, events []trace.Event, cs []claims.Claim, sym bundle.SymbolID) string {
+	s := &Server{Cfg: cfg, Bundle: b, Events: events, Claims: cs}
+	return renderContext(s.buildContext(sym))
 }
 
 func renderContext(pc PromptContext) string {
@@ -256,7 +392,7 @@ func renderContext(pc PromptContext) string {
 		p("")
 	}
 	p("## Source")
-	p("```go")
+	p("```%s", fenceLanguage(pc.Symbol.File()))
 	p("%s", pc.Source)
 	p("```")
 	p("")
@@ -359,6 +495,29 @@ func (s *Server) handleDone(w http.ResponseWriter, r *http.Request) {
 	default:
 		close(s.done)
 	}
+}
+
+// fenceLanguage labels the source block with the language it is actually in.
+func fenceLanguage(path string) string {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".go":
+		return "go"
+	case ".py", ".pyi":
+		return "python"
+	case ".ts", ".tsx":
+		return "typescript"
+	case ".js", ".jsx", ".mjs", ".cjs":
+		return "javascript"
+	case ".rb":
+		return "ruby"
+	case ".yaml", ".yml":
+		return "yaml"
+	case ".toml":
+		return "toml"
+	case ".json":
+		return "json"
+	}
+	return ""
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

@@ -39,7 +39,10 @@ func cmdInit(ctx context.Context, env *Env, args []string) error {
 
 	// Traces are large and machine-specific; the journal is live rationale that
 	// belongs to the run, not the repo. Everything else is committed on purpose.
-	ignore := "sessions/*/traces/\ncurrent-session.json\njournal/\n"
+	// Traces are large and machine-specific, the journal is live rationale, and a
+	// question is a moment rather than a fact about the code. Bundles, synthesis,
+	// claims and landscapes are committed on purpose.
+	ignore := "sessions/*/traces/\ncurrent-session.json\njournal/\nask/\npatches/\n"
 	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(ignore), 0o644); err != nil {
 		return err
 	}

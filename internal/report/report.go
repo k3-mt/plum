@@ -64,10 +64,17 @@ func Render(b *bundle.Bundle, opt Options) string {
 		// Signature changes on existing exports are never truncated: they are the
 		// highest-signal event this tool produces.
 		for _, m := range b.Surface.Modified {
+			if m.Kind == "config_key" {
+				p("- **value changed** `%s`", m.Name)
+				p("    - before: `%s`", m.Before)
+				p("    - after:  `%s`", m.After)
+				p("    - nothing fails to build when a setting changes; behaviour just differs")
+				continue
+			}
 			p("- **signature changed** `%s`", m.Name)
 			p("    - before: `%s`", m.Before)
 			p("    - after:  `%s`", m.After)
-			p("    - every existing caller compiles against the old shape")
+			p("    - every existing caller was written against the old shape")
 		}
 		for _, it := range b.Surface.Removed {
 			p("- **removed** %s `%s` (`%s`)", it.Kind, it.Name, it.File)
@@ -143,12 +150,15 @@ func Render(b *bundle.Bundle, opt Options) string {
 		p("")
 	}
 
-	if len(b.Symbols) > 0 {
+	if codeSymbols(b) > 0 {
 		p("## Symbols changed")
 		p("")
 		byFile := map[string][]bundle.Symbol{}
 		var files []string
 		for _, s := range b.Symbols {
+			if s.Kind == "config_key" {
+				continue // settings have their own section
+			}
 			if _, ok := byFile[s.File]; !ok {
 				files = append(files, s.File)
 			}
@@ -198,6 +208,42 @@ func Render(b *bundle.Bundle, opt Options) string {
 		}
 		if hidden > 0 {
 			p("- … and %d more — `plum report -v`", hidden)
+		}
+		p("")
+	}
+
+	if keys, edges := configChanges(b); len(keys) > 0 || len(edges) > 0 {
+		p("## Configuration")
+		p("")
+		p("A changed setting is a behaviour change that no compiler and no test")
+		p("signature announces.")
+		p("")
+		shown, hidden := limit(len(keys), opt.Verbose)
+		for _, k := range keys[:shown] {
+			p("- %s `%s` — `%s`", pad(k.Change), k.ID, oneline(k.Signature))
+			if k.Doc != "" {
+				p("    - comment: %s", oneline(k.Doc))
+			}
+			for _, e := range edges {
+				if e.To == k.ID {
+					p("    - read by `%s` (matched by %s)", e.From, strings.TrimPrefix(e.Kind, "config:"))
+				}
+			}
+		}
+		if hidden > 0 {
+			p("- … and %d more changed settings — `plum report -v`", hidden)
+		}
+		orphans := 0
+		for _, k := range keys {
+			if !readBy(edges, k.ID) {
+				orphans++
+			}
+		}
+		if orphans > 0 {
+			p("")
+			p("%d changed settings have no reader anywhere in the tree at this revision.", orphans)
+			p("Either they are read by a name this pass cannot see — built at runtime,")
+			p("or spelled differently — or nothing reads them at all.")
 		}
 		p("")
 	}
@@ -301,6 +347,43 @@ func byKind(items []bundle.SurfaceItem) string {
 		parts = append(parts, fmt.Sprintf("%d %s", counts[k], k))
 	}
 	return strings.Join(parts, ", ")
+}
+
+// configChanges separates settings from code so the report can say what a
+// changed default now does, and which function will notice.
+func codeSymbols(b *bundle.Bundle) int {
+	n := 0
+	for _, s := range b.Symbols {
+		if s.Kind != "config_key" {
+			n++
+		}
+	}
+	return n
+}
+
+func configChanges(b *bundle.Bundle) ([]bundle.Symbol, []bundle.Edge) {
+	var keys []bundle.Symbol
+	for _, s := range b.Symbols {
+		if s.Kind == "config_key" {
+			keys = append(keys, s)
+		}
+	}
+	var edges []bundle.Edge
+	for _, e := range b.Edges {
+		if strings.HasPrefix(e.Kind, "config:") {
+			edges = append(edges, e)
+		}
+	}
+	return keys, edges
+}
+
+func readBy(edges []bundle.Edge, id bundle.SymbolID) bool {
+	for _, e := range edges {
+		if e.To == id {
+			return true
+		}
+	}
+	return false
 }
 
 func bySeverity(fs []bundle.DivergenceFinding) []bundle.DivergenceFinding {

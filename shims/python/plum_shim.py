@@ -72,6 +72,23 @@ def _symbol_id(code) -> str:
     return f"{path}::{qual}"
 
 
+def _args_of(code) -> dict:
+    """The arguments the function was actually called with.
+
+    sys.monitoring hands the callback a code object, not a frame, so the frame
+    is fetched from the stack. Best effort by design: a trace with no arguments
+    is still evidence, a crashed test run is not.
+    """
+    try:
+        frame = sys._getframe(2)
+        if frame.f_code is not code:
+            return {}
+        names = code.co_varnames[:code.co_argcount + code.co_kwonlyargcount]
+        return {n: _truncate(frame.f_locals[n]) for n in names if n in frame.f_locals and n != "self"}
+    except Exception:
+        return {}
+
+
 def _on_call(code, _offset):
     symbol = _symbol_id(code)
     if _symbols and symbol not in _symbols:
@@ -80,7 +97,7 @@ def _on_call(code, _offset):
     invocation = f"{threading.get_ident()}-{next(_counter)}"
     parent = stack[-1][1] if stack else ""
     _emit(event="call", symbol_id=symbol, invocation_id=invocation,
-          parent_invocation_id=parent, depth=len(stack), args={})
+          parent_invocation_id=parent, depth=len(stack), args=_args_of(code))
     stack.append((symbol, invocation, len(stack)))
 
 
@@ -89,6 +106,8 @@ def _on_return(code, _offset, retval):
     if not stack:
         return
     symbol = _symbol_id(code)
+    if _symbols and symbol not in _symbols:
+        return
     if stack[-1][0] != symbol:
         return
     _, invocation, depth = stack.pop()
@@ -101,6 +120,8 @@ def _on_raise(code, _offset, exc):
     if not stack:
         return
     symbol = _symbol_id(code)
+    if _symbols and symbol not in _symbols:
+        return
     if stack[-1][0] != symbol:
         return
     _, invocation, depth = stack.pop()

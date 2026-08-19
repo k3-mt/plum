@@ -11,8 +11,10 @@ import (
 
 	"github.com/kelalaike/plum/internal/config"
 	"github.com/kelalaike/plum/internal/lang"
+	"github.com/kelalaike/plum/internal/lang/conf"
 	"github.com/kelalaike/plum/internal/lang/generic"
 	"github.com/kelalaike/plum/internal/lang/gopkg"
+	"github.com/kelalaike/plum/internal/lang/pyast"
 	"github.com/kelalaike/plum/internal/store"
 	"github.com/kelalaike/plum/internal/vcs"
 )
@@ -49,6 +51,7 @@ func commands() []command {
 		{"trace", "run the test suite under instrumentation, ingest events", cmdTrace},
 		{"landscape", "derive the energy landscape from recorded traces", cmdLandscape},
 		{"explore", "serve the landscape UI — no scoring, no gate, no timer", cmdExplore},
+		{"ask", "ask a grounded question; the answer can be kept as rationale, a claim or a patch", cmdAsk},
 		{"quiz", "interrogate yourself, graded against recorded execution", cmdQuiz},
 		{"claims", "list|verify — executable claims", cmdClaims},
 		{"gate", "exit non-zero when the session needs attention (for hooks)", cmdGate},
@@ -135,7 +138,13 @@ func registry(cfg *config.Config) *lang.Registry {
 		case "go":
 			as = append(as, gopkg.New())
 		case "python", "py":
-			as = append(as, generic.Python())
+			// Python parses Python: exact signatures, docstrings and comments.
+			// Falls back to the line-based adapter when no interpreter is found.
+			if py := pyast.New(); py != nil {
+				as = append(as, py)
+			} else {
+				as = append(as, generic.Python())
+			}
 		case "typescript", "javascript", "ts", "js":
 			as = append(as, generic.TypeScript())
 		}
@@ -143,6 +152,9 @@ func registry(cfg *config.Config) *lang.Registry {
 	if len(as) == 0 {
 		as = append(as, gopkg.New())
 	}
+	// Configuration is always in scope. A changed default is a behaviour change
+	// that no compiler and no test signature will announce.
+	as = append(as, conf.New())
 	return lang.NewRegistry(as...)
 }
 

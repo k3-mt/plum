@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kelalaike/plum/internal/ask"
 	"github.com/kelalaike/plum/internal/bundle"
 	"github.com/kelalaike/plum/internal/claims"
 	"github.com/kelalaike/plum/internal/config"
@@ -50,7 +51,11 @@ func testServer(t *testing.T) (*Server, *explore.Store) {
 	l := trace.Derive(events, b)
 	tel := explore.NewStore(filepath.Join(root, "state"))
 	cs := []claims.Claim{{ID: "c-001", Claim: "Get appends a bang", Symbol: "cache.go::Get", Executable: true}}
-	return New(cfg, b, l, events, cs, "# seams", tel, nil), tel
+	return New(cfg, b, l, events, cs, "# seams", tel, Config{
+		Ask:        ask.NewStore(root),
+		JournalDir: ".plum/journal",
+		ClaimsPath: filepath.Join(root, "claims.yaml"),
+	}), tel
 }
 
 func TestAssetsAreEmbeddedAndSmall(t *testing.T) {
@@ -99,7 +104,7 @@ func TestSymbolContextIsAssembledMechanically(t *testing.T) {
 // finding: the rationale was never recorded (spec §10.2).
 func TestUnansweredQuestionsAreLogged(t *testing.T) {
 	s, tel := testServer(t)
-	ask := func(sym string) askResponse {
+	askOne := func(sym string) askResponse {
 		body := strings.NewReader(`{"symbol":"` + sym + `","question":"why?"}`)
 		rec := httptest.NewRecorder()
 		s.mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/ask", body))
@@ -109,10 +114,10 @@ func TestUnansweredQuestionsAreLogged(t *testing.T) {
 		}
 		return out
 	}
-	if got := ask("cache.go::Get"); !got.Grounded || got.Unanswered {
+	if got := askOne("cache.go::Get"); !got.Grounded || got.Unanswered {
 		t.Errorf("a symbol with traces and rationale is grounded: %+v", got)
 	}
-	if got := ask("cache.go::Unknown"); got.Grounded || !got.Unanswered {
+	if got := askOne("cache.go::Unknown"); got.Grounded || !got.Unanswered {
 		t.Errorf("a symbol with neither traces nor rationale is a finding: %+v", got)
 	}
 	events, err := tel.Load("s1")

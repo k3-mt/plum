@@ -157,6 +157,59 @@ func (r *Repo) ListFiles(ctx context.Context, rev string) ([]string, error) {
 	return files, nil
 }
 
+// Grep finds fixed-string occurrences at a revision, returning path:line pairs.
+// Used to find the code that reads a configuration key, which is almost never
+// the code that changed in the same session.
+func (r *Repo) Grep(ctx context.Context, rev, needle string, pathspecs []string, max int) ([]GrepHit, error) {
+	args := []string{"grep", "--no-color", "-n", "-I", "--fixed-strings", "-e", needle, rev}
+	if len(pathspecs) > 0 {
+		args = append(args, "--")
+		args = append(args, pathspecs...)
+	}
+	out, err := r.git(ctx, args...)
+	if err != nil {
+		return nil, nil // git grep exits 1 when nothing matches: not an error here
+	}
+	var hits []GrepHit
+	for _, line := range strings.Split(out, "\n") {
+		if line == "" {
+			continue
+		}
+		// "<rev>:<path>:<line>:<text>"
+		rest := strings.TrimPrefix(line, rev+":")
+		path, remainder, ok := strings.Cut(rest, ":")
+		if !ok {
+			continue
+		}
+		lineNo, text, ok := strings.Cut(remainder, ":")
+		if !ok {
+			continue
+		}
+		n := 0
+		for _, c := range lineNo {
+			if c < '0' || c > '9' {
+				n = 0
+				break
+			}
+			n = n*10 + int(c-'0')
+		}
+		if n == 0 {
+			continue
+		}
+		hits = append(hits, GrepHit{Path: path, Line: n, Text: strings.TrimSpace(text)})
+		if max > 0 && len(hits) >= max {
+			break
+		}
+	}
+	return hits, nil
+}
+
+type GrepHit struct {
+	Path string
+	Line int
+	Text string
+}
+
 // EmptyTree is git's canonical empty-tree object, used as the "before" side when
 // a repository has no prior commit.
 const EmptyTree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"

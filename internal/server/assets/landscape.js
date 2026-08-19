@@ -27,6 +27,11 @@ async function boot() {
     document.getElementById('done').textContent = 'quiz unlocked — run: plum quiz';
   };
   document.getElementById('asked').onclick = ask;
+  document.getElementById('route').textContent =
+    'answers via ' + (DATA.ask_route === 'tmux' ? 'your tmux agent session' : DATA.ask_route);
+  for (const kind of ['journal', 'claim', 'comment']) {
+    document.getElementById('keep-' + kind).onclick = () => keep(kind);
+  }
   document.getElementById('q').addEventListener('keydown', e => { if (e.key === 'Enter') ask(); });
 }
 
@@ -135,17 +140,86 @@ async function select(symbol, well) {
     </dl>`;
 }
 
+let ASK_ID = null, POLL = null, LAST_ANSWER = '';
+
 async function ask() {
-  if (!SELECTED) { document.getElementById('answer').textContent = 'select a frame first.'; return; }
+  if (!SELECTED) { setAnswer('select a frame first.'); return; }
   const q = document.getElementById('q').value.trim();
   if (!q) return;
-  const out = document.getElementById('answer');
-  out.textContent = 'thinking…';
+  stopPolling();
+  setKeepVisible(false);
+  setAnswer(DATA.ask_route === 'tmux'
+    ? 'sent to your agent session — waiting for the answer…'
+    : 'thinking…');
+
   const r = await (await fetch('/api/ask', {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ symbol: SELECTED, question: q }),
   })).json();
-  out.textContent = (r.unanswered ? '⚠ nothing in the assembled context grounds this — that gap is itself the finding.\n\n' : '') + r.answer;
+
+  const preamble = r.unanswered
+    ? '\u26a0 nothing in the assembled context grounds this \u2014 that gap is itself the finding.\n\n'
+    : '';
+
+  if (r.status === 'pending' && r.ask_id) {
+    ASK_ID = r.ask_id;
+    setAnswer(preamble + 'question ' + r.ask_id + ' sent to ' + (r.target || 'the agent pane') +
+      '.\nit is reading .plum/ask/' + r.ask_id + '.md \u2014 the answer appears here when it lands.');
+    startPolling(preamble);
+    return;
+  }
+  if (r.status === 'failed') {
+    setAnswer(preamble + '\u2717 ' + (r.error || 'the question could not be delivered'));
+    return;
+  }
+  LAST_ANSWER = r.answer || '';
+  setAnswer(preamble + LAST_ANSWER);
+  setKeepVisible(!!LAST_ANSWER);
+}
+
+function startPolling(preamble) {
+  const started = Date.now();
+  POLL = setInterval(async () => {
+    if (!ASK_ID) return stopPolling();
+    const r = await (await fetch('/api/ask/' + ASK_ID)).json();
+    if (r.status === 'answered') {
+      stopPolling();
+      LAST_ANSWER = r.answer || '';
+      setAnswer(preamble + LAST_ANSWER);
+      setKeepVisible(true);
+      return;
+    }
+    const secs = Math.round((Date.now() - started) / 1000);
+    const dots = '.'.repeat(1 + (secs % 3));
+    setAnswer(preamble + 'waiting for the agent' + dots + ' (' + secs + 's)\n' +
+      'question ' + ASK_ID + ' \u2014 it may need you to accept a prompt in that pane.');
+  }, 1500);
+}
+
+function stopPolling() { if (POLL) { clearInterval(POLL); POLL = null; } }
+
+function setAnswer(text) { document.getElementById('answer').textContent = text; }
+
+function setKeepVisible(on) {
+  document.getElementById('keep').style.display = on ? 'block' : 'none';
+}
+
+// Keeping an answer is what separates this from chat: it becomes rationale that
+// survives into every future report, a claim that goes stale when the code
+// moves, or a patch proposing the comment where the next reader will look.
+async function keep(kind) {
+  if (!LAST_ANSWER || !SELECTED) return;
+  const body = {
+    ask_id: ASK_ID || '', symbol: SELECTED, answer: LAST_ANSWER,
+    journal: kind === 'journal', claim: kind === 'claim', comment: kind === 'comment',
+  };
+  const r = await (await fetch('/api/keep', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })).json();
+  const notes = (r.notes || []).join('\n');
+  document.getElementById('kept').textContent =
+    '\u2713 ' + (notes || 'kept') + (r.patch_path ? '\n' + r.patch_path : '');
 }
 
 function send(e) { fetch('/api/telemetry', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(e) }); }

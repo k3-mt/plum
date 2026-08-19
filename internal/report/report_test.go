@@ -57,7 +57,9 @@ func TestSectionOrdering(t *testing.T) {
 	if sigIdx > newIdx {
 		t.Error("signature changes on existing exports must come before new surface")
 	}
-	if !strings.Contains(out, "every existing caller compiles against the old shape") {
+	// Deliberately language-neutral: Python and YAML have callers too, and
+	// neither of them compiles.
+	if !strings.Contains(out, "every existing caller was written against the old shape") {
 		t.Error("the report should say why a signature change matters")
 	}
 }

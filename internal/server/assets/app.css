@@ -52,3 +52,8 @@ pre { margin: 0; white-space: pre; overflow-x: auto; font-size: 12px; color: #cd
 #q { width: 70%; background: #16191c; border: 1px solid var(--line); color: var(--fg); padding: .4rem; font: inherit; font-size: 12px; }
 #answer { margin-top: .6rem; font-size: 12px; white-space: pre-wrap; color: #cdd6cf; max-height: 40vh; overflow-y: auto; }
 .warn { color: var(--risk); }
+.small { font-size: 11px; }
+#route { margin-top: .4rem; }
+#keep { display: none; margin-top: .8rem; border-top: 1px solid var(--line); padding-top: .6rem; }
+#keep button { margin: .3rem .3rem 0 0; font-size: 11px; }
+#kept { margin-top: .5rem; color: var(--accent); white-space: pre-wrap; }

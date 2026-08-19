@@ -40,11 +40,15 @@ type Result struct {
 	ScratchDir   string
 }
 
-// Run copies the tree, injects probes, runs the suite and ingests the JSONL.
+// Run copies the tree, attaches the instrumentation each language needs, runs
+// the suite and ingests the JSONL. Go is instrumented by rewriting the scratch
+// copy; Python attaches a sys.monitoring shim through the environment. Both can
+// be active in the same run — the event schema is the same either way.
 func (c *Collector) Run(ctx context.Context, b *bundle.Bundle) (*Result, error) {
-	targets := goTargets(b)
-	if len(targets) == 0 {
-		return nil, fmt.Errorf("no instrumentable Go symbols in this session (tracing currently covers the Go adapter; other languages ship as shims under shims/)")
+	goIDs := targetsFor(b, ".go")
+	pyIDs := targetsFor(b, ".py")
+	if len(goIDs)+len(pyIDs) == 0 {
+		return nil, fmt.Errorf("no instrumentable symbols in this session (tracing covers Go and Python; other languages need a shim under shims/)")
 	}
 	if err := os.RemoveAll(c.Scratch); err != nil {
 		return nil, err
@@ -53,31 +57,21 @@ func (c *Collector) Run(ctx context.Context, b *bundle.Bundle) (*Result, error) 
 		return nil, fmt.Errorf("copying the tree to %s: %w", c.Scratch, err)
 	}
 
-	modPath, err := modulePath(filepath.Join(c.Scratch, "go.mod"))
-	if err != nil {
-		return nil, fmt.Errorf("tracing needs a go.mod at the repo root: %w", err)
-	}
-	shimDir := filepath.Join(c.Scratch, "plumtrace")
-	if err := os.MkdirAll(shimDir, 0o755); err != nil {
-		return nil, err
-	}
-	if err := os.WriteFile(filepath.Join(shimDir, "plumtrace.go"), []byte(GoShimSource), 0o644); err != nil {
-		return nil, err
-	}
-
 	res := &Result{ScratchDir: c.Scratch}
-	byFile := map[string][]bundle.SymbolID{}
-	for _, id := range targets {
-		byFile[id.File()] = append(byFile[id.File()], id)
-	}
-	for file, ids := range byFile {
-		done, skipped, err := inject(filepath.Join(c.Scratch, file), file, ids, modPath+"/plumtrace")
-		if err != nil {
-			res.Skipped = append(res.Skipped, file+": "+err.Error())
-			continue
+	env := []string{"PLUM_TRACE=1", "PLUM_REPO_ROOT=" + c.Scratch}
+
+	if len(goIDs) > 0 {
+		if err := c.instrumentGo(b, goIDs, res); err != nil {
+			res.Skipped = append(res.Skipped, "go: "+err.Error())
 		}
-		res.Instrumented = append(res.Instrumented, done...)
-		res.Skipped = append(res.Skipped, skipped...)
+	}
+	if len(pyIDs) > 0 {
+		pyEnv, err := c.instrumentPython(pyIDs, res)
+		if err != nil {
+			res.Skipped = append(res.Skipped, "python: "+err.Error())
+		} else {
+			env = append(env, pyEnv...)
+		}
 	}
 	if len(res.Instrumented) == 0 {
 		return res, fmt.Errorf("nothing could be instrumented: %s", strings.Join(res.Skipped, "; "))
@@ -90,11 +84,10 @@ func (c *Collector) Run(ctx context.Context, b *bundle.Bundle) (*Result, error) 
 
 	cmd := exec.CommandContext(ctx, "sh", "-c", c.TestCommand)
 	cmd.Dir = c.Scratch
-	cmd.Env = append(os.Environ(),
-		"PLUM_TRACE=1",
+	cmd.Env = append(os.Environ(), append(env,
 		"PLUM_TRACE_OUT="+tracePath,
 		fmt.Sprintf("PLUM_TRACE_MAX=%d", c.MaxEvents),
-	)
+	)...)
 	var buf bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &buf, &buf
 	res.TestErr = cmd.Run() // a failing suite still produced real execution
@@ -109,23 +102,92 @@ func (c *Collector) Run(ctx context.Context, b *bundle.Bundle) (*Result, error) 
 	return res, nil
 }
 
-// goTargets is the instrumentation set: changed, non-deleted, non-test Go
-// functions. Only symbols present in Bundle.Symbols are ever instrumented.
-func goTargets(b *bundle.Bundle) []bundle.SymbolID {
+// targetsFor is the instrumentation set for one language: changed, non-deleted,
+// non-test functions. Only symbols present in Bundle.Symbols are ever
+// instrumented — the AST pass decided this, and paying for anything else is waste.
+func targetsFor(b *bundle.Bundle, ext string) []bundle.SymbolID {
 	var out []bundle.SymbolID
 	for _, s := range b.Symbols {
-		if s.Change == "deleted" || filepath.Ext(s.File) != ".go" {
+		if s.Change == "deleted" || filepath.Ext(s.File) != ext {
 			continue
 		}
 		if s.Kind != "func" && s.Kind != "method" {
 			continue
 		}
-		if strings.HasSuffix(s.File, "_test.go") || s.Name == "init" || s.Name == "main" {
+		if isTestPath(s.File) || s.Name == "init" || s.Name == "main" {
 			continue
 		}
 		out = append(out, s.ID)
 	}
 	return out
+}
+
+func isTestPath(path string) bool {
+	base := filepath.Base(path)
+	return strings.HasSuffix(base, "_test.go") ||
+		strings.HasPrefix(base, "test_") || strings.HasSuffix(base, "_test.py") ||
+		strings.Contains(filepath.ToSlash(path), "/tests/")
+}
+
+// instrumentGo rewrites the scratch copy, adding a deferred probe to each target.
+func (c *Collector) instrumentGo(b *bundle.Bundle, ids []bundle.SymbolID, res *Result) error {
+	modPath, err := modulePath(filepath.Join(c.Scratch, "go.mod"))
+	if err != nil {
+		return fmt.Errorf("tracing Go needs a go.mod at the repo root: %w", err)
+	}
+	shimDir := filepath.Join(c.Scratch, "plumtrace")
+	if err := os.MkdirAll(shimDir, 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(shimDir, "plumtrace.go"), []byte(GoShimSource), 0o644); err != nil {
+		return err
+	}
+	byFile := map[string][]bundle.SymbolID{}
+	for _, id := range ids {
+		byFile[id.File()] = append(byFile[id.File()], id)
+	}
+	for file, fileIDs := range byFile {
+		done, skipped, err := inject(filepath.Join(c.Scratch, file), file, fileIDs, modPath+"/plumtrace")
+		if err != nil {
+			res.Skipped = append(res.Skipped, file+": "+err.Error())
+			continue
+		}
+		res.Instrumented = append(res.Instrumented, done...)
+		res.Skipped = append(res.Skipped, skipped...)
+	}
+	return nil
+}
+
+// instrumentPython writes the sys.monitoring shim into the scratch copy and
+// returns the environment that attaches it. Nothing in the project's own source
+// is touched: CPython imports sitecustomize at startup when it is on PYTHONPATH,
+// which reaches pytest, unittest and plain scripts identically.
+func (c *Collector) instrumentPython(ids []bundle.SymbolID, res *Result) ([]string, error) {
+	shimDir := filepath.Join(c.Scratch, ".plum-shim")
+	if err := os.MkdirAll(shimDir, 0o755); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(filepath.Join(shimDir, "plum_shim.py"), []byte(PythonShimSource), 0o644); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(filepath.Join(shimDir, "sitecustomize.py"), []byte(PythonSiteCustomize), 0o644); err != nil {
+		return nil, err
+	}
+	symbols := make([]string, 0, len(ids))
+	for _, id := range ids {
+		symbols = append(symbols, string(id))
+	}
+	res.Instrumented = append(res.Instrumented, ids...)
+
+	pythonPath := shimDir
+	if existing := os.Getenv("PYTHONPATH"); existing != "" {
+		pythonPath += string(os.PathListSeparator) + existing
+	}
+	return []string{
+		"PYTHONPATH=" + pythonPath,
+		"PLUM_SYMBOLS=" + strings.Join(symbols, ","),
+		"PYTHONDONTWRITEBYTECODE=1",
+	}, nil
 }
 
 // inject rewrites one file in the scratch copy, adding a deferred probe to the

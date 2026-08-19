@@ -36,7 +36,15 @@
     <div id="ask">
       <input id="q" placeholder="ask about this frame…" autocomplete="off">
       <button id="asked">ask</button>
+      <div id="route" class="muted small"></div>
       <div id="answer"></div>
+      <div id="keep">
+        <div class="muted small">worth keeping?</div>
+        <button id="keep-journal" title="Records it as rationale against this file — it appears in every future report">as rationale</button>
+        <button id="keep-claim" title="Records it as a claim, fingerprinted so it goes stale when this symbol changes">as a claim</button>
+        <button id="keep-comment" title="Writes a patch adding this as a source comment — review before applying">as a comment</button>
+        <div id="kept" class="muted small"></div>
+      </div>
     </div>
   </aside>
 </main>
