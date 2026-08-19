@@ -54,6 +54,9 @@ func (e *Extractor) Extract(ctx context.Context, sess bundle.Session, journal []
 
 	states := map[string]*fileState{}
 	for path, kind := range kinds {
+		if e.Cfg.Excluded(path) {
+			continue
+		}
 		fs := &fileState{path: path, change: kind, hunks: hunks[path]}
 		if c, ok := counts[path]; ok {
 			fs.added, fs.deleted = c[0], c[1]

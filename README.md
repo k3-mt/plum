@@ -94,6 +94,27 @@ run on a line-based fallback adapter — useful for symbols, surface and comment
 honest about what it cannot resolve — plus standalone trace shims under `shims/`.
 Swapping in tree-sitter-under-wazero is a drop-in behind `lang.Adapter`.
 
+## Deviations from the spec, and why
+
+| Spec said | Built | Why |
+|---|---|---|
+| `spf13/cobra`, `BurntSushi/toml`, `bubbletea` | stdlib `flag`, a small TOML subset parser, plain terminal output | The spec offers "or stdlib `flag` if you want zero deps". Zero dependencies makes `CGO_ENABLED=0` and cross-compilation unconditional, and the gate popup needs no TUI framework — `plum gate` exits non-zero and `tmux display-popup` does the rest. |
+| tree-sitter as WASM under wazero | native `go/ast`; a line-based fallback for Python and TS | The spec itself says a Go-only M0 defers this. The `lang.Adapter` seam is unchanged, so the wazero spike remains a drop-in when a non-Go repo justifies its day. |
+| `git stash create` for uncommitted work | a commit built against a throwaway `GIT_INDEX_FILE` | `git stash create` refuses to run once intent-to-add entries exist, and cannot see untracked files at all. The replacement touches neither the index nor the working tree, and does capture untracked files. Covered by a test. |
+| `audit`, `.audit/` | `plum`, `.plum/` | The product is PLUM. |
+
+Two things the spec left open were forced during the build and are now flags
+rather than assumptions:
+
+- **Representative chain** (spec §14.3): `plum trace -chain hottest|slowest|raising`,
+  re-derivable from stored events with `plum landscape -chain ...` — no re-run needed.
+- **Divergence baseline** (spec §14.6): both are shipped. Every finding records
+  whether it came from `config` or from the `empirical` sample at `StartSHA`, so
+  the false-positive rates can be compared rather than argued about.
+
+Neither the report nor the landscape truncates silently. A capped section says
+how many entries it held back and how to see them.
+
 ## Development
 
 ```sh

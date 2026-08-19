@@ -115,7 +115,10 @@ func (e *Extractor) divergence(ctx context.Context, b *bundle.Bundle, states map
 				Symbol:     s.ID, Severity: "info", Source: "config",
 			})
 		}
-		if s.Kind == "var" && e.Cfg.Forbids("package_level_state") {
+		// Only a var the risk pass judged to be genuinely writable counts here:
+		// a compiled regex or a lookup table is not the convention violation the
+		// config is talking about.
+		if s.Kind == "var" && e.Cfg.Forbids("package_level_state") && hasMarker(b, s.ID, "package_level_state") {
 			sev := "high"
 			if base.globalVars > 3 {
 				sev = "warn" // the repo already does this; it is a habit, not a novelty
@@ -341,6 +344,15 @@ func calleeString(e ast.Expr) string {
 		return t.Sel.Name
 	}
 	return ""
+}
+
+func hasMarker(b *bundle.Bundle, id bundle.SymbolID, kind string) bool {
+	for _, r := range b.RiskMarkers {
+		if r.Symbol == id && r.Kind == kind {
+			return true
+		}
+	}
+	return false
 }
 
 func worse(a, b string) bool {

@@ -111,6 +111,7 @@ func cmdTrace(ctx context.Context, env *Env, args []string) error {
 	cmdOverride := fs.String("cmd", "", "override the test command for this run")
 	keep := fs.Bool("keep", false, "keep the instrumented scratch copy for inspection")
 	chain := fs.String("chain", "hottest", "representative chain: hottest|slowest|raising")
+	frames := fs.Int("frames", trace.DefaultMaxFrames, "how many frames to render (0 = all)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -159,7 +160,7 @@ func cmdTrace(ctx context.Context, env *Env, args []string) error {
 	if err := trace.WriteFile(env.Store.TracePath(id), res.Events); err != nil {
 		return err
 	}
-	l := trace.DeriveChain(res.Events, b, trace.Chain(*chain))
+	l := trace.DeriveChainN(res.Events, b, trace.Chain(*chain), *frames)
 	if err := l.Save(env.Store.LandscapePath(id)); err != nil {
 		return err
 	}
@@ -177,6 +178,7 @@ func cmdTrace(ctx context.Context, env *Env, args []string) error {
 func cmdLandscape(ctx context.Context, env *Env, args []string) error {
 	fs := flag.NewFlagSet("landscape", flag.ContinueOnError)
 	chain := fs.String("chain", "", "re-derive from stored events: hottest|slowest|raising")
+	frames := fs.Int("frames", trace.DefaultMaxFrames, "how many frames to render (0 = all)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -194,7 +196,7 @@ func cmdLandscape(ctx context.Context, env *Env, args []string) error {
 		if err != nil {
 			return fmt.Errorf("no traces for %s — run `plum trace` first", id)
 		}
-		l := trace.DeriveChain(events, b, trace.Chain(*chain))
+		l := trace.DeriveChainN(events, b, trace.Chain(*chain), *frames)
 		if err := l.Save(env.Store.LandscapePath(id)); err != nil {
 			return err
 		}

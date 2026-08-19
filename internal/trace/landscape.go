@@ -48,9 +48,11 @@ type Landscape struct {
 	Chain     string `json:"chain"`
 	// Escaped is the panic that left the instrumented set entirely — nothing in
 	// the changed code caught it.
-	Escaped string   `json:"escaped,omitempty"`
-	Chains  int      `json:"chains"`
-	HotPath []string `json:"hot_path"`
+	Escaped string `json:"escaped,omitempty"`
+	// Truncated counts frames beyond the render budget. Reported, never hidden.
+	Truncated int      `json:"truncated,omitempty"`
+	Chains    int      `json:"chains"`
+	HotPath   []string `json:"hot_path"`
 }
 
 // Chain selects which invocation tree the landscape renders. A test suite that
@@ -70,8 +72,41 @@ func Derive(events []Event, b *bundle.Bundle) Landscape {
 	return DeriveChain(events, b, ChainHottest)
 }
 
+// DefaultMaxFrames bounds how much of a chain is rendered. A real suite produces
+// chains of a thousand frames, which is not a landscape anyone can read. The
+// remainder is counted and reported, never silently dropped.
+const DefaultMaxFrames = 80
+
 // DeriveChain is Derive with an explicit representative-chain policy.
 func DeriveChain(events []Event, b *bundle.Bundle, pick Chain) Landscape {
+	return DeriveChainN(events, b, pick, DefaultMaxFrames)
+}
+
+// DeriveChainN is DeriveChain with an explicit frame budget; 0 means unbounded.
+func DeriveChainN(events []Event, b *bundle.Bundle, pick Chain, maxFrames int) Landscape {
+	l := deriveChain(events, b, pick)
+	if maxFrames > 0 && len(l.Wells) > maxFrames {
+		l.Truncated = len(l.Wells) - maxFrames
+		l.Wells = l.Wells[:maxFrames]
+		var kept []Barrier
+		for _, bar := range l.Barriers {
+			if bar.FromIdx < maxFrames && bar.ToIdx < maxFrames {
+				kept = append(kept, bar)
+			}
+		}
+		l.Barriers = kept
+		var hot []string
+		for _, w := range l.Wells {
+			if w.Phase == "enter" {
+				hot = append(hot, string(w.Symbol))
+			}
+		}
+		l.HotPath = hot
+	}
+	return l
+}
+
+func deriveChain(events []Event, b *bundle.Bundle, pick Chain) Landscape {
 	chain, chains := representativeChain(events, pick)
 	l := Landscape{SessionID: b.Session.ID, Chains: chains, Closed: true, Chain: string(pick)}
 	if len(chain) == 0 {
@@ -402,7 +437,10 @@ func (l Landscape) Notes() []string {
 	if !l.Closed {
 		out = append(out, fmt.Sprintf("**the path does not close** — `%s` was entered and never returned during the test run", l.OpenFrame))
 	}
-	out = append(out, fmt.Sprintf("%d frames on the representative chain, %d chains recorded", len(l.Wells), l.Chains))
+	out = append(out, fmt.Sprintf("%d frames on the representative chain, %d chains recorded", len(l.Wells)+l.Truncated, l.Chains))
+	if l.Truncated > 0 {
+		out = append(out, fmt.Sprintf("showing the first %d frames; %d more are recorded in traces/ — raise the budget with `plum landscape -frames N`", len(l.Wells), l.Truncated))
+	}
 	for _, bar := range l.Barriers {
 		if bar.Direction == "unwind" && bar.Frames > 1 {
 			out = append(out, fmt.Sprintf("an exception unwound %d frames at once — the error boundary sits at `%s`", bar.Frames, l.Wells[bar.ToIdx].Symbol))

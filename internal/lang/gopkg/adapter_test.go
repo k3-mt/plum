@@ -232,3 +232,57 @@ func keys(m map[string]bool) []string {
 	}
 	return out
 }
+
+const tables = `package auth
+
+import "regexp"
+import "errors"
+
+// hunkRe is compiled once and only ever read.
+var hunkRe = regexp.MustCompile("^@@")
+
+// ErrMiss is a sentinel.
+var errMiss = errors.New("miss")
+
+var lookups = map[string]int{"a": 1}
+
+var counter int
+
+var Version = "dev"
+
+func bump() {
+	counter++
+}
+`
+
+// A compiled regex or a lookup table assigned once is a constant in everything
+// but syntax. Flagging it is the false-positive class that makes people stop
+// reading the report (spec §7).
+func TestPackageLevelStateOnlyFlagsWhatCanBeWritten(t *testing.T) {
+	a := New()
+	syms, err := a.ParseSymbols("x.go", []byte(tables))
+	if err != nil {
+		t.Fatal(err)
+	}
+	marks, err := a.RiskMarkers("x.go", []byte(tables), syms)
+	if err != nil {
+		t.Fatal(err)
+	}
+	flagged := map[string]bool{}
+	for _, m := range marks {
+		if m.Kind == "package_level_state" {
+			flagged[string(m.Symbol)] = true
+		}
+	}
+	for _, quiet := range []string{"x.go::hunkRe", "x.go::errMiss", "x.go::lookups"} {
+		if flagged[quiet] {
+			t.Errorf("%s is written once and never mutated — it must not be flagged", quiet)
+		}
+	}
+	if !flagged["x.go::counter"] {
+		t.Error("counter is incremented, so it is genuinely shared mutable state")
+	}
+	if !flagged["x.go::Version"] {
+		t.Error("an exported var can be written by any importing package")
+	}
+}

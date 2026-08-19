@@ -17,6 +17,9 @@ type Config struct {
 		Languages   []string
 		TestCommand string
 		JournalDir  string
+		// Exclude holds path prefixes and globs that are code but not this
+		// repo's own surface: fixtures, vendored trees, generated output.
+		Exclude []string
 	}
 	Gating struct {
 		MinSymbolsChanged   int
@@ -49,6 +52,7 @@ func Default(root string) *Config {
 	c.Repo.Languages = []string{"go"}
 	c.Repo.TestCommand = "go test ./..."
 	c.Repo.JournalDir = filepath.Join(Dir, "journal")
+	c.Repo.Exclude = []string{"testdata/", "vendor/", "node_modules/", "dist/", ".git/"}
 	c.Gating.MinSymbolsChanged = 5
 	c.Gating.NewPublicSurface = true
 	c.Gating.NewDependency = true
@@ -115,6 +119,7 @@ func (c *Config) apply(d Doc) {
 	list("repo.languages", &c.Repo.Languages)
 	str("repo.test_command", &c.Repo.TestCommand)
 	str("repo.journal_dir", &c.Repo.JournalDir)
+	list("repo.exclude", &c.Repo.Exclude)
 
 	inum("gating.min_symbols_changed", &c.Gating.MinSymbolsChanged)
 	bl("gating.new_public_surface", &c.Gating.NewPublicSurface)
@@ -153,6 +158,34 @@ func (c *Config) HasLanguage(name string) bool {
 	return false
 }
 
+// Excluded reports whether a path is outside the audited surface. Matching is
+// on path prefixes and simple globs — enough to name a fixtures directory
+// without pulling in a glob library.
+func (c *Config) Excluded(path string) bool {
+	path = filepath.ToSlash(path)
+	for _, pattern := range c.Repo.Exclude {
+		pattern = filepath.ToSlash(pattern)
+		switch {
+		case strings.HasSuffix(pattern, "/"):
+			if strings.HasPrefix(path, pattern) || strings.Contains(path, "/"+pattern) {
+				return true
+			}
+		case strings.ContainsAny(pattern, "*?["):
+			if ok, _ := filepath.Match(pattern, path); ok {
+				return true
+			}
+			if ok, _ := filepath.Match(pattern, filepath.Base(path)); ok {
+				return true
+			}
+		default:
+			if path == pattern || strings.HasPrefix(path, pattern+"/") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (c *Config) Forbids(rule string) bool {
 	for _, f := range c.Conventions.Forbidden {
 		if f == rule {
@@ -175,6 +208,8 @@ const DefaultTOML = `# PLUM — comprehension-debt system for agent-written code
 languages    = ["go"]
 test_command = "go test ./..."
 journal_dir  = ".plum/journal"
+# Code that is not this repo's own surface: fixtures, vendored and generated trees.
+exclude      = ["testdata/", "vendor/", "node_modules/", "dist/"]
 
 [gating]
 min_symbols_changed  = 5

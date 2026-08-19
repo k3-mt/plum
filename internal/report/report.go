@@ -10,6 +10,12 @@ import (
 	"github.com/kelalaike/plum/internal/bundle"
 )
 
+// maxPerSection bounds how much of any one list the report prints. A report
+// nobody finishes reading is a report that found nothing (spec §7): the fix is
+// to cut sections, not detail, so the remainder is counted and named rather than
+// silently dropped. -v prints everything.
+const maxPerSection = 12
+
 type Options struct {
 	// Stale lists claims whose subject's fingerprint moved since they were
 	// written (P5). Empty when no synthesis has run.
@@ -55,6 +61,8 @@ func Render(b *bundle.Bundle, opt Options) string {
 	if n := len(b.Surface.Added) + len(b.Surface.Removed) + len(b.Surface.Modified); n > 0 {
 		p("## ⚠ Public surface changed")
 		p("")
+		// Signature changes on existing exports are never truncated: they are the
+		// highest-signal event this tool produces.
 		for _, m := range b.Surface.Modified {
 			p("- **signature changed** `%s`", m.Name)
 			p("    - before: `%s`", m.Before)
@@ -64,12 +72,19 @@ func Render(b *bundle.Bundle, opt Options) string {
 		for _, it := range b.Surface.Removed {
 			p("- **removed** %s `%s` (`%s`)", it.Kind, it.Name, it.File)
 		}
-		for _, it := range b.Surface.Added {
+		added := b.Surface.Added
+		shown, hidden := limit(len(added), opt.Verbose)
+		for _, it := range added[:shown] {
 			sig := ""
 			if it.Signature != "" {
-				sig = " — `" + oneline(it.Signature) + "`"
+				sig = " — `" + clip(oneline(it.Signature), 110) + "`"
 			}
 			p("- new %s `%s` (`%s`)%s", it.Kind, it.Name, it.File, sig)
+		}
+		if hidden > 0 {
+			p("- … and %d more new public items — `plum report -v` for the full list", hidden)
+			p("")
+			p("  by kind: %s", byKind(added))
 		}
 		p("")
 	}
@@ -77,10 +92,15 @@ func Render(b *bundle.Bundle, opt Options) string {
 	if len(b.Divergence.Findings) > 0 {
 		p("## ⚠ Divergence from repo conventions — score %.2f", b.Divergence.Score)
 		p("")
-		for _, f := range bySeverity(b.Divergence.Findings) {
+		findings := bySeverity(b.Divergence.Findings)
+		shown, hidden := limit(len(findings), opt.Verbose)
+		for _, f := range findings[:shown] {
 			p("- `%s` **%s** [%s/%s]", f.Symbol, f.Convention, f.Severity, f.Source)
 			p("    - expected: %s", f.Expected)
 			p("    - observed: %s", f.Observed)
+		}
+		if hidden > 0 {
+			p("- … and %d more findings — `plum report -v`", hidden)
 		}
 		p("")
 	}
@@ -110,9 +130,14 @@ func Render(b *bundle.Bundle, opt Options) string {
 		}
 		sort.Strings(kinds)
 		for _, k := range kinds {
-			p("- **%s**", k)
-			for _, r := range byKind[k] {
+			marks := byKind[k]
+			p("- **%s** (%d)", k, len(marks))
+			shown, hidden := limit(len(marks), opt.Verbose)
+			for _, r := range marks[:shown] {
 				p("    - `%s:%d` %s", r.File, r.Line, r.Note)
+			}
+			if hidden > 0 {
+				p("    - … and %d more — `plum report -v`", hidden)
 			}
 		}
 		p("")
@@ -130,7 +155,8 @@ func Render(b *bundle.Bundle, opt Options) string {
 			byFile[s.File] = append(byFile[s.File], s)
 		}
 		sort.Strings(files)
-		for _, f := range files {
+		shownFiles, hiddenFiles := limit(len(files), opt.Verbose)
+		for _, f := range files[:shownFiles] {
 			p("`%s`", f)
 			p("")
 			for _, s := range byFile[f] {
@@ -155,6 +181,10 @@ func Render(b *bundle.Bundle, opt Options) string {
 			}
 			p("")
 		}
+		if hiddenFiles > 0 {
+			p("… and %d more files — `plum report -v`", hiddenFiles)
+			p("")
+		}
 	}
 
 	if edges := crossModule(b.Edges); len(edges) > 0 {
@@ -162,8 +192,12 @@ func Render(b *bundle.Bundle, opt Options) string {
 		p("")
 		p("Coupling this session introduced between packages.")
 		p("")
-		for _, e := range edges {
+		shown, hidden := limit(len(edges), opt.Verbose)
+		for _, e := range edges[:shown] {
 			p("- `%s` → `%s`", e.From, e.To)
+		}
+		if hidden > 0 {
+			p("- … and %d more — `plum report -v`", hidden)
 		}
 		p("")
 	}
@@ -208,8 +242,12 @@ func Render(b *bundle.Bundle, opt Options) string {
 		p("")
 		p("%d of %d changed symbols are not named by any changed test.", len(b.Coverage.Untested), b.Coverage.SymbolCount)
 		p("")
-		for _, id := range b.Coverage.Untested {
+		shown, hidden := limit(len(b.Coverage.Untested), opt.Verbose)
+		for _, id := range b.Coverage.Untested[:shown] {
 			p("- `%s`", id)
+		}
+		if hidden > 0 {
+			p("- … and %d more — `plum report -v`", hidden)
 		}
 		p("")
 	}
@@ -230,6 +268,39 @@ func Render(b *bundle.Bundle, opt Options) string {
 	}
 	p("")
 	return w.String()
+}
+
+// limit returns how many entries to print and how many are held back.
+func limit(n int, verbose bool) (int, int) {
+	if verbose || n <= maxPerSection {
+		return n, 0
+	}
+	return maxPerSection, n - maxPerSection
+}
+
+func clip(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
+}
+
+// byKind summarises a truncated surface list so the shape is still legible.
+func byKind(items []bundle.SurfaceItem) string {
+	counts := map[string]int{}
+	for _, i := range items {
+		counts[i.Kind]++
+	}
+	var kinds []string
+	for k := range counts {
+		kinds = append(kinds, k)
+	}
+	sort.Strings(kinds)
+	var parts []string
+	for _, k := range kinds {
+		parts = append(parts, fmt.Sprintf("%d %s", counts[k], k))
+	}
+	return strings.Join(parts, ", ")
 }
 
 func bySeverity(fs []bundle.DivergenceFinding) []bundle.DivergenceFinding {

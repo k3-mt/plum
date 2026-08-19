@@ -1,0 +1,1846 @@
+{
+  "session_id": "2026-08-19-c876",
+  "wells": [
+    {
+      "symbol": "internal/extract/extract.go::Extractor.Extract",
+      "label": "Extractor.Extract",
+      "depth": 0,
+      "self_ns": 20000,
+      "phase": "enter",
+      "doc": "Extract produces the bundle for a session. The session record supplies the\ncommit range; everything else is derived here.",
+      "risk": false,
+      "invocations": [
+        "ctx=context.Background, journal=[], sess={fixture 0b42dec531a9b0ab8943bebd39e60782b06f1c86 36c468088a59fbc36315c042d5f8818429f06750 1970-01-01 00:00:00 +0000 UTC 1970-01-01 00:00:00 +0000 UTC fixture fixture false }",
+        "→ \u0026{1.0 {fixture 0b42dec531a9b0ab8943bebd39e60782b06f1c86 36c468088a59fbc36315c042d5f8818429f06750 1970-01-01 00:00:00 +0000 UTC 1970-01-01 00:00:00 +0000 UTC fixture fixture false } [{internal/auth/cac…"
+      ]
+    },
+    {
+      "symbol": "internal/vcs/git.go::Repo.Diff",
+      "label": "Repo.Diff",
+      "depth": 1,
+      "self_ns": 28000,
+      "phase": "enter",
+      "doc": "Diff returns the unified diff between two revisions with zero context lines,\nwhich keeps hunks tight and symbol mapping precise (spec §6.3).",
+      "risk": false,
+      "invocations": [
+        "ctx=context.Background, from=0b42dec531a9b0ab8943bebd39e60782b06f1c86, to=36c468088a59fbc36315c042d5f8818429f06750",
+        "→ diff --git a/internal/auth/cache.go b/internal/auth/cache.go\nindex f841fa5..423b689 100644\n--- a/internal/auth/cache.go\n+++ b/internal/auth/cache.go\n@@ -5,0 +6,2 @@ import (\n+\t\"net/http\"\n+\t\"os\"\n@@ -10…"
+      ]
+    },
+    {
+      "symbol": "internal/vcs/git.go::Repo.git",
+      "label": "Repo.git",
+      "depth": 2,
+      "self_ns": 7716000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "ctx=context.Background",
+        "→ diff --git a/internal/auth/cache.go b/internal/auth/cache.go\nindex f841fa5..423b689 100644\n--- a/internal/auth/cache.go\n+++ b/internal/auth/cache.go\n@@ -5,0 +6,2 @@ import (\n+\t\"net/http\"\n+\t\"os\"\n@@ -10…"
+      ]
+    },
+    {
+      "symbol": "internal/vcs/git.go::Repo.Diff",
+      "label": "Repo.Diff",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "Diff returns the unified diff between two revisions with zero context lines,\nwhich keeps hunks tight and symbol mapping precise (spec §6.3).",
+      "risk": false,
+      "invocations": [
+        "← Repo.git diff --git a/internal/auth/cache.go b/internal/auth/cache.go\nindex f841fa5..423b689 100644\n--- a/internal/auth/cache.go\n…"
+      ]
+    },
+    {
+      "symbol": "internal/extract/extract.go::Extractor.Extract",
+      "label": "Extractor.Extract",
+      "depth": 0,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "Extract produces the bundle for a session. The session record supplies the\ncommit range; everything else is derived here.",
+      "risk": false,
+      "invocations": [
+        "← Repo.Diff diff --git a/internal/auth/cache.go b/internal/auth/cache.go\nindex f841fa5..423b689 100644\n--- a/internal/auth/cache.go\n…"
+      ]
+    },
+    {
+      "symbol": "internal/vcs/git.go::Repo.NameStatus",
+      "label": "Repo.NameStatus",
+      "depth": 1,
+      "self_ns": 22000,
+      "phase": "enter",
+      "doc": "NameStatus returns the machine-readable file change list for a range.",
+      "risk": false,
+      "invocations": [
+        "ctx=context.Background, from=0b42dec531a9b0ab8943bebd39e60782b06f1c86, to=36c468088a59fbc36315c042d5f8818429f06750",
+        "→ 23\t2\tinternal/auth/cache.go\n, \u003cnil\u003e"
+      ]
+    },
+    {
+      "symbol": "internal/vcs/git.go::Repo.git",
+      "label": "Repo.git",
+      "depth": 2,
+      "self_ns": 6343000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "ctx=context.Background",
+        "→ 23\t2\tinternal/auth/cache.go\n, \u003cnil\u003e"
+      ]
+    },
+    {
+      "symbol": "internal/vcs/git.go::Repo.NameStatus",
+      "label": "Repo.NameStatus",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "NameStatus returns the machine-readable file change list for a range.",
+      "risk": false,
+      "invocations": [
+        "← Repo.git 23\t2\tinternal/auth/cache.go\n, \u003cnil\u003e"
+      ]
+    },
+    {
+      "symbol": "internal/extract/extract.go::Extractor.Extract",
+      "label": "Extractor.Extract",
+      "depth": 0,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "Extract produces the bundle for a session. The session record supplies the\ncommit range; everything else is derived here.",
+      "risk": false,
+      "invocations": [
+        "← Repo.NameStatus 23\t2\tinternal/auth/cache.go\n, \u003cnil\u003e"
+      ]
+    },
+    {
+      "symbol": "internal/vcs/git.go::Repo.Status",
+      "label": "Repo.Status",
+      "depth": 1,
+      "self_ns": 29000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "ctx=context.Background, from=0b42dec531a9b0ab8943bebd39e60782b06f1c86, to=36c468088a59fbc36315c042d5f8818429f06750",
+        "→ M\tinternal/auth/cache.go\n, \u003cnil\u003e"
+      ]
+    },
+    {
+      "symbol": "internal/vcs/git.go::Repo.git",
+      "label": "Repo.git",
+      "depth": 2,
+      "self_ns": 6353000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "ctx=context.Background",
+        "→ M\tinternal/auth/cache.go\n, \u003cnil\u003e"
+      ]
+    },
+    {
+      "symbol": "internal/vcs/git.go::Repo.Status",
+      "label": "Repo.Status",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "← Repo.git M\tinternal/auth/cache.go\n, \u003cnil\u003e"
+      ]
+    },
+    {
+      "symbol": "internal/extract/extract.go::Extractor.Extract",
+      "label": "Extractor.Extract",
+      "depth": 0,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "Extract produces the bundle for a session. The session record supplies the\ncommit range; everything else is derived here.",
+      "risk": false,
+      "invocations": [
+        "← Repo.Status M\tinternal/auth/cache.go\n, \u003cnil\u003e"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::ParseNumstat",
+      "label": "ParseNumstat",
+      "depth": 1,
+      "self_ns": 13000,
+      "phase": "enter",
+      "doc": "ParseNumstat reads `git diff --numstat` into per-file line counts.",
+      "risk": false,
+      "invocations": [
+        "s=23\t2\tinternal/auth/cache.go\n",
+        "→ map[internal/auth/cache.go:[23 2]]"
+      ]
+    },
+    {
+      "symbol": "internal/extract/extract.go::Extractor.Extract",
+      "label": "Extractor.Extract",
+      "depth": 0,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "Extract produces the bundle for a session. The session record supplies the\ncommit range; everything else is derived here.",
+      "risk": false,
+      "invocations": [
+        "← ParseNumstat map[internal/auth/cache.go:[23 2]]"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::ParseNameStatus",
+      "label": "ParseNameStatus",
+      "depth": 1,
+      "self_ns": 4000,
+      "phase": "enter",
+      "doc": "ParseNameStatus reads `git diff --name-status` into change kinds.",
+      "risk": false,
+      "invocations": [
+        "s=M\tinternal/auth/cache.go\n",
+        "→ map[internal/auth/cache.go:modified]"
+      ]
+    },
+    {
+      "symbol": "internal/extract/extract.go::Extractor.Extract",
+      "label": "Extractor.Extract",
+      "depth": 0,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "Extract produces the bundle for a session. The session record supplies the\ncommit range; everything else is derived here.",
+      "risk": false,
+      "invocations": [
+        "← ParseNameStatus map[internal/auth/cache.go:modified]"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::ParseDiff",
+      "label": "ParseDiff",
+      "depth": 1,
+      "self_ns": 12000,
+      "phase": "enter",
+      "doc": "ParseDiff reads `git diff --unified=0` output into per-file hunks. Zero\ncontext keeps hunks tight, which is what makes symbol mapping precise (§6.3).",
+      "risk": false,
+      "invocations": [
+        "diff=diff --git a/internal/auth/cache.go b/internal/auth/cache.go\nindex f841fa5..423b689 100644\n--- a/internal/auth/cache.go\n+++ b/internal/auth/cache.go\n@@ -5,0 +6,2 @@ import (\n+\t\"net/http\"\n+\t\"os\"\n@@ -10…",
+        "→ [{internal/auth/cache.go 5 0 6 2 [\t\"net/http\" \t\"os\"] []} {internal/auth/cache.go 10 0 13 3 [// hits counts lookups for the debug endpoint. var hits int ] []} {internal/auth/cache.go 22 1 27 2 [func (c…"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::atoi",
+      "label": "atoi",
+      "depth": 2,
+      "self_ns": 4000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "s=5",
+        "→ 5"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::ParseDiff",
+      "label": "ParseDiff",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "ParseDiff reads `git diff --unified=0` output into per-file hunks. Zero\ncontext keeps hunks tight, which is what makes symbol mapping precise (§6.3).",
+      "risk": false,
+      "invocations": [
+        "← atoi 5"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::atoi",
+      "label": "atoi",
+      "depth": 2,
+      "self_ns": 3000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "s=6",
+        "→ 6"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::ParseDiff",
+      "label": "ParseDiff",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "ParseDiff reads `git diff --unified=0` output into per-file hunks. Zero\ncontext keeps hunks tight, which is what makes symbol mapping precise (§6.3).",
+      "risk": false,
+      "invocations": [
+        "← atoi 6"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::atoi",
+      "label": "atoi",
+      "depth": 2,
+      "self_ns": 3000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "s=0",
+        "→ 0"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::ParseDiff",
+      "label": "ParseDiff",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "ParseDiff reads `git diff --unified=0` output into per-file hunks. Zero\ncontext keeps hunks tight, which is what makes symbol mapping precise (§6.3).",
+      "risk": false,
+      "invocations": [
+        "← atoi 0"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::atoi",
+      "label": "atoi",
+      "depth": 2,
+      "self_ns": 3000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "s=2",
+        "→ 2"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::ParseDiff",
+      "label": "ParseDiff",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "ParseDiff reads `git diff --unified=0` output into per-file hunks. Zero\ncontext keeps hunks tight, which is what makes symbol mapping precise (§6.3).",
+      "risk": false,
+      "invocations": [
+        "← atoi 2"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::atoi",
+      "label": "atoi",
+      "depth": 2,
+      "self_ns": 2000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "s=10",
+        "→ 10"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::ParseDiff",
+      "label": "ParseDiff",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "ParseDiff reads `git diff --unified=0` output into per-file hunks. Zero\ncontext keeps hunks tight, which is what makes symbol mapping precise (§6.3).",
+      "risk": false,
+      "invocations": [
+        "← atoi 10"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::atoi",
+      "label": "atoi",
+      "depth": 2,
+      "self_ns": 3000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "s=13",
+        "→ 13"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::ParseDiff",
+      "label": "ParseDiff",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "ParseDiff reads `git diff --unified=0` output into per-file hunks. Zero\ncontext keeps hunks tight, which is what makes symbol mapping precise (§6.3).",
+      "risk": false,
+      "invocations": [
+        "← atoi 13"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::atoi",
+      "label": "atoi",
+      "depth": 2,
+      "self_ns": 2000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "s=0",
+        "→ 0"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::ParseDiff",
+      "label": "ParseDiff",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "ParseDiff reads `git diff --unified=0` output into per-file hunks. Zero\ncontext keeps hunks tight, which is what makes symbol mapping precise (§6.3).",
+      "risk": false,
+      "invocations": [
+        "← atoi 0"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::atoi",
+      "label": "atoi",
+      "depth": 2,
+      "self_ns": 2000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "s=3",
+        "→ 3"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::ParseDiff",
+      "label": "ParseDiff",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "ParseDiff reads `git diff --unified=0` output into per-file hunks. Zero\ncontext keeps hunks tight, which is what makes symbol mapping precise (§6.3).",
+      "risk": false,
+      "invocations": [
+        "← atoi 3"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::atoi",
+      "label": "atoi",
+      "depth": 2,
+      "self_ns": 3000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "s=22",
+        "→ 22"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::ParseDiff",
+      "label": "ParseDiff",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "ParseDiff reads `git diff --unified=0` output into per-file hunks. Zero\ncontext keeps hunks tight, which is what makes symbol mapping precise (§6.3).",
+      "risk": false,
+      "invocations": [
+        "← atoi 22"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::atoi",
+      "label": "atoi",
+      "depth": 2,
+      "self_ns": 2000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "s=27",
+        "→ 27"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::ParseDiff",
+      "label": "ParseDiff",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "ParseDiff reads `git diff --unified=0` output into per-file hunks. Zero\ncontext keeps hunks tight, which is what makes symbol mapping precise (§6.3).",
+      "risk": false,
+      "invocations": [
+        "← atoi 27"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::atoi",
+      "label": "atoi",
+      "depth": 2,
+      "self_ns": 2000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "s=2",
+        "→ 2"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::ParseDiff",
+      "label": "ParseDiff",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "ParseDiff reads `git diff --unified=0` output into per-file hunks. Zero\ncontext keeps hunks tight, which is what makes symbol mapping precise (§6.3).",
+      "risk": false,
+      "invocations": [
+        "← atoi 2"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::atoi",
+      "label": "atoi",
+      "depth": 2,
+      "self_ns": 2000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "s=27",
+        "→ 27"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::ParseDiff",
+      "label": "ParseDiff",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "ParseDiff reads `git diff --unified=0` output into per-file hunks. Zero\ncontext keeps hunks tight, which is what makes symbol mapping precise (§6.3).",
+      "risk": false,
+      "invocations": [
+        "← atoi 27"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::atoi",
+      "label": "atoi",
+      "depth": 2,
+      "self_ns": 2000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "s=33",
+        "→ 33"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::ParseDiff",
+      "label": "ParseDiff",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "ParseDiff reads `git diff --unified=0` output into per-file hunks. Zero\ncontext keeps hunks tight, which is what makes symbol mapping precise (§6.3).",
+      "risk": false,
+      "invocations": [
+        "← atoi 33"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::atoi",
+      "label": "atoi",
+      "depth": 2,
+      "self_ns": 2000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "s=16",
+        "→ 16"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::ParseDiff",
+      "label": "ParseDiff",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "ParseDiff reads `git diff --unified=0` output into per-file hunks. Zero\ncontext keeps hunks tight, which is what makes symbol mapping precise (§6.3).",
+      "risk": false,
+      "invocations": [
+        "← atoi 16"
+      ]
+    },
+    {
+      "symbol": "internal/extract/extract.go::Extractor.Extract",
+      "label": "Extractor.Extract",
+      "depth": 0,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "Extract produces the bundle for a session. The session record supplies the\ncommit range; everything else is derived here.",
+      "risk": false,
+      "invocations": [
+        "← ParseDiff [{internal/auth/cache.go 5 0 6 2 [\t\"net/http\" \t\"os\"] []} {internal/auth/cache.go 10 0 13 3 [// hits counts lookups for t…"
+      ]
+    },
+    {
+      "symbol": "internal/extract/diff.go::HunksByFile",
+      "label": "HunksByFile",
+      "depth": 1,
+      "self_ns": 15000,
+      "phase": "enter",
+      "doc": "HunksByFile groups hunks for symbol mapping.",
+      "risk": false,
+      "invocations": [
+        "hs=[{internal/auth/cache.go 5 0 6 2 [\t\"net/http\" \t\"os\"] []} {internal/auth/cache.go 10 0 13 3 [// hits counts lookups for the debug endpoint. var hits int ] []} {internal/auth/cache.go 22 1 27 2 [func (c…",
+        "→ map[internal/auth/cache.go:[{internal/auth/cache.go 5 0 6 2 [\t\"net/http\" \t\"os\"] []} {internal/auth/cache.go 10 0 13 3 [// hits counts lookups for the debug endpoint. var hits int ] []} {internal/auth/…"
+      ]
+    },
+    {
+      "symbol": "internal/extract/extract.go::Extractor.Extract",
+      "label": "Extractor.Extract",
+      "depth": 0,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "Extract produces the bundle for a session. The session record supplies the\ncommit range; everything else is derived here.",
+      "risk": false,
+      "invocations": [
+        "← HunksByFile map[internal/auth/cache.go:[{internal/auth/cache.go 5 0 6 2 [\t\"net/http\" \t\"os\"] []} {internal/auth/cache.go 10 0 13 3 [/…"
+      ]
+    },
+    {
+      "symbol": "internal/vcs/git.go::Repo.Show",
+      "label": "Repo.Show",
+      "depth": 1,
+      "self_ns": 16000,
+      "phase": "enter",
+      "doc": "Show reads a blob at a revision. Missing paths return (\"\", nil) so callers can\ntreat \"did not exist at StartSHA\" as the added case.",
+      "risk": false,
+      "invocations": [
+        "ctx=context.Background, path=internal/auth/cache.go, rev=0b42dec531a9b0ab8943bebd39e60782b06f1c86",
+        "→ package auth\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n)\n\n// ErrMiss is returned when a key is not present.\nvar ErrMiss = errors.New(\"auth: cache miss\")\n\n// Cache holds tokens keyed by user id.\ntype Cache struct {\n\t…"
+      ]
+    },
+    {
+      "symbol": "internal/vcs/git.go::Repo.git",
+      "label": "Repo.git",
+      "depth": 2,
+      "self_ns": 6346000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "ctx=context.Background",
+        "→ package auth\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n)\n\n// ErrMiss is returned when a key is not present.\nvar ErrMiss = errors.New(\"auth: cache miss\")\n\n// Cache holds tokens keyed by user id.\ntype Cache struct {\n\t…"
+      ]
+    },
+    {
+      "symbol": "internal/vcs/git.go::Repo.Show",
+      "label": "Repo.Show",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "Show reads a blob at a revision. Missing paths return (\"\", nil) so callers can\ntreat \"did not exist at StartSHA\" as the added case.",
+      "risk": false,
+      "invocations": [
+        "← Repo.git package auth\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n)\n\n// ErrMiss is returned when a key is not present.\nvar ErrMiss = errors.New(\"a…"
+      ]
+    },
+    {
+      "symbol": "internal/extract/extract.go::Extractor.Extract",
+      "label": "Extractor.Extract",
+      "depth": 0,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "Extract produces the bundle for a session. The session record supplies the\ncommit range; everything else is derived here.",
+      "risk": false,
+      "invocations": [
+        "← Repo.Show package auth\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n)\n\n// ErrMiss is returned when a key is not present.\nvar ErrMiss = errors.New(\"a…"
+      ]
+    },
+    {
+      "symbol": "internal/vcs/git.go::Repo.Show",
+      "label": "Repo.Show",
+      "depth": 1,
+      "self_ns": 24000,
+      "phase": "enter",
+      "doc": "Show reads a blob at a revision. Missing paths return (\"\", nil) so callers can\ntreat \"did not exist at StartSHA\" as the added case.",
+      "risk": false,
+      "invocations": [
+        "ctx=context.Background, path=internal/auth/cache.go, rev=36c468088a59fbc36315c042d5f8818429f06750",
+        "→ package auth\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n\t\"net/http\"\n\t\"os\"\n)\n\n// ErrMiss is returned when a key is not present.\nvar ErrMiss = errors.New(\"auth: cache miss\")\n\n// hits counts lookups for the debug endpoi…"
+      ]
+    },
+    {
+      "symbol": "internal/vcs/git.go::Repo.git",
+      "label": "Repo.git",
+      "depth": 2,
+      "self_ns": 6110000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "ctx=context.Background",
+        "→ package auth\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n\t\"net/http\"\n\t\"os\"\n)\n\n// ErrMiss is returned when a key is not present.\nvar ErrMiss = errors.New(\"auth: cache miss\")\n\n// hits counts lookups for the debug endpoi…"
+      ]
+    },
+    {
+      "symbol": "internal/vcs/git.go::Repo.Show",
+      "label": "Repo.Show",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "Show reads a blob at a revision. Missing paths return (\"\", nil) so callers can\ntreat \"did not exist at StartSHA\" as the added case.",
+      "risk": false,
+      "invocations": [
+        "← Repo.git package auth\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n\t\"net/http\"\n\t\"os\"\n)\n\n// ErrMiss is returned when a key is not present.\nvar ErrMi…"
+      ]
+    },
+    {
+      "symbol": "internal/extract/extract.go::Extractor.Extract",
+      "label": "Extractor.Extract",
+      "depth": 0,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "Extract produces the bundle for a session. The session record supplies the\ncommit range; everything else is derived here.",
+      "risk": false,
+      "invocations": [
+        "← Repo.Show package auth\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n\t\"net/http\"\n\t\"os\"\n)\n\n// ErrMiss is returned when a key is not present.\nvar ErrMi…"
+      ]
+    },
+    {
+      "symbol": "internal/lang/adapter.go::Registry.Language",
+      "label": "Registry.Language",
+      "depth": 1,
+      "self_ns": 3000,
+      "phase": "enter",
+      "doc": "Language names the adapter that would handle a path, or \"\" when unsupported.",
+      "risk": false,
+      "invocations": [
+        "path=internal/auth/cache.go",
+        "→ go"
+      ]
+    },
+    {
+      "symbol": "internal/lang/adapter.go::Registry.For",
+      "label": "Registry.For",
+      "depth": 2,
+      "self_ns": 4000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "path=internal/auth/cache.go",
+        "→ \u0026{}"
+      ]
+    },
+    {
+      "symbol": "internal/lang/gopkg/adapter.go::Adapter.Extensions",
+      "label": "Adapter.Extensions",
+      "depth": 3,
+      "self_ns": 16000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "→ [.go]"
+      ]
+    },
+    {
+      "symbol": "internal/lang/adapter.go::Registry.For",
+      "label": "Registry.For",
+      "depth": 2,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "← Adapter.Extensions [.go]"
+      ]
+    },
+    {
+      "symbol": "internal/lang/adapter.go::Registry.Language",
+      "label": "Registry.Language",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "Language names the adapter that would handle a path, or \"\" when unsupported.",
+      "risk": false,
+      "invocations": [
+        "← Registry.For \u0026{}"
+      ]
+    },
+    {
+      "symbol": "internal/lang/gopkg/adapter.go::Adapter.Name",
+      "label": "Adapter.Name",
+      "depth": 2,
+      "self_ns": 2000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "→ go"
+      ]
+    },
+    {
+      "symbol": "internal/lang/adapter.go::Registry.Language",
+      "label": "Registry.Language",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "Language names the adapter that would handle a path, or \"\" when unsupported.",
+      "risk": false,
+      "invocations": [
+        "← Adapter.Name go"
+      ]
+    },
+    {
+      "symbol": "internal/extract/extract.go::Extractor.Extract",
+      "label": "Extractor.Extract",
+      "depth": 0,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "Extract produces the bundle for a session. The session record supplies the\ncommit range; everything else is derived here.",
+      "risk": false,
+      "invocations": [
+        "← Registry.Language go"
+      ]
+    },
+    {
+      "symbol": "internal/extract/extract.go::isBinary",
+      "label": "isBinary",
+      "depth": 1,
+      "self_ns": 7000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "b=[112 97 99 107 97 103 101 32 97 117 116 104 10 10 105 109 112 111 114 116 32 40 10 9 34 101 114 114 111 114 115 34 10 9 34 102 109 116 34 10 9 34 110 101 116 47 104 116 116 112 34 10 9 34 111 115 34 1…",
+        "→ false"
+      ]
+    },
+    {
+      "symbol": "internal/extract/extract.go::Extractor.Extract",
+      "label": "Extractor.Extract",
+      "depth": 0,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "Extract produces the bundle for a session. The session record supplies the\ncommit range; everything else is derived here.",
+      "risk": false,
+      "invocations": [
+        "← isBinary false"
+      ]
+    },
+    {
+      "symbol": "internal/extract/extract.go::isMigration",
+      "label": "isMigration",
+      "depth": 1,
+      "self_ns": 4000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "path=internal/auth/cache.go",
+        "→ false"
+      ]
+    },
+    {
+      "symbol": "internal/extract/extract.go::Extractor.Extract",
+      "label": "Extractor.Extract",
+      "depth": 0,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "Extract produces the bundle for a session. The session record supplies the\ncommit range; everything else is derived here.",
+      "risk": false,
+      "invocations": [
+        "← isMigration false"
+      ]
+    },
+    {
+      "symbol": "internal/extract/extract.go::Extractor.symbols",
+      "label": "Extractor.symbols",
+      "depth": 1,
+      "self_ns": 3000,
+      "phase": "enter",
+      "doc": "symbols parses both sides of every changed file, maps hunks onto the new-side\ndeclarations, and records deletions from the old side.",
+      "risk": false,
+      "invocations": [
+        "b=\u0026{1.0 {fixture 0b42dec531a9b0ab8943bebd39e60782b06f1c86 36c468088a59fbc36315c042d5f8818429f06750 1970-01-01 00:00:00 +0000 UTC 1970-01-01 00:00:00 +0000 UTC fixture fixture false } [{internal/auth/cac…, states=map[internal/auth/cache.go:0x215482bf6000]",
+        "→ "
+      ]
+    },
+    {
+      "symbol": "internal/extract/extract.go::sortedStates",
+      "label": "sortedStates",
+      "depth": 2,
+      "self_ns": 4000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "m=map[internal/auth/cache.go:0x215482bf6000]",
+        "→ [0x215482bf6000]"
+      ]
+    },
+    {
+      "symbol": "internal/extract/extract.go::Extractor.symbols",
+      "label": "Extractor.symbols",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "symbols parses both sides of every changed file, maps hunks onto the new-side\ndeclarations, and records deletions from the old side.",
+      "risk": false,
+      "invocations": [
+        "← sortedStates [0x215482bf6000]"
+      ]
+    },
+    {
+      "symbol": "internal/lang/adapter.go::Registry.For",
+      "label": "Registry.For",
+      "depth": 2,
+      "self_ns": 3000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "path=internal/auth/cache.go",
+        "→ \u0026{}"
+      ]
+    },
+    {
+      "symbol": "internal/lang/gopkg/adapter.go::Adapter.Extensions",
+      "label": "Adapter.Extensions",
+      "depth": 3,
+      "self_ns": 2000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "→ [.go]"
+      ]
+    },
+    {
+      "symbol": "internal/lang/adapter.go::Registry.For",
+      "label": "Registry.For",
+      "depth": 2,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "← Adapter.Extensions [.go]"
+      ]
+    },
+    {
+      "symbol": "internal/extract/extract.go::Extractor.symbols",
+      "label": "Extractor.symbols",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "symbols parses both sides of every changed file, maps hunks onto the new-side\ndeclarations, and records deletions from the old side.",
+      "risk": false,
+      "invocations": [
+        "← Registry.For \u0026{}"
+      ]
+    },
+    {
+      "symbol": "internal/lang/gopkg/adapter.go::Adapter.ParseSymbols",
+      "label": "Adapter.ParseSymbols",
+      "depth": 2,
+      "self_ns": 10000,
+      "phase": "enter",
+      "doc": "ParseSymbols returns every declaration in the file with line spans, docs,\nbody comments, outbound call sites and a normalised fingerprint.",
+      "risk": false,
+      "invocations": [
+        "path=internal/auth/cache.go, src=[112 97 99 107 97 103 101 32 97 117 116 104 10 10 105 109 112 111 114 116 32 40 10 9 34 101 114 114 111 114 115 34 10 9 34 102 109 116 34 10 41 10 10 47 47 32 69 114 114 77 105 115 115 32 105 115 32 1…",
+        "→ [{internal/auth/cache.go::ErrMiss var ErrMiss internal/auth/cache.go 9 9 97 137  var ErrMiss = errors.New(\"auth: cache miss\") sha256:480efe1e2f3dee7d100603bf23810222eaa026c8468e21b1346cdfa0e84fbcdf Er…"
+      ]
+    },
+    {
+      "symbol": "internal/lang/gopkg/adapter.go::parse",
+      "label": "parse",
+      "depth": 3,
+      "self_ns": 90000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "invocations": [
+        "path=internal/auth/cache.go, src=[112 97 99 107 97 103 101 32 97 117 116 104 10 10 105 109 112 111 114 116 32 40 10 9 34 101 114 114 111 114 115 34 10 9 34 102 109 116 34 10 41 10 10 47 47 32 69 114 114 77 105 115 115 32 105 115 32 1…",
+        "→ \u0026{0x215482b9d620 0x215482f00d20 [112 97 99 107 97 103 101 32 97 117 116 104 10 10 105 109 112 111 114 116 32 40 10 9 34 101 114 114 111 114 115 34 10 9 34 102 109 116 34 10 41 10 10 47 47 32 69 114 11…"
+      ]
+    },
+    {
+      "symbol": "internal/lang/gopkg/adapter.go::Adapter.ParseSymbols",
+      "label": "Adapter.ParseSymbols",
+      "depth": 2,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "ParseSymbols returns every declaration in the file with line spans, docs,\nbody comments, outbound call sites and a normalised fingerprint.",
+      "risk": false,
+      "invocations": [
+        "← parse \u0026{0x215482b9d620 0x215482f00d20 [112 97 99 107 97 103 101 32 97 117 116 104 10 10 105 109 112 111 114 116 32 40 10 9 34 …"
+      ]
+    },
+    {
+      "symbol": "internal/lang/gopkg/adapter.go::commentIndex",
+      "label": "commentIndex",
+      "depth": 3,
+      "self_ns": 10000,
+      "phase": "enter",
+      "doc": "commentIndex maps the line a comment block ends on to that block, so a call\nsite can find the contiguous comment directly above it (spec §9.4).",
+      "risk": false,
+      "invocations": [
+        "p=\u0026{0x215482b9d620 0x215482f00d20 [112 97 99 107 97 103 101 32 97 117 116 104 10 10 105 109 112 111 114 116 32 40 10 9 34 101 114 114 111 114 115 34 10 9 34 102 109 116 34 10 41 10 10 47 47 32 69 114 11…",
+        "→ map[8:0x215482bac7f8 11:0x215482bac840 16:0x215482bac888 21:0x215482bac8d0]"
+      ]
+    }
+  ],
+  "barriers": [
+    {
+      "from": 0,
+      "to": 1,
+      "direction": "descend",
+      "cost_ns": 11000,
+      "height": 0.206,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 1,
+      "to": 2,
+      "direction": "descend",
+      "cost_ns": 10000,
+      "height": 0.194,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 2,
+      "to": 3,
+      "direction": "ascend",
+      "cost_ns": 7716000,
+      "height": 0.996,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 3,
+      "to": 4,
+      "direction": "ascend",
+      "cost_ns": 28000,
+      "height": 0.318,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 4,
+      "to": 5,
+      "direction": "descend",
+      "cost_ns": 24000,
+      "height": 0.3,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 5,
+      "to": 6,
+      "direction": "descend",
+      "cost_ns": 20000,
+      "height": 0.278,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 6,
+      "to": 7,
+      "direction": "ascend",
+      "cost_ns": 6343000,
+      "height": 0.973,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 7,
+      "to": 8,
+      "direction": "ascend",
+      "cost_ns": 22000,
+      "height": 0.289,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 8,
+      "to": 9,
+      "direction": "descend",
+      "cost_ns": 17000,
+      "height": 0.258,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 9,
+      "to": 10,
+      "direction": "descend",
+      "cost_ns": 22000,
+      "height": 0.289,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 10,
+      "to": 11,
+      "direction": "ascend",
+      "cost_ns": 6353000,
+      "height": 0.973,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 11,
+      "to": 12,
+      "direction": "ascend",
+      "cost_ns": 29000,
+      "height": 0.323,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 12,
+      "to": 13,
+      "direction": "descend",
+      "cost_ns": 24000,
+      "height": 0.3,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 13,
+      "to": 14,
+      "direction": "ascend",
+      "cost_ns": 13000,
+      "height": 0.226,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 14,
+      "to": 15,
+      "direction": "descend",
+      "cost_ns": 10000,
+      "height": 0.194,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 15,
+      "to": 16,
+      "direction": "ascend",
+      "cost_ns": 4000,
+      "height": 0.084,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 16,
+      "to": 17,
+      "direction": "descend",
+      "cost_ns": 23000,
+      "height": 0.295,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 17,
+      "to": 18,
+      "direction": "descend",
+      "cost_ns": 43000,
+      "height": 0.37,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 18,
+      "to": 19,
+      "direction": "ascend",
+      "cost_ns": 4000,
+      "height": 0.084,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 19,
+      "to": 20,
+      "direction": "descend",
+      "cost_ns": 9000,
+      "height": 0.181,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 20,
+      "to": 21,
+      "direction": "ascend",
+      "cost_ns": 3000,
+      "height": 0.05,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 21,
+      "to": 22,
+      "direction": "descend",
+      "cost_ns": 9000,
+      "height": 0.181,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 22,
+      "to": 23,
+      "direction": "ascend",
+      "cost_ns": 3000,
+      "height": 0.05,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 23,
+      "to": 24,
+      "direction": "descend",
+      "cost_ns": 8000,
+      "height": 0.167,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 24,
+      "to": 25,
+      "direction": "ascend",
+      "cost_ns": 3000,
+      "height": 0.05,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 25,
+      "to": 26,
+      "direction": "descend",
+      "cost_ns": 10000,
+      "height": 0.194,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 26,
+      "to": 27,
+      "direction": "ascend",
+      "cost_ns": 2000,
+      "height": 0.05,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 27,
+      "to": 28,
+      "direction": "descend",
+      "cost_ns": 20000,
+      "height": 0.278,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 28,
+      "to": 29,
+      "direction": "ascend",
+      "cost_ns": 3000,
+      "height": 0.05,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 29,
+      "to": 30,
+      "direction": "descend",
+      "cost_ns": 9000,
+      "height": 0.181,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 30,
+      "to": 31,
+      "direction": "ascend",
+      "cost_ns": 2000,
+      "height": 0.05,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 31,
+      "to": 32,
+      "direction": "descend",
+      "cost_ns": 9000,
+      "height": 0.181,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 32,
+      "to": 33,
+      "direction": "ascend",
+      "cost_ns": 2000,
+      "height": 0.05,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 33,
+      "to": 34,
+      "direction": "descend",
+      "cost_ns": 13000,
+      "height": 0.226,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 34,
+      "to": 35,
+      "direction": "ascend",
+      "cost_ns": 3000,
+      "height": 0.05,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 35,
+      "to": 36,
+      "direction": "descend",
+      "cost_ns": 9000,
+      "height": 0.181,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 36,
+      "to": 37,
+      "direction": "ascend",
+      "cost_ns": 2000,
+      "height": 0.05,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 37,
+      "to": 38,
+      "direction": "descend",
+      "cost_ns": 10000,
+      "height": 0.194,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 38,
+      "to": 39,
+      "direction": "ascend",
+      "cost_ns": 2000,
+      "height": 0.05,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 39,
+      "to": 40,
+      "direction": "descend",
+      "cost_ns": 11000,
+      "height": 0.206,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 40,
+      "to": 41,
+      "direction": "ascend",
+      "cost_ns": 2000,
+      "height": 0.05,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 41,
+      "to": 42,
+      "direction": "descend",
+      "cost_ns": 10000,
+      "height": 0.194,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 42,
+      "to": 43,
+      "direction": "ascend",
+      "cost_ns": 2000,
+      "height": 0.05,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 43,
+      "to": 44,
+      "direction": "descend",
+      "cost_ns": 9000,
+      "height": 0.181,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 44,
+      "to": 45,
+      "direction": "ascend",
+      "cost_ns": 2000,
+      "height": 0.05,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 45,
+      "to": 46,
+      "direction": "ascend",
+      "cost_ns": 12000,
+      "height": 0.216,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 46,
+      "to": 47,
+      "direction": "descend",
+      "cost_ns": 12000,
+      "height": 0.216,
+      "kind": "io",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 47,
+      "to": 48,
+      "direction": "ascend",
+      "cost_ns": 15000,
+      "height": 0.243,
+      "kind": "io",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 48,
+      "to": 49,
+      "direction": "descend",
+      "cost_ns": 12000,
+      "height": 0.216,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 49,
+      "to": 50,
+      "direction": "descend",
+      "cost_ns": 10000,
+      "height": 0.194,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 50,
+      "to": 51,
+      "direction": "ascend",
+      "cost_ns": 6346000,
+      "height": 0.973,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 51,
+      "to": 52,
+      "direction": "ascend",
+      "cost_ns": 16000,
+      "height": 0.251,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 52,
+      "to": 53,
+      "direction": "descend",
+      "cost_ns": 24000,
+      "height": 0.3,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 53,
+      "to": 54,
+      "direction": "descend",
+      "cost_ns": 15000,
+      "height": 0.243,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 54,
+      "to": 55,
+      "direction": "ascend",
+      "cost_ns": 6110000,
+      "height": 0.968,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 55,
+      "to": 56,
+      "direction": "ascend",
+      "cost_ns": 24000,
+      "height": 0.3,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 56,
+      "to": 57,
+      "direction": "descend",
+      "cost_ns": 27000,
+      "height": 0.314,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 57,
+      "to": 58,
+      "direction": "descend",
+      "cost_ns": 20000,
+      "height": 0.278,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 58,
+      "to": 59,
+      "direction": "descend",
+      "cost_ns": 23000,
+      "height": 0.295,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 59,
+      "to": 60,
+      "direction": "ascend",
+      "cost_ns": 16000,
+      "height": 0.251,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 60,
+      "to": 61,
+      "direction": "ascend",
+      "cost_ns": 4000,
+      "height": 0.084,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 61,
+      "to": 62,
+      "direction": "descend",
+      "cost_ns": 9000,
+      "height": 0.181,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 62,
+      "to": 63,
+      "direction": "ascend",
+      "cost_ns": 2000,
+      "height": 0.05,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 63,
+      "to": 64,
+      "direction": "ascend",
+      "cost_ns": 3000,
+      "height": 0.05,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 64,
+      "to": 65,
+      "direction": "descend",
+      "cost_ns": 37000,
+      "height": 0.352,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 65,
+      "to": 66,
+      "direction": "ascend",
+      "cost_ns": 7000,
+      "height": 0.151,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 66,
+      "to": 67,
+      "direction": "descend",
+      "cost_ns": 8000,
+      "height": 0.167,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 67,
+      "to": 68,
+      "direction": "ascend",
+      "cost_ns": 4000,
+      "height": 0.084,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 68,
+      "to": 69,
+      "direction": "descend",
+      "cost_ns": 44000,
+      "height": 0.373,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 69,
+      "to": 70,
+      "direction": "descend",
+      "cost_ns": 14000,
+      "height": 0.235,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 70,
+      "to": 71,
+      "direction": "ascend",
+      "cost_ns": 4000,
+      "height": 0.084,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 71,
+      "to": 72,
+      "direction": "descend",
+      "cost_ns": 8000,
+      "height": 0.167,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 72,
+      "to": 73,
+      "direction": "descend",
+      "cost_ns": 10000,
+      "height": 0.194,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 73,
+      "to": 74,
+      "direction": "ascend",
+      "cost_ns": 2000,
+      "height": 0.05,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 74,
+      "to": 75,
+      "direction": "ascend",
+      "cost_ns": 3000,
+      "height": 0.05,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 75,
+      "to": 76,
+      "direction": "descend",
+      "cost_ns": 19000,
+      "height": 0.272,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 76,
+      "to": 77,
+      "direction": "descend",
+      "cost_ns": 22000,
+      "height": 0.289,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 77,
+      "to": 78,
+      "direction": "ascend",
+      "cost_ns": 90000,
+      "height": 0.459,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 78,
+      "to": 79,
+      "direction": "descend",
+      "cost_ns": 21000,
+      "height": 0.284,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    }
+  ],
+  "closed": true,
+  "open_frame": "",
+  "test_id": "",
+  "chain": "hottest",
+  "truncated": 1019,
+  "chains": 18,
+  "hot_path": [
+    "internal/extract/extract.go::Extractor.Extract",
+    "internal/vcs/git.go::Repo.Diff",
+    "internal/vcs/git.go::Repo.git",
+    "internal/vcs/git.go::Repo.NameStatus",
+    "internal/vcs/git.go::Repo.git",
+    "internal/vcs/git.go::Repo.Status",
+    "internal/vcs/git.go::Repo.git",
+    "internal/extract/diff.go::ParseNumstat",
+    "internal/extract/diff.go::ParseNameStatus",
+    "internal/extract/diff.go::ParseDiff",
+    "internal/extract/diff.go::atoi",
+    "internal/extract/diff.go::atoi",
+    "internal/extract/diff.go::atoi",
+    "internal/extract/diff.go::atoi",
+    "internal/extract/diff.go::atoi",
+    "internal/extract/diff.go::atoi",
+    "internal/extract/diff.go::atoi",
+    "internal/extract/diff.go::atoi",
+    "internal/extract/diff.go::atoi",
+    "internal/extract/diff.go::atoi",
+    "internal/extract/diff.go::atoi",
+    "internal/extract/diff.go::atoi",
+    "internal/extract/diff.go::atoi",
+    "internal/extract/diff.go::atoi",
+    "internal/extract/diff.go::HunksByFile",
+    "internal/vcs/git.go::Repo.Show",
+    "internal/vcs/git.go::Repo.git",
+    "internal/vcs/git.go::Repo.Show",
+    "internal/vcs/git.go::Repo.git",
+    "internal/lang/adapter.go::Registry.Language",
+    "internal/lang/adapter.go::Registry.For",
+    "internal/lang/gopkg/adapter.go::Adapter.Extensions",
+    "internal/lang/gopkg/adapter.go::Adapter.Name",
+    "internal/extract/extract.go::isBinary",
+    "internal/extract/extract.go::isMigration",
+    "internal/extract/extract.go::Extractor.symbols",
+    "internal/extract/extract.go::sortedStates",
+    "internal/lang/adapter.go::Registry.For",
+    "internal/lang/gopkg/adapter.go::Adapter.Extensions",
+    "internal/lang/gopkg/adapter.go::Adapter.ParseSymbols",
+    "internal/lang/gopkg/adapter.go::parse",
+    "internal/lang/gopkg/adapter.go::commentIndex"
+  ]
+}

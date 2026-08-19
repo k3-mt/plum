@@ -31,6 +31,11 @@ func (a *Adapter) RiskMarkers(path string, src []byte, syms []bundle.Symbol) ([]
 		})
 	}
 
+	// A package-level var is only shared *mutable* state if something can write
+	// it. A compiled regex, a sentinel error or a lookup table assigned once is a
+	// constant in everything but syntax, and flagging it is the false-positive
+	// class that makes people stop reading the report (spec §7).
+	mutated := mutatedIdents(p)
 	for _, d := range p.file.Decls {
 		gd, ok := d.(*ast.GenDecl)
 		if !ok || gd.Tok != token.VAR {
@@ -45,8 +50,15 @@ func (a *Adapter) RiskMarkers(path string, src []byte, syms []bundle.Symbol) ([]
 				if n.Name == "_" {
 					continue
 				}
-				mark("package_level_state", bundle.MakeID(rel, n.Name), n.Pos(),
-					"package-level mutable var "+n.Name+" — shared across every caller and every test")
+				note := "package-level mutable var " + n.Name + " — shared across every caller and every test"
+				switch {
+				case mutated[n.Name]:
+				case ast.IsExported(n.Name):
+					note = "exported package-level var " + n.Name + " — any importing package can write it"
+				default:
+					continue // assigned once and never written: a table, not state
+				}
+				mark("package_level_state", bundle.MakeID(rel, n.Name), n.Pos(), note)
 			}
 		}
 	}
@@ -107,6 +119,56 @@ func (a *Adapter) RiskMarkers(path string, src []byte, syms []bundle.Symbol) ([]
 		}
 	}
 	return out, nil
+}
+
+// mutatedIdents collects every identifier written to after its declaration:
+// assignment, increment, decrement, or having its address taken.
+func mutatedIdents(p *parsed) map[string]bool {
+	out := map[string]bool{}
+	record := func(e ast.Expr) {
+		for {
+			switch t := e.(type) {
+			case *ast.Ident:
+				out[t.Name] = true
+				return
+			case *ast.IndexExpr:
+				e = t.X
+			case *ast.SelectorExpr:
+				e = t.X
+			case *ast.StarExpr:
+				e = t.X
+			case *ast.ParenExpr:
+				e = t.X
+			default:
+				return
+			}
+		}
+	}
+	ast.Inspect(p.file, func(n ast.Node) bool {
+		switch node := n.(type) {
+		case *ast.AssignStmt:
+			// The declaration itself is a GenDecl, never an AssignStmt, so every
+			// assignment reaching here is a later write.
+			for _, lhs := range node.Lhs {
+				record(lhs)
+			}
+		case *ast.IncDecStmt:
+			record(node.X)
+		case *ast.UnaryExpr:
+			if node.Op == token.AND {
+				record(node.X)
+			}
+		case *ast.RangeStmt:
+			if node.Key != nil {
+				record(node.Key)
+			}
+			if node.Value != nil {
+				record(node.Value)
+			}
+		}
+		return true
+	})
+	return out
 }
 
 func isErrNilCheck(cond ast.Expr) bool {

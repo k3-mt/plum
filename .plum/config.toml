@@ -1,0 +1,30 @@
+# PLUM — comprehension-debt system for agent-written code.
+# See BUILD.md §6.7. Everything here is tunable; you will tune it.
+
+[repo]
+languages    = ["go"]
+test_command = "go test ./..."
+journal_dir  = ".plum/journal"
+
+[gating]
+min_symbols_changed  = 5
+new_public_surface   = true
+new_dependency       = true
+migration_touched    = true
+divergence_threshold = 0.4
+risk_markers         = 3
+
+[conventions]
+error_handling = "wrapped_error"   # wrapped_error | sentinel | panic
+di_style       = "constructor"
+forbidden      = ["package_level_state", "naked_return", "init_side_effects"]
+
+[synthesis]
+# "offline" composes the seams doc mechanically from the bundle (no network).
+# "anthropic" calls the API with ANTHROPIC_API_KEY, in a fresh context (P2).
+provider = "offline"
+model    = "claude-sonnet-5"
+
+[trace]
+enabled    = true
+max_events = 200000

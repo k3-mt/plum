@@ -234,3 +234,41 @@ func TestUnannotatedExpensiveBarrierIsSurfaced(t *testing.T) {
 		t.Errorf("annotated barrier still reported: %v", got)
 	}
 }
+
+// A real suite produces chains of a thousand frames. Truncation is fine;
+// silent truncation is not.
+func TestFrameBudgetIsReportedNotHidden(t *testing.T) {
+	// One deeply nested chain, so the whole thing is a single representative path.
+	var ev []Event
+	const depth = 40
+	for i := 0; i < depth; i++ {
+		ev = append(ev, call("a.go::lookup", "i", "", i, int64(i*10)))
+	}
+	for i := depth - 1; i >= 0; i-- {
+		ev = append(ev, ret("a.go::lookup", "i", i, int64(1000+i*10), "x"))
+	}
+	l := DeriveChainN(ev, testBundle(), ChainHottest, 10)
+	if len(l.Wells) != 10 {
+		t.Fatalf("rendered %d wells, want the 10-frame budget", len(l.Wells))
+	}
+	if l.Truncated == 0 {
+		t.Fatal("frames beyond the budget must be counted")
+	}
+	for _, b := range l.Barriers {
+		if b.FromIdx >= len(l.Wells) || b.ToIdx >= len(l.Wells) {
+			t.Errorf("barrier %+v points past the rendered wells", b)
+		}
+	}
+	var said bool
+	for _, n := range l.Notes() {
+		if strings.Contains(n, "more are recorded") {
+			said = true
+		}
+	}
+	if !said {
+		t.Errorf("truncation was not surfaced: %v", l.Notes())
+	}
+	if unbounded := DeriveChainN(ev, testBundle(), ChainHottest, 0); unbounded.Truncated != 0 {
+		t.Error("a zero budget means unbounded")
+	}
+}

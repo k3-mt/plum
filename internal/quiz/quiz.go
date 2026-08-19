@@ -34,6 +34,7 @@ func Generate(targets []bundle.SymbolID, events []trace.Event, l trace.Landscape
 	for _, t := range targets {
 		targeted[t] = true
 	}
+	onlyTargets := len(targets) > 0
 
 	var qs []Question
 	seen := map[string]bool{}
@@ -65,7 +66,7 @@ func Generate(targets []bundle.SymbolID, events []trace.Event, l trace.Landscape
 	for _, id := range ids {
 		evs := byInvocation[id]
 		call := find(evs, "call")
-		if call == nil || (len(targets) > 0 && !targeted[call.Symbol]) {
+		if call == nil || (onlyTargets && !targeted[call.Symbol]) {
 			continue
 		}
 		if ret := find(evs, "return"); ret != nil && strings.TrimSpace(ret.Result) != "" {
@@ -92,10 +93,10 @@ func Generate(targets []bundle.SymbolID, events []trace.Event, l trace.Landscape
 	// what the code looks like it should do.
 	enters := entered(l)
 	for i := 0; i+1 < len(enters); i++ {
-		if len(targets) > 0 && !targeted[enters[i]] {
+		if onlyTargets && !targeted[enters[i]] {
 			continue
 		}
-		opts := distinct(enters)
+		opts := choices(distinct(enters), enters[i+1], 4)
 		if len(opts) < 3 {
 			break
 		}
@@ -103,7 +104,7 @@ func Generate(targets []bundle.SymbolID, events []trace.Event, l trace.Landscape
 			Kind:     "next_frame",
 			Symbol:   enters[i],
 			Prompt:   fmt.Sprintf("During the traced run, which frame is entered immediately after %s?", enters[i].Qualified()),
-			Options:  labels(opts),
+			Options:  opts,
 			Expected: enters[i+1].Qualified(),
 			Source:   "recorded call order on the representative chain",
 		})
@@ -145,10 +146,71 @@ func Generate(targets []bundle.SymbolID, events []trace.Event, l trace.Landscape
 		}
 	}
 
-	if max > 0 && len(qs) > max {
-		qs = qs[:max]
+	return selectQuestions(qs, targeted, l, max)
+}
+
+// selectQuestions picks the set worth asking. Invocation order is not a
+// priority order: three questions about the same trivial helper test nothing,
+// while one question each about a risky, undocumented and targeted frame is the
+// whole point of grading against traces.
+func selectQuestions(qs []Question, targeted map[bundle.SymbolID]bool, l trace.Landscape, max int) []Question {
+	if max <= 0 || len(qs) <= max {
+		return qs
 	}
-	return qs
+	risky := map[bundle.SymbolID]bool{}
+	undocumented := map[bundle.SymbolID]bool{}
+	depth := map[bundle.SymbolID]int{}
+	for _, w := range l.Wells {
+		if w.Risk {
+			risky[w.Symbol] = true
+		}
+		if w.Doc == "" {
+			undocumented[w.Symbol] = true
+		}
+		if w.Depth > depth[w.Symbol] {
+			depth[w.Symbol] = w.Depth
+		}
+	}
+
+	base := func(q Question) float64 {
+		var v float64
+		if targeted[q.Symbol] {
+			v += 4
+		}
+		if risky[q.Symbol] {
+			v += 2
+		}
+		if undocumented[q.Symbol] {
+			v += 1
+		}
+		if q.Kind == "exception" || q.Kind == "cost" {
+			v += 1 // error propagation and cost are the things people mis-model
+		}
+		v += float64(depth[q.Symbol]) * 0.1
+		return v
+	}
+
+	var out []Question
+	usedSymbol := map[bundle.SymbolID]int{}
+	usedKind := map[string]int{}
+	remaining := make([]Question, len(qs))
+	copy(remaining, qs)
+
+	for len(out) < max && len(remaining) > 0 {
+		best, bestScore := -1, -1e9
+		for i, q := range remaining {
+			score := base(q) - float64(usedSymbol[q.Symbol])*3 - float64(usedKind[q.Kind])*1.5
+			if score > bestScore {
+				best, bestScore = i, score
+			}
+		}
+		q := remaining[best]
+		out = append(out, q)
+		usedSymbol[q.Symbol]++
+		usedKind[q.Kind]++
+		remaining = append(remaining[:best], remaining[best+1:]...)
+	}
+	return out
 }
 
 // Grade is lenient about formatting and strict about content: an answer counts
@@ -234,11 +296,33 @@ func distinct(ids []bundle.SymbolID) []bundle.SymbolID {
 	return out
 }
 
-func labels(ids []bundle.SymbolID) []string {
-	var out []string
-	for _, id := range ids {
-		out = append(out, id.Qualified())
+// choices builds a small multiple-choice set: the recorded answer plus
+// distractors drawn from frames that really appear in this trace. Fourteen
+// options is not a question, it is a list.
+func choices(pool []bundle.SymbolID, answer bundle.SymbolID, n int) []string {
+	out := []string{answer.Qualified()}
+	seen := map[string]bool{answer.Qualified(): true}
+	// Deterministic but not adjacent: step through the pool so the distractors
+	// are not simply the answer's neighbours on the chain.
+	step := 1
+	if len(pool) > n {
+		step = len(pool) / n
 	}
+	for i := 0; i < len(pool) && len(out) < n; i += step {
+		label := pool[i].Qualified()
+		if !seen[label] {
+			seen[label] = true
+			out = append(out, label)
+		}
+	}
+	for i := 0; i < len(pool) && len(out) < n; i++ {
+		label := pool[i].Qualified()
+		if !seen[label] {
+			seen[label] = true
+			out = append(out, label)
+		}
+	}
+	sort.Strings(out)
 	return out
 }
 
