@@ -138,6 +138,19 @@ type PromptContext struct {
 	Seams       []claims.Claim        `json:"seams"`
 	CallSites   []bundle.CallSite     `json:"call_sites"`
 	Comments    []bundle.Comment      `json:"comments"`
+	// Related carries the neighbours' actual code, not just their names. A
+	// question like "is this intentional?" often turns on what the caller does
+	// before it calls — an edge alone cannot answer that.
+	Related []RelatedSymbol `json:"related"`
+}
+
+// RelatedSymbol is a caller or callee, with enough source to be useful.
+type RelatedSymbol struct {
+	Symbol    bundle.SymbolID `json:"symbol"`
+	Relation  string          `json:"relation"` // caller | callee
+	Signature string          `json:"signature"`
+	Doc       string          `json:"doc"`
+	Excerpt   string          `json:"excerpt"`
 }
 
 const maxSamples = 8
@@ -153,6 +166,7 @@ func (s *Server) buildContext(sym bundle.SymbolID) PromptContext {
 	}
 	return PromptContext{
 		Symbol:      sym,
+		Related:     s.related(sym),
 		Source:      s.source(symbol),
 		Signature:   symbol.Signature,
 		Doc:         symbol.Doc,
@@ -165,6 +179,71 @@ func (s *Server) buildContext(sym bundle.SymbolID) PromptContext {
 		CallSites:   symbol.CallSites,
 		Comments:    symbol.Comments,
 	}
+}
+
+const (
+	maxRelated      = 6
+	maxExcerptLines = 40
+)
+
+// related gathers the callers and callees of a symbol with their source, so a
+// question about intent has the surrounding code to reason from. Short
+// neighbours travel whole; long ones are trimmed to their signature and the
+// lines around the call, because an unbounded context is its own failure.
+func (s *Server) related(sym bundle.SymbolID) []RelatedSymbol {
+	seen := map[bundle.SymbolID]bool{sym: true}
+	var out []RelatedSymbol
+
+	collect := func(id bundle.SymbolID, relation string) {
+		if seen[id] || len(out) >= maxRelated || !s.Bundle.Has(id) {
+			return
+		}
+		seen[id] = true
+		other := s.Bundle.Lookup(id)
+		r := RelatedSymbol{
+			Symbol: id, Relation: relation,
+			Signature: other.Signature, Doc: other.Doc,
+		}
+		src := s.source(other)
+		lines := strings.Split(src, "\n")
+		if src != "" && len(lines) <= maxExcerptLines {
+			r.Excerpt = src
+		} else if src != "" {
+			// Too long to send whole: keep the lines around where it calls us.
+			r.Excerpt = aroundCall(lines, other, sym)
+		}
+		out = append(out, r)
+	}
+
+	for _, e := range s.Bundle.EdgesTo(sym) {
+		collect(e.From, "caller")
+	}
+	for _, e := range s.Bundle.EdgesFrom(sym) {
+		collect(e.To, "callee")
+	}
+	return out
+}
+
+// aroundCall trims a long neighbour to the lines surrounding its call to target.
+func aroundCall(lines []string, caller bundle.Symbol, target bundle.SymbolID) string {
+	line := 0
+	for _, cs := range caller.CallSites {
+		if cs.Callee == target || strings.HasSuffix(string(target), "."+cs.CalleeRaw) || cs.CalleeRaw == target.Qualified() {
+			line = cs.Line - caller.LineStart
+			break
+		}
+	}
+	start, end := line-5, line+6
+	if start < 0 {
+		start = 0
+	}
+	if end > len(lines) {
+		end = len(lines)
+	}
+	if start >= end {
+		return ""
+	}
+	return "…\n" + strings.Join(lines[start:end], "\n") + "\n…"
 }
 
 // source reads the declaration exactly as it stands in the working tree.
@@ -423,6 +502,24 @@ func renderContext(pc PromptContext) string {
 			p("- calls %s", e.To)
 		}
 		p("")
+	}
+	if len(pc.Related) > 0 {
+		p("## Neighbouring code")
+		p("")
+		for _, r := range pc.Related {
+			p("### %s (%s)", r.Symbol, r.Relation)
+			if r.Doc != "" {
+				p("%s", r.Doc)
+			}
+			if r.Excerpt != "" {
+				p("```%s", fenceLanguage(r.Symbol.File()))
+				p("%s", r.Excerpt)
+				p("```")
+			} else if r.Signature != "" {
+				p("`%s`", r.Signature)
+			}
+			p("")
+		}
 	}
 	if len(pc.CallSites) > 0 {
 		p("## Call sites and their rationale comments")

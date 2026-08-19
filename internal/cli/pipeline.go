@@ -311,7 +311,7 @@ func cmdExplore(ctx context.Context, env *Env, args []string) error {
 			target := env.Cfg.Ask.TmuxTarget
 			if target == "" {
 				if pane, err := ask.FindPane(ctx, env.Cfg.Root); err == nil {
-					target = pane.Target + " (" + pane.Command + ")"
+					target = pane.Target + " (" + pane.Agent() + ")"
 				} else {
 					target = "no agent pane found yet — " + err.Error()
 				}

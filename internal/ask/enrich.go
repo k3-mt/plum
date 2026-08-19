@@ -156,26 +156,62 @@ func leadingSpace(line string) string {
 	return line[:len(line)-len(strings.TrimLeft(line, " \t"))]
 }
 
-// firstParagraph keeps a claim or a comment to the part that states the answer,
-// rather than to the whole reply: everything up to the first blank line, with
-// markdown headings dropped and the wrapping undone.
+// firstParagraph reduces a reply to the sentence that actually answers, for a
+// claim or a source comment.
+//
+// Real agent replies open with a heading, often restate the question, and
+// sometimes quote it back. All of that has to be skipped: keeping the question
+// as the "answer" produces a claim that asserts nothing and a comment that
+// tells the next reader what was asked rather than what is true.
 func firstParagraph(s string) string {
-	body := stripHeadings(s)
-	if i := strings.Index(body, "\n\n"); i >= 0 {
-		body = body[:i]
-	}
-	return strings.Join(strings.Fields(body), " ")
-}
-
-func stripHeadings(s string) string {
-	var kept []string
-	for _, line := range strings.Split(s, "\n") {
-		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+	for _, para := range strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n\n") {
+		para = strings.TrimSpace(para)
+		if para == "" || isScaffolding(para) {
 			continue
 		}
-		kept = append(kept, line)
+		return cleanMarkdown(para)
 	}
-	return strings.TrimSpace(strings.Join(kept, "\n"))
+	return cleanMarkdown(strings.TrimSpace(s))
+}
+
+// isScaffolding recognises the parts of a reply that frame the answer rather
+// than being it: headings, quoted questions, restated prompts, rules.
+func isScaffolding(para string) bool {
+	first := strings.TrimSpace(strings.SplitN(para, "\n", 2)[0])
+	switch {
+	case strings.HasPrefix(first, "#"), strings.HasPrefix(first, ">"):
+		return true
+	case strings.HasPrefix(first, "---"), strings.HasPrefix(first, "==="), strings.HasPrefix(first, "***"):
+		return true
+	}
+	lower := strings.ToLower(stripEmphasis(first))
+	for _, label := range []string{"question:", "q:", "asked:", "prompt:", "context:"} {
+		if strings.HasPrefix(lower, label) {
+			return true
+		}
+	}
+	return false
+}
+
+// cleanMarkdown unwraps a paragraph and drops the markup that means nothing in
+// a source comment or a claims file.
+func cleanMarkdown(para string) string {
+	para = stripEmphasis(para)
+	para = strings.ReplaceAll(para, "`", "")
+	// A leading "Answer:" label is scaffolding too, once we are inside the text.
+	for _, label := range []string{"Answer:", "answer:", "A:"} {
+		if strings.HasPrefix(para, label) {
+			para = strings.TrimSpace(strings.TrimPrefix(para, label))
+		}
+	}
+	return strings.Join(strings.Fields(para), " ")
+}
+
+func stripEmphasis(s string) string {
+	for _, marker := range []string{"**", "__"} {
+		s = strings.ReplaceAll(s, marker, "")
+	}
+	return s
 }
 
 func wrap(s string, width int) []string {

@@ -165,6 +165,10 @@ tmux_target     = ""       # empty to auto-detect the agent pane
 timeout_seconds = 300
 ```
 
+The pane is found by inspecting the processes actually running in it, not by
+tmux's `pane_current_command` — a real Claude Code session reports its version
+as the command and the hostname as its title, so the obvious check finds nothing.
+
 `tmux` needs no API key and uses the session you already have open. `api` calls
 the Anthropic API directly with `ANTHROPIC_API_KEY`. `context-only` returns the
 assembled evidence and nothing else — which is still useful, because it is
@@ -191,6 +195,10 @@ and each turns it into something durable:
 Source is never edited in place. The comment option writes a patch you read and
 then `git apply` — or delete. A tool that silently rewrites your code is a tool
 you stop trusting.
+
+Replies arrive as markdown, usually opening with a heading and a restatement of
+the question. Only the first substantive paragraph is kept, with the scaffolding
+and the markup stripped — a claim that restates the question asserts nothing.
 
 ## Deviations from the spec, and why
 

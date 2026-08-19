@@ -149,3 +149,34 @@ func TestKeepRefusesAnEmptyAnswer(t *testing.T) {
 		t.Error("keeping nothing should fail loudly")
 	}
 }
+
+// This is the shape a real Claude Code answer arrives in: a heading, the
+// question restated in bold, then the actual answer. Keeping the question as
+// the answer produces a claim that asserts nothing.
+const realReply = "# Answer — 20260819-234247.894\n\n" +
+	"**Question:** what does `Cache.decorate` return when the key was missing, and is that intentional?\n\n" +
+	"## What it returns\n\n" +
+	"When the key is missing, `decorate` returns the string `'None@prod'`.\n\n" +
+	"This is directly recorded, not inferred.\n"
+
+func TestFirstParagraphSkipsHeadingsAndRestatedQuestions(t *testing.T) {
+	got := firstParagraph(realReply)
+	want := "When the key is missing, decorate returns the string 'None@prod'."
+	if got != want {
+		t.Errorf("kept the wrong text.\n got: %q\nwant: %q", got, want)
+	}
+}
+
+func TestFirstParagraphHandlesPlainReplies(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"Because absence is normal here.", "Because absence is normal here."},
+		{"> why does this return nil?\n\nBecause absence is normal.", "Because absence is normal."},
+		{"**Answer:** it returns nil.", "it returns nil."},
+		{"---\n\nIt returns nil.", "It returns nil."},
+		{"Wrapped across\ntwo lines.", "Wrapped across two lines."},
+	} {
+		if got := firstParagraph(tc.in); got != tc.want {
+			t.Errorf("firstParagraph(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

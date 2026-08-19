@@ -176,24 +176,92 @@ type Pane struct {
 	Command string
 	Title   string
 	Path    string
+	PID     string
+	// Processes is the full command line of every process running in the pane,
+	// which is the only reliable way to recognise an agent session.
+	Processes []string
 }
 
-// Panes lists every pane in every session.
+// Panes lists every pane in every session, with the processes running in each.
+//
+// tmux's own pane_current_command is not enough: a real Claude Code session
+// reports its version as the command ("2.1.236") and the hostname as its title,
+// because the process renames itself. Only the actual argv says what it is.
 func Panes(ctx context.Context) ([]Pane, error) {
 	out, err := exec.CommandContext(ctx, "tmux", "list-panes", "-a", "-F",
-		"#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}\t#{pane_current_command}\t#{pane_title}\t#{pane_current_path}").Output()
+		"#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}\t#{pane_current_command}\t#{pane_title}\t#{pane_current_path}\t#{pane_pid}").Output()
 	if err != nil {
 		return nil, fmt.Errorf("tmux is not running, or has no panes: %w", err)
 	}
+	tree := processTree(ctx)
 	var panes []Pane
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		f := strings.Split(line, "\t")
-		if len(f) < 5 {
+		if len(f) < 6 {
 			continue
 		}
-		panes = append(panes, Pane{ID: f[0], Target: f[1], Command: f[2], Title: f[3], Path: f[4]})
+		p := Pane{ID: f[0], Target: f[1], Command: f[2], Title: f[3], Path: f[4], PID: f[5]}
+		p.Processes = tree.descendants(p.PID)
+		panes = append(panes, p)
 	}
 	return panes, nil
+}
+
+// procTree maps a pid to its children and to its command line, from one ps call.
+type procTree struct {
+	children map[string][]string
+	args     map[string]string
+}
+
+func processTree(ctx context.Context) procTree {
+	t := procTree{children: map[string][]string{}, args: map[string]string{}}
+	out, err := exec.CommandContext(ctx, "ps", "-eo", "pid=,ppid=,args=").Output()
+	if err != nil {
+		return t
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
+			continue
+		}
+		pid, ppid := fields[0], fields[1]
+		t.children[ppid] = append(t.children[ppid], pid)
+		t.args[pid] = strings.Join(fields[2:], " ")
+	}
+	return t
+}
+
+// descendants returns the command lines of a pid and everything under it.
+func (t procTree) descendants(pid string) []string {
+	var out []string
+	seen := map[string]bool{}
+	var walk func(string, int)
+	walk = func(p string, depth int) {
+		if seen[p] || depth > 6 {
+			return
+		}
+		seen[p] = true
+		if args, ok := t.args[p]; ok {
+			out = append(out, args)
+		}
+		for _, child := range t.children[p] {
+			walk(child, depth+1)
+		}
+	}
+	walk(pid, 0)
+	return out
+}
+
+// Agent names the agent recognised in this pane, for display. Falls back to the
+// tmux-reported command, which is better than nothing but often wrong.
+func (p Pane) Agent() string {
+	hay := strings.ToLower(strings.Join(p.Processes, " "))
+	for _, name := range []string{"claude", "aider", "codex", "cursor-agent"} {
+		if strings.Contains(hay, name) {
+			return name
+		}
+	}
+	return p.Command
 }
 
 // FindPane picks the pane most likely to be a Claude Code session: one whose
@@ -209,15 +277,17 @@ func FindPane(ctx context.Context, repoRoot string) (Pane, error) {
 		if p.ID == self {
 			return -1
 		}
+		// The process argv is authoritative; the tmux-reported command and title
+		// are only hints, and on a real Claude Code session they are misleading.
+		hay := strings.ToLower(strings.Join(append([]string{p.Command, p.Title}, p.Processes...), " "))
 		s := 0
-		hay := strings.ToLower(p.Command + " " + p.Title)
 		switch {
 		case strings.Contains(hay, "claude"):
 			s += 10
-		case strings.Contains(hay, "node"), strings.Contains(hay, "aider"), strings.Contains(hay, "codex"):
-			s += 4
+		case strings.Contains(hay, "aider"), strings.Contains(hay, "codex"), strings.Contains(hay, "cursor-agent"):
+			s += 6
 		default:
-			return -1 // do not send keystrokes into a shell that is not an agent
+			return -1 // never send keystrokes into a shell that is not an agent
 		}
 		if repoRoot != "" && strings.HasPrefix(p.Path, repoRoot) {
 			s += 3
@@ -231,7 +301,7 @@ func FindPane(ctx context.Context, repoRoot string) (Pane, error) {
 		}
 	}
 	if bestScore == 0 {
-		return Pane{}, fmt.Errorf("no pane looks like an agent session (looked for claude, aider, codex in %d panes) — set [ask] tmux_target in .plum/config.toml to choose one explicitly", len(panes))
+		return Pane{}, fmt.Errorf("no pane is running an agent session (looked for claude, aider, codex among the processes in %d panes) — start one, or set [ask] tmux_target in .plum/config.toml to choose a pane explicitly", len(panes))
 	}
 	return best, nil
 }
