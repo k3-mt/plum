@@ -1,0 +1,43 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>plum · explore</title>
+<link rel="stylesheet" href="/app.css">
+<header>
+  <h1>plum <span class="sub">explore</span></h1>
+  <div id="gate" class="gate"></div>
+  <button id="done" title="Unlocks plum quiz for this session">I have met this code</button>
+</header>
+
+<section id="notes" class="notes"></section>
+
+<section class="landscape">
+  <div class="legend">
+    <span><i class="k-enter"></i> entered frame</span>
+    <span><i class="k-resume"></i> resumed (returned into)</span>
+    <span><i class="k-dashed"></i> no declaration doc</span>
+    <span><i class="k-risk"></i> risk marker</span>
+    <span><i class="k-unwind"></i> unwind — a cliff, not a staircase</span>
+  </div>
+  <div id="svgwrap"><svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+  <div id="closed" class="closed"></div>
+</section>
+
+<main>
+  <section id="source" class="pane">
+    <h2>source</h2>
+    <pre id="src">Click a frame in the landscape.</pre>
+  </section>
+  <aside id="rail" class="pane">
+    <h2>frame</h2>
+    <div id="rail-body">
+      <p class="muted">Nothing selected. The landscape is a round trip: descent is
+      entering a call, ascent is returning, and hump height is what the transition cost.</p>
+    </div>
+    <div id="ask">
+      <input id="q" placeholder="ask about this frame…" autocomplete="off">
+      <button id="asked">ask</button>
+      <div id="answer"></div>
+    </div>
+  </aside>
+</main>
+<script src="/landscape.js"></script>

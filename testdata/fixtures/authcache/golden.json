@@ -1,0 +1,253 @@
+{
+  "schema_version": "1.0",
+  "session": {
+    "id": "fixture",
+    "start_sha": "\u003cstart\u003e",
+    "end_sha": "\u003cend\u003e",
+    "started_at": "1970-01-01T00:00:00Z",
+    "ended_at": "1970-01-01T00:00:00Z",
+    "command": "fixture",
+    "agent": "fixture",
+    "journal_present": false,
+    "repo": "\u003croot\u003e"
+  },
+  "files": [
+    {
+      "path": "internal/auth/cache.go",
+      "change": "modified",
+      "added": 23,
+      "deleted": 2,
+      "language": "go",
+      "binary": false,
+      "migration": false
+    }
+  ],
+  "symbols": [
+    {
+      "id": "internal/auth/cache.go::hits",
+      "kind": "var",
+      "name": "hits",
+      "file": "internal/auth/cache.go",
+      "line_start": 14,
+      "line_end": 14,
+      "byte_start": 208,
+      "byte_end": 216,
+      "change": "added",
+      "signature": "var hits int",
+      "fingerprint": "sha256:974e5b9b52224182954208326fe37080a0684269519b7680a5ac26259529e6f2",
+      "doc": "hits counts lookups for the debug endpoint.",
+      "exported": false,
+      "comments": null,
+      "call_sites": null,
+      "tested": false
+    },
+    {
+      "id": "internal/auth/cache.go::Cache.Get",
+      "kind": "method",
+      "name": "Cache.Get",
+      "file": "internal/auth/cache.go",
+      "line_start": 27,
+      "line_end": 34,
+      "byte_start": 468,
+      "byte_end": 654,
+      "change": "modified",
+      "signature": "func (*Cache) Get(key string, opts any) (string, error)",
+      "fingerprint": "sha256:479fa9edfca48e1607193d14647a19e60d12d31ec43006a7cf1e79b9fee4e2ca",
+      "doc": "Get returns the token for a key, or ErrMiss.",
+      "exported": true,
+      "comments": null,
+      "call_sites": [
+        {
+          "callee": "internal/auth/cache.go::Errorf",
+          "callee_raw": "fmt.Errorf",
+          "line": 31,
+          "rationale": ""
+        },
+        {
+          "callee": "internal/auth/cache.go::decorate",
+          "callee_raw": "c.decorate",
+          "line": 33,
+          "rationale": ""
+        }
+      ],
+      "tested": false
+    },
+    {
+      "id": "internal/auth/cache.go::Cache.decorate",
+      "kind": "method",
+      "name": "Cache.decorate",
+      "file": "internal/auth/cache.go",
+      "line_start": 36,
+      "line_end": 38,
+      "byte_start": 656,
+      "byte_end": 743,
+      "change": "added",
+      "signature": "func (*Cache) decorate(v string) string",
+      "fingerprint": "sha256:1d0b43ef43818082cf33fe62b5c82d05c2987a059d6939f8643d3cedc9f21f28",
+      "doc": "",
+      "exported": false,
+      "comments": null,
+      "call_sites": [
+        {
+          "callee": "internal/auth/cache.go::Getenv",
+          "callee_raw": "os.Getenv",
+          "line": 37,
+          "rationale": ""
+        }
+      ],
+      "tested": false
+    },
+    {
+      "id": "internal/auth/cache.go::Cache.Refresh",
+      "kind": "method",
+      "name": "Cache.Refresh",
+      "file": "internal/auth/cache.go",
+      "line_start": 41,
+      "line_end": 49,
+      "byte_start": 803,
+      "byte_end": 1093,
+      "change": "added",
+      "signature": "func (*Cache) Refresh(key string) (string, error)",
+      "fingerprint": "sha256:d1cc551819c452d6acea1e321d960bd91b1b207ddbaa59370e4d7c06f90980c5",
+      "doc": "Refresh re-fetches a token from the identity provider.",
+      "exported": true,
+      "comments": [
+        {
+          "text": "the identity provider is authoritative once the local map misses",
+          "line_start": 42,
+          "line_end": 42
+        }
+      ],
+      "call_sites": [
+        {
+          "callee": "internal/auth/cache.go::Get",
+          "callee_raw": "http.Get",
+          "line": 43,
+          "rationale": "the identity provider is authoritative once the local map misses"
+        }
+      ],
+      "tested": false
+    }
+  ],
+  "public_surface": {
+    "added": [
+      {
+        "kind": "env_var",
+        "name": "AUTH_REALM",
+        "file": "internal/auth/cache.go",
+        "signature": "os.Getenv"
+      },
+      {
+        "kind": "export",
+        "name": "auth.Cache.Refresh",
+        "file": "internal/auth/cache.go",
+        "symbol": "internal/auth/cache.go::Cache.Refresh",
+        "signature": "func (*Cache) Refresh(key string) (string, error)"
+      }
+    ],
+    "removed": null,
+    "modified": [
+      {
+        "kind": "export",
+        "name": "auth.Cache.Get",
+        "file": "internal/auth/cache.go",
+        "symbol": "internal/auth/cache.go::Cache.Get",
+        "signature": "func (*Cache) Get(key string, opts any) (string, error)",
+        "before": "func (*Cache) Get(key string) (string, error)",
+        "after": "func (*Cache) Get(key string, opts any) (string, error)"
+      }
+    ]
+  },
+  "edges": [
+    {
+      "from": "internal/auth/cache.go::Cache.Get",
+      "to": "internal/auth/cache.go::Cache.decorate",
+      "kind": "call",
+      "crosses_module": false,
+      "new": true
+    },
+    {
+      "from": "internal/auth/cache.go::Cache.Refresh",
+      "to": "internal/auth/cache.go::Cache.Get",
+      "kind": "call",
+      "crosses_module": false,
+      "new": true
+    }
+  ],
+  "dependencies": {
+    "added": null,
+    "removed": null,
+    "upgraded": null
+  },
+  "risk_markers": [
+    {
+      "kind": "package_level_state",
+      "symbol": "internal/auth/cache.go::hits",
+      "file": "internal/auth/cache.go",
+      "line": 14,
+      "note": "package-level mutable var hits — shared across every caller and every test"
+    },
+    {
+      "kind": "widened_type",
+      "symbol": "internal/auth/cache.go::Cache.Get",
+      "file": "internal/auth/cache.go",
+      "line": 27,
+      "note": "parameter opts is typed as any/interface{} — the compiler stops helping callers"
+    },
+    {
+      "kind": "network_without_timeout",
+      "symbol": "internal/auth/cache.go::Cache.Refresh",
+      "file": "internal/auth/cache.go",
+      "line": 43,
+      "note": "http.Get uses http.DefaultClient — no timeout, no context, no cancellation"
+    },
+    {
+      "kind": "swallowed_error",
+      "symbol": "internal/auth/cache.go::Cache.Refresh",
+      "file": "internal/auth/cache.go",
+      "line": 44,
+      "note": "error checked and then discarded"
+    },
+    {
+      "kind": "unsynchronised_goroutine",
+      "symbol": "internal/auth/cache.go::Cache.Refresh",
+      "file": "internal/auth/cache.go",
+      "line": 46,
+      "note": "goroutine started with no WaitGroup/Wait in scope — completion is unobservable"
+    }
+  ],
+  "divergence": {
+    "score": 0.25,
+    "findings": [
+      {
+        "convention": "package_level_state",
+        "expected": "state held on a struct and injected",
+        "observed": "new package-level var hits",
+        "symbol": "internal/auth/cache.go::hits",
+        "severity": "high",
+        "source": "config"
+      }
+    ]
+  },
+  "coverage": {
+    "test_command": "go test ./...",
+    "untested": [
+      "internal/auth/cache.go::Cache.Get",
+      "internal/auth/cache.go::Cache.Refresh",
+      "internal/auth/cache.go::Cache.decorate",
+      "internal/auth/cache.go::hits"
+    ],
+    "tested_count": 0,
+    "symbol_count": 4,
+    "test_files_new": null
+  },
+  "journal": null,
+  "gate": {
+    "fired": true,
+    "reasons": [
+      "new public surface: 2 items",
+      "signature changed on 1 existing export",
+      "5 risk markers"
+    ]
+  }
+}
