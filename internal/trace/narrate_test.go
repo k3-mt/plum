@@ -155,3 +155,75 @@ func TestSurroundingFramesAreNamedAsSuch(t *testing.T) {
 		t.Error("the surrounding frame was not narrated")
 	}
 }
+
+// A sentence flattened to a string loses the difference between an identifier,
+// a value the run produced, and prose a person wrote — and that difference is
+// what tells a reader how much to trust each part.
+func TestSentencesCarryLabelledSpans(t *testing.T) {
+	b := narrateBundle()
+	l := Derive(narrateEvents(), b)
+	steps := Narrate(l, b)
+
+	var first Step
+	for _, s := range steps {
+		if s.Kind == "frame" {
+			first = s
+			break
+		}
+	}
+	if len(first.Spans) == 0 {
+		t.Fatal("no spans: the browser would have to guess with a regex")
+	}
+
+	// The flattened text and the spans must always agree, or the terminal and
+	// the page would be describing different runs.
+	var rebuilt strings.Builder
+	kinds := map[string]string{}
+	for _, sp := range first.Spans {
+		rebuilt.WriteString(sp.Text)
+		if _, seen := kinds[sp.Kind]; !seen {
+			kinds[sp.Kind] = sp.Text
+		}
+	}
+	if rebuilt.String() != first.Text {
+		t.Errorf("spans do not reconstruct the sentence:\n%q\n%q", rebuilt.String(), first.Text)
+	}
+
+	if got := kinds["code"]; got != "Cache.Get" {
+		t.Errorf("the identifier was labelled %q", got)
+	}
+	if !strings.Contains(kinds["value"], "user:42") {
+		t.Errorf("the recorded argument was not labelled as a value: %q", kinds["value"])
+	}
+	if !strings.Contains(kinds["quote"], "Get returns the token") {
+		t.Errorf("the doc comment was not labelled as prose: %q", kinds["quote"])
+	}
+	if !strings.Contains(kinds["risk"], "compiler stops helping") {
+		t.Errorf("the risk marker was not labelled: %q", kinds["risk"])
+	}
+}
+
+func TestTransitionSpansSeparateCostFromProse(t *testing.T) {
+	b := narrateBundle()
+	l := Derive(narrateEvents(), b)
+	for _, s := range Narrate(l, b) {
+		if s.Kind != "transition" || !strings.Contains(s.Text, "then called") {
+			continue
+		}
+		kinds := map[string]string{}
+		for _, sp := range s.Spans {
+			kinds[sp.Kind] += sp.Text
+		}
+		if kinds["cost"] == "" {
+			t.Error("a measured duration should be labelled as one")
+		}
+		if !strings.Contains(kinds["quote"], "realm suffix") {
+			t.Errorf("the call-site comment should be labelled as prose: %q", kinds["quote"])
+		}
+		if !strings.Contains(kinds["code"], "Cache.decorate") {
+			t.Errorf("the callee should be labelled as an identifier: %q", kinds["code"])
+		}
+		return
+	}
+	t.Fatal("no descend transition was narrated")
+}

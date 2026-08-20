@@ -86,6 +86,28 @@ pre { margin: 0; white-space: pre; overflow-x: auto; font-size: 12px; color: #cd
 #q { width: 70%; background: #16191c; border: 1px solid var(--line); color: var(--fg); padding: .4rem; font: inherit; font-size: 12px; }
 #answer { margin-top: .6rem; font-size: 12px; white-space: pre-wrap; color: #cdd6cf; max-height: 40vh; overflow-y: auto; }
 .warn { color: var(--risk); }
+
+/* One vocabulary of colour, used everywhere the same thing appears: in the
+   narration, in the hover strip, in the rail and in the source pane. What it
+   distinguishes is where a piece of text came from — the codebase, the run, or
+   a person — because that is the difference that decides how much to trust it. */
+.sp-code  { color: var(--enter); }              /* an identifier in the codebase */
+.sp-value { color: var(--accent); }             /* something the run produced */
+.sp-quote { color: #c9a227; font-style: italic; } /* prose a person wrote */
+.sp-cost  { color: #b98cd0; }                   /* a measured duration */
+.sp-risk  { color: var(--risk); }               /* a mechanical finding */
+
+.hl-kw  { color: #c586c0; }
+.hl-str { color: var(--accent); }
+.hl-num { color: #b98cd0; }
+.hl-com { color: #6a7a6d; font-style: italic; }
+
+.vocab {
+  display: flex; gap: 1.1rem; flex-wrap: wrap;
+  padding: .35rem 1rem .5rem; font-size: .7rem; color: var(--dim);
+  border-bottom: 1px solid var(--line);
+}
+.vocab b { font-weight: 400; }
 .small { font-size: 11px; }
 #route { margin-top: .4rem; }
 #keep { display: none; margin-top: .8rem; border-top: 1px solid var(--line); padding-top: .6rem; }

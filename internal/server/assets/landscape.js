@@ -108,14 +108,39 @@ function stepFor(kind, idx) {
 function showStep(i) {
   const step = (DATA.narration || [])[i];
   const box = document.getElementById('hover');
-  if (!step) { box.textContent = 'Hover a frame or a step to read what happened there.'; return; }
-  box.textContent = step.text;
+  box.innerHTML = '';
+  if (!step) {
+    box.textContent = 'Hover a frame or a step to read what happened there. Click to copy its evidence.';
+    return;
+  }
+  box.appendChild(renderSpans(step));
   if (step.note) {
     const warn = document.createElement('span');
     warn.className = 'warn';
     warn.textContent = '\u26a0 ' + step.note;
     box.appendChild(warn);
   }
+}
+
+// renderSpans colours a sentence by what each part is. The server decided the
+// kinds; nothing here guesses from the text.
+function renderSpans(step) {
+  const frag = document.createDocumentFragment();
+  if (!step.spans || !step.spans.length) {
+    frag.appendChild(document.createTextNode(step.text || ''));
+    return frag;
+  }
+  for (const span of step.spans) {
+    if (span.kind === 'text') {
+      frag.appendChild(document.createTextNode(span.text));
+      continue;
+    }
+    const el = document.createElement('span');
+    el.className = 'sp-' + span.kind;
+    el.textContent = span.text;
+    frag.appendChild(el);
+  }
+  return frag;
 }
 
 function draw() {
@@ -264,7 +289,13 @@ async function select(symbol, well, opts) {
   }
   SELECTED = symbol; DWELL = Date.now();
   const pc = await (await fetch('/api/symbol/' + encodeURIComponent(symbol))).json();
-  document.getElementById('src').textContent = pc.source || '(source not available in the working tree)';
+  const srcEl = document.getElementById('src');
+  srcEl.innerHTML = '';
+  if (pc.source) {
+    srcEl.appendChild(highlight(pc.source, languageOf(symbol.split('::')[0])));
+  } else {
+    srcEl.textContent = '(source not available in the working tree)';
+  }
   send({ symbol, action: 'expand_source' });
 
   // Clicking a frame hands its whole assembled brief to the clipboard: source,
@@ -278,22 +309,29 @@ async function select(symbol, well, opts) {
   }
 
   const body = document.getElementById('rail-body');
+  // Recorded values are data, and are coloured as data wherever they appear.
+  const val = (v) => '<span class="sp-value">' + escape(v) + '</span>';
   const invs = (pc.invocations || []).map(e => {
-    if (e.event === 'call') return `<div class="inv">call ${escape(JSON.stringify(e.args || {}))}</div>`;
-    if (e.event === 'return') return `<div class="inv">return ${escape(e.result || '')}</div>`;
-    return `<div class="inv raise">raised ${escape(e.exception || '')}</div>`;
+    const test = e.test_id ? ' <span class="muted">during ' + escape(e.test_id) + '</span>' : '';
+    if (e.event === 'call') {
+      const args = Object.entries(e.args || {}).map(([k, v]) =>
+        '<span class="sp-code">' + escape(k) + '</span> = ' + val(v)).join(', ');
+      return '<div class="inv">called with ' + (args || '<span class="muted">no arguments</span>') + test + '</div>';
+    }
+    if (e.event === 'return') return '<div class="inv">returned ' + val(e.result || 'nothing') + test + '</div>';
+    return '<div class="inv raise">raised ' + val(e.exception || '') + test + '</div>';
   }).join('') || '<span class="muted">never executed by the traced run</span>';
 
   body.innerHTML = `
     <dl class="kv">
-      <dt>symbol</dt><dd>${escape(symbol)}</dd>
-      <dt>signature</dt><dd>${escape(pc.signature || '—')}</dd>
-      <dt>doc</dt><dd>${pc.doc ? escape(pc.doc) : '<span class="warn">no declaration doc</span>'}</dd>
+      <dt>symbol</dt><dd><span class="sp-code">${escape(symbol)}</span></dd>
+      <dt>signature</dt><dd><code class="sp-code">${escape(pc.signature || '—')}</code></dd>
+      <dt>doc</dt><dd>${pc.doc ? '<span class="sp-quote">' + escape(pc.doc) + '</span>' : '<span class="warn">no declaration doc</span>'}</dd>
       <dt>recorded invocations</dt><dd>${invs}</dd>
       <dt>risks</dt><dd>${(pc.risks || []).map(r => `<div class="warn">${escape(r.kind)} — ${escape(r.note)}</div>`).join('') || '<span class="muted">none</span>'}</dd>
-      <dt>rationale</dt><dd>${(pc.rationale || []).map(j => escape(j.rationale)).join('<br>') || '<span class="muted">never recorded</span>'}</dd>
+      <dt>rationale</dt><dd>${(pc.rationale || []).map(j => '<span class="sp-quote">' + escape(j.rationale) + '</span>').join('<br>') || '<span class="muted">never recorded</span>'}</dd>
       <dt>claims</dt><dd>${(pc.seams || []).map(c => `[${c.executable ? 'executable' : 'assertion'}] ${escape(c.claim)}`).join('<br>') || '<span class="muted">none</span>'}</dd>
-      <dt>call sites</dt><dd>${(pc.call_sites || []).map(c => `L${c.line} → ${escape(c.callee_raw)} ${c.rationale ? '“' + escape(c.rationale) + '”' : '<span class="muted">(unannotated)</span>'}`).join('<br>') || '<span class="muted">none</span>'}</dd>
+      <dt>call sites</dt><dd>${(pc.call_sites || []).map(c => `L${c.line} → <span class="sp-code">${escape(c.callee_raw)}</span> ${c.rationale ? '<span class="sp-quote">“' + escape(c.rationale) + '”</span>' : '<span class="warn">(unannotated)</span>'}`).join('<br>') || '<span class="muted">none</span>'}</dd>
     </dl>`;
 }
 
@@ -380,6 +418,74 @@ async function keep(kind) {
 }
 
 function send(e) { fetch('/api/telemetry', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(e) }); }
+// highlight is a deliberately small tokenizer: comments, strings, numbers and
+// keywords, for the languages this tool parses. It is not a parser and does not
+// pretend to be — but reading a frame's body as undifferentiated grey is the
+// difference between seeing the code and scanning it.
+const KEYWORDS = {
+  go: 'break case chan const continue default defer else fallthrough for func go goto if import interface map package range return select struct switch type var nil true false error string int int64 bool byte rune any',
+  python: 'and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield None True False self',
+  javascript: 'async await break case catch class const continue default delete do else export extends finally for from function if import in instanceof let new of return static super switch this throw try typeof var void while yield null undefined true false',
+  typescript: 'async await break case catch class const continue default delete do else export extends finally for from function if import in instanceof interface let new of return static super switch this throw try type typeof var void while yield null undefined true false',
+  yaml: 'true false null yes no',
+};
+
+function languageOf(path) {
+  const ext = (path || '').split('.').pop().toLowerCase();
+  if (ext === 'go') return 'go';
+  if (ext === 'py' || ext === 'pyi') return 'python';
+  if (ext === 'ts' || ext === 'tsx') return 'typescript';
+  if (['js', 'jsx', 'mjs', 'cjs'].includes(ext)) return 'javascript';
+  if (['yaml', 'yml', 'toml', 'json', 'env', 'ini'].includes(ext)) return 'yaml';
+  return '';
+}
+
+function highlight(code, lang) {
+  const words = new Set((KEYWORDS[lang] || '').split(' '));
+  const lineComment = lang === 'python' || lang === 'yaml' ? '#' : '//';
+  const out = document.createDocumentFragment();
+
+  const push = (cls, text) => {
+    if (!text) return;
+    if (!cls) { out.appendChild(document.createTextNode(text)); return; }
+    const el = document.createElement('span');
+    el.className = cls;
+    el.textContent = text;
+    out.appendChild(el);
+  };
+
+  for (const line of code.split('\n')) {
+    let i = 0;
+    // A comment runs to end of line, but only outside a string.
+    let inStr = 0, commentAt = -1;
+    for (let j = 0; j < line.length; j++) {
+      const c = line[j];
+      if (inStr) { if (c === '\\') j++; else if (c === inStr) inStr = 0; continue; }
+      if (c === '"' || c === "'" || c === '`') { inStr = c; continue; }
+      if (line.startsWith(lineComment, j)) { commentAt = j; break; }
+    }
+    const body = commentAt >= 0 ? line.slice(0, commentAt) : line;
+    const comment = commentAt >= 0 ? line.slice(commentAt) : '';
+
+    // Then split the code part into strings, numbers, keywords and the rest.
+    const token = /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\b\d[\d_.]*\b|[A-Za-z_$][\w$]*)/g;
+    let m;
+    while ((m = token.exec(body)) !== null) {
+      push('', body.slice(i, m.index));
+      const t = m[0];
+      if (/^["'`]/.test(t)) push('hl-str', t);
+      else if (/^\d/.test(t)) push('hl-num', t);
+      else if (words.has(t)) push('hl-kw', t);
+      else push('', t);
+      i = m.index + t.length;
+    }
+    push('', body.slice(i));
+    push('hl-com', comment);
+    out.appendChild(document.createTextNode('\n'));
+  }
+  return out;
+}
+
 function fmtNs(ns) {
   if (ns < 1000) return ns + 'ns';
   if (ns < 1e6) return (ns / 1e3).toFixed(1) + 'µs';
