@@ -7,7 +7,7 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/k3-mt/plum/main/install.sh | sh
 #   PREFIX=/usr/local sh install.sh          # somewhere else
-#   VERSION=v0.1.0 sh install.sh             # a specific release
+#   VERSION=v0.1.1 sh install.sh             # a specific release
 set -eu
 
 REPO="k3-mt/plum"

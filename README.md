@@ -1,5 +1,9 @@
 # plum
 
+[![release](https://img.shields.io/github/v/release/k3-mt/plum?label=release&color=6f8f7a)](https://github.com/k3-mt/plum/releases/latest)
+[![ci](https://github.com/k3-mt/plum/actions/workflows/ci.yml/badge.svg)](https://github.com/k3-mt/plum/actions/workflows/ci.yml)
+[![licence](https://img.shields.io/badge/licence-MIT-6f8f7a)](LICENSE)
+
 **A comprehension-debt system for agent-written code.**
 
 When an agent builds a feature, the code may work while your mental model of the
@@ -28,8 +32,15 @@ curl -fsSL https://raw.githubusercontent.com/k3-mt/plum/main/install.sh | sh
 git clone https://github.com/k3-mt/plum && cd plum && make install
 ```
 
-Binaries for macOS, Linux and Windows on amd64 and arm64 are attached to every
-[release](https://github.com/k3-mt/plum/releases).
+All three give you the current release — **v0.1.1** at the time of writing;
+`plum version` tells you what you actually have. Binaries for macOS, Linux and
+Windows on amd64 and arm64, with `checksums.txt`, are attached to every
+[release](https://github.com/k3-mt/plum/releases). To pin one:
+
+```sh
+go install github.com/k3-mt/plum/cmd/plum@v0.1.1
+VERSION=v0.1.1 sh install.sh
+```
 
 **Setting it up in a repository?** [`SETUP.md`](SETUP.md) is a runbook written to
 be handed to an agent — *"read SETUP.md and set plum up in this repository"* —

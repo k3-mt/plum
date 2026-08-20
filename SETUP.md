@@ -45,7 +45,7 @@ curl -fsSL https://raw.githubusercontent.com/k3-mt/plum/main/install.sh | sh
 Verify:
 
 ```sh
-plum version        # -> plum v0.1.0 (or later)
+plum version        # -> plum v0.1.1 (or later)
 ```
 
 **If `plum: command not found`:** the binary is installed but not on `PATH`.
