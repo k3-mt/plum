@@ -496,6 +496,7 @@ func cmdExplore(ctx context.Context, env *Env, args []string) error {
 	addr := fs.String("addr", "127.0.0.1:0", "listen address")
 	noOpen := fs.Bool("no-open", false, "do not open a browser")
 	testName := fs.String("test", "", "serve the path of one named test")
+	noWatch := fs.Bool("no-watch", false, "do not reload when the session or the source changes")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -532,6 +533,8 @@ func cmdExplore(ctx context.Context, env *Env, args []string) error {
 		ClaimsPath: env.Store.ClaimsPath(id),
 		SessionDir: env.Store.Dir(id),
 		Adapters:   env.Reg,
+		TestFilter: *testName,
+		Watch:      !*noWatch,
 	}
 	switch env.Cfg.Ask.Route {
 	case "tmux":

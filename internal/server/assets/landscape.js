@@ -12,8 +12,7 @@ const el = (name, attrs = {}, text) => {
 
 async function boot() {
   DATA = await (await fetch('/api/landscape')).json();
-  const g = document.getElementById('gate');
-  g.textContent = DATA.gate.fired ? 'GATE FIRED — ' + DATA.gate.reasons.join(' · ') : 'gate clear';
+  setGate();
   document.getElementById('summary').textContent = DATA.summary || '';
   drawReading();
   draw();
@@ -22,12 +21,76 @@ async function boot() {
     document.getElementById('done').textContent = 'quiz unlocked — run: plum quiz';
   };
   document.getElementById('asked').onclick = ask;
+  listen();
   document.getElementById('route').textContent =
     'answers via ' + (DATA.ask_route === 'tmux' ? 'your tmux agent session' : DATA.ask_route);
   for (const kind of ['journal', 'claim', 'comment']) {
     document.getElementById('keep-' + kind).onclick = () => keep(kind);
   }
   document.getElementById('q').addEventListener('keydown', e => { if (e.key === 'Enter') ask(); });
+}
+
+// The reading is the only part of this page a model wrote. It sits at the top,
+// folds away, and is labelled — because prose that reads like a record but was
+// inferred is worse than no prose at all.
+function drawReading() {
+  const box = document.getElementById('reading-body');
+  const r = DATA.interpretation;
+  if (!r) return;
+  box.className = '';
+  box.innerHTML = '';
+
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.textContent = r.provider + ' · ' + r.generated_at;
+  box.appendChild(meta);
+
+  if (r.stale) {
+    const stale = document.createElement('div');
+    stale.className = 'stale';
+    stale.textContent = '\u26a0 stale — ' + r.stale_reason;
+    box.appendChild(stale);
+  }
+
+  const body = document.createElement('div');
+  body.className = 'body';
+  // Headings and emphasis only; the text is otherwise shown as written.
+  body.innerHTML = escape(r.markdown)
+    .replace(/^#+\s*(.+)$/gm, '<b>$1</b>')
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>');
+  box.appendChild(body);
+}
+
+// listen keeps the page in step with the files it is a view of. Work in one
+// pane, watch it here in the other: a trace rewrites the landscape, an
+// interpretation appears, an edit to the source turns a reading stale.
+function listen() {
+  if (!window.EventSource) return;
+  const src = new EventSource('/api/live');
+  src.addEventListener('reload', async (e) => {
+    const before = SELECTED;
+    const scroll = document.getElementById('svgwrap').scrollLeft;
+    DATA = await (await fetch('/api/landscape')).json();
+    drawReading();
+    document.getElementById('summary').textContent = DATA.summary || '';
+    setGate();
+    draw();
+    document.getElementById('svgwrap').scrollLeft = scroll;
+    // Keep whatever the reader was looking at, if it still exists.
+    if (before && (DATA.landscape.wells || []).some((w) => w.symbol === before)) {
+      select(before, null, { copy: false });
+    }
+    toast(e.data === 'source'
+      ? 'source changed on disk — reading and staleness refreshed'
+      : 'session updated — landscape reloaded');
+  });
+}
+
+function setGate() {
+  document.getElementById('gate').textContent = DATA.gate.fired
+    ? 'GATE FIRED — ' + DATA.gate.reasons.join(' · ')
+    : 'gate clear';
 }
 
 // stepFor maps a shape back to its sentence: frames by well index, transitions

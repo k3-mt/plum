@@ -328,6 +328,37 @@ Each test contributes a named path. The union over a suite is a map of the
 covered system, assembled from real execution rather than static analysis — and
 code no test reaches is visible by its absence, which is itself the finding.
 
+## Two panes
+
+The explore page is a view of files that change while you are looking at them,
+so it watches them. Work in one pane and read in the other:
+
+| You do this | The page does this |
+|---|---|
+| `plum trace` | reloads the landscape |
+| `plum interpret` | the reading appears at the top |
+| an agent edits the source | the reading's **stale** badge lights up |
+| `plum synth` | claims refresh in the rail |
+
+No dependency and no build step: a digest of the watched files' size and
+modification time on a short timer, pushed over server-sent events. The reader's
+selection and scroll position survive a reload, and a view narrowed with `-test`
+stays narrowed. `plum explore -no-watch` turns it off.
+
+A click is not just navigation. Clicking a **frame** copies its whole assembled
+brief to the clipboard — source, recorded arguments and returns, neighbours with
+their code, risks, journalled rationale, claims — and says so:
+
+```
+evidence copied — undocumented, paste it and ask for the doc · 2,228 chars
+```
+
+Clicking a **transition** copies that call site instead, headed with its cost and
+with whether anything explains it. An unannotated expensive call is the thing you
+most want to hand to an agent, and it lives on the transition rather than on the
+frame. The copied brief is byte-identical to what `plum context` prints, with a
+test pinning the two together.
+
 ## Two layers, kept apart
 
 There are two different kinds of statement about a change, and mixing them is

@@ -7,8 +7,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kelalaike/plum/internal/ask"
 	"github.com/kelalaike/plum/internal/bundle"
@@ -197,5 +199,187 @@ func TestSymbolResponseCarriesTheRenderedBrief(t *testing.T) {
 	// The brief is what `plum context` prints, so the two cannot drift.
 	if pc.Markdown != AssembleContext(s.Cfg, s.Bundle, s.Events, s.Claims, "cache.go::Get") {
 		t.Error("the copied brief differs from what plum context prints")
+	}
+}
+
+// The page is a single script with no build step, so a function that is called
+// but never defined is a blank page — and nothing in Go's tests would notice.
+// This is the cheapest guard against that.
+func TestEveryFunctionTheScriptCallsIsDefined(t *testing.T) {
+	src, err := assets.ReadFile("assets/landscape.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	js := stripJSLiterals(stripJSComments(string(src)))
+
+	defined := map[string]bool{}
+	for _, m := range regexp.MustCompile(`(?m)^(?:async )?function ([A-Za-z_$][\w$]*)`).FindAllStringSubmatch(js, -1) {
+		defined[m[1]] = true
+	}
+	// Arrow and expression forms count as definitions too.
+	for _, m := range regexp.MustCompile(`(?:const|let|var) ([A-Za-z_$][\w$]*)\s*=`).FindAllStringSubmatch(js, -1) {
+		defined[m[1]] = true
+	}
+	if len(defined) == 0 {
+		t.Fatal("no functions found; the extraction is wrong, not the script")
+	}
+
+	keywords := map[string]bool{
+		"if": true, "for": true, "while": true, "switch": true, "catch": true,
+		"return": true, "function": true, "typeof": true, "await": true,
+		"async": true, "var": true, "const": true, "let": true, "new": true,
+		"else": true, "do": true, "of": true, "in": true, "delete": true, "void": true,
+	}
+	builtin := map[string]bool{
+		"fetch": true, "setTimeout": true, "clearTimeout": true, "setInterval": true,
+		"clearInterval": true, "parseInt": true, "encodeURIComponent": true,
+		"decodeURIComponent": true, "alert": true, "isNaN": true,
+	}
+
+	seen := map[string]bool{}
+	for _, m := range regexp.MustCompile(`(?m)(?:^|[^.\w$])([a-z][\w$]*)\s*\(`).FindAllStringSubmatch(js, -1) {
+		name := m[1]
+		if defined[name] || keywords[name] || builtin[name] || seen[name] {
+			continue
+		}
+		seen[name] = true
+		// Parameters and destructured locals are out of scope: only bare calls
+		// that look like top-level helpers matter.
+		if regexp.MustCompile(`[(,]\s*` + regexp.QuoteMeta(name) + `\s*[,)]`).MatchString(js) {
+			continue
+		}
+		t.Errorf("landscape.js calls %s() but never defines it — the page would throw at boot", name)
+	}
+}
+
+// stripJSComments removes comments before literals are scanned. An apostrophe
+// in prose ("the frame's cost") would otherwise open a string that never
+// closes, blanking the rest of the file and hiding every definition in it.
+func stripJSComments(js string) string {
+	var out strings.Builder
+	for i := 0; i < len(js); i++ {
+		if js[i] == '/' && i+1 < len(js) && js[i+1] == '/' {
+			for i < len(js) && js[i] != '\n' {
+				i++
+			}
+			out.WriteByte('\n')
+			continue
+		}
+		if js[i] == '/' && i+1 < len(js) && js[i+1] == '*' {
+			i += 2
+			for i+1 < len(js) && !(js[i] == '*' && js[i+1] == '/') {
+				i++
+			}
+			i++
+			continue
+		}
+		out.WriteByte(js[i])
+	}
+	return out.String()
+}
+
+// stripJSLiterals blanks string and template contents so a CSS value like
+// "var(--risk)" is not read as a call to var().
+func stripJSLiterals(js string) string {
+	var out strings.Builder
+	quote := byte(0)
+	for i := 0; i < len(js); i++ {
+		c := js[i]
+		switch {
+		case quote != 0:
+			if c == '\\' {
+				i++
+				out.WriteString("  ")
+				continue
+			}
+			if c == quote {
+				quote = 0
+				out.WriteByte(c)
+				continue
+			}
+			out.WriteByte(' ')
+		case c == '\'' || c == '"' || c == '`':
+			quote = c
+			out.WriteByte(c)
+		default:
+			out.WriteByte(c)
+		}
+	}
+	return out.String()
+}
+
+// The page is a view of files that change while you are looking at them. If the
+// watcher does not notice, the reader is reading yesterday's evidence.
+func TestWatcherNoticesSessionAndSourceChanges(t *testing.T) {
+	s, _ := testServer(t)
+	s.SessionDir = filepath.Join(s.Cfg.Root, "session")
+	if err := os.MkdirAll(s.SessionDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(s.SessionDir, "landscape.json"), []byte(`{"wells":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stop := make(chan struct{})
+	defer close(stop)
+	client := s.hub.add()
+	defer s.hub.remove(client)
+	go s.watch(stop)
+
+	// A session artifact appearing — what `plum interpret` does in the other pane.
+	time.Sleep(2 * watchInterval)
+	if err := os.WriteFile(filepath.Join(s.SessionDir, "interpretation.json"), []byte(`{"entries":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case what := <-client:
+		if what != "session" {
+			t.Errorf("event = %q, want session", what)
+		}
+	case <-time.After(6 * watchInterval):
+		t.Fatal("a new session artifact did not reach the page")
+	}
+
+	// Source changing without a re-capture still matters: it is what turns a
+	// stored reading stale, and the source pane is showing it.
+	if err := os.WriteFile(filepath.Join(s.Cfg.Root, "cache.go"), []byte(source+"\n// edited\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case what := <-client:
+		if what != "source" {
+			t.Errorf("event = %q, want source", what)
+		}
+	case <-time.After(6 * watchInterval):
+		t.Fatal("an edit to the source did not reach the page")
+	}
+}
+
+// A view narrowed to one test must stay narrowed when the session reloads,
+// or the reader's frame silently widens under them.
+func TestReloadKeepsTheTestFilter(t *testing.T) {
+	s, _ := testServer(t)
+	s.SessionDir = filepath.Join(s.Cfg.Root, "session")
+	s.TestFilter = "TestOne"
+	if err := os.MkdirAll(s.SessionDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A landscape on disk covering two tests' worth of frames.
+	if err := os.WriteFile(filepath.Join(s.SessionDir, "landscape.json"),
+		[]byte(`{"wells":[{"symbol":"cache.go::Get","label":"Get","phase":"enter"},{"symbol":"cache.go::Other","label":"Other","phase":"enter"}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s.Events = []trace.Event{
+		{Kind: "call", Symbol: "cache.go::Get", InvocationID: "1", TestID: "TestOne"},
+		{Kind: "return", Symbol: "cache.go::Get", InvocationID: "1", TestID: "TestOne", Result: "x"},
+	}
+	s.reload()
+	if s.Landscape.TestID != "TestOne" {
+		t.Errorf("the filter was lost: test id = %q", s.Landscape.TestID)
+	}
+	for _, w := range s.Landscape.Wells {
+		if w.Symbol == "cache.go::Other" {
+			t.Error("reloading widened a narrowed view back to the whole recording")
+		}
 	}
 }

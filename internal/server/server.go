@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kelalaike/plum/internal/ask"
@@ -48,8 +49,15 @@ type Server struct {
 	// check it against the working tree.
 	SessionDir string
 	Adapters   *lang.Registry
-	mux        *http.ServeMux
-	done       chan struct{}
+	// TestFilter narrows the view to one test's path, and is remembered so a
+	// live reload does not silently widen it back to the whole recording.
+	TestFilter string
+	// mu guards the session state, which the watcher replaces underneath
+	// whatever request happens to be reading it.
+	mu   sync.RWMutex
+	hub  *liveHub
+	mux  *http.ServeMux
+	done chan struct{}
 }
 
 // Config bundles what the server needs beyond the session data itself.
@@ -61,6 +69,9 @@ type Config struct {
 	ClaimsPath string
 	SessionDir string
 	Adapters   *lang.Registry
+	TestFilter string
+	// Watch reloads the page when the session or the source changes on disk.
+	Watch bool
 }
 
 func New(cfg *config.Config, b *bundle.Bundle, l trace.Landscape, ev []trace.Event, cs []claims.Claim, synthesis string, tel *explore.Store, opts Config) *Server {
@@ -68,7 +79,8 @@ func New(cfg *config.Config, b *bundle.Bundle, l trace.Landscape, ev []trace.Eve
 		Cfg: cfg, Bundle: b, Landscape: l, Events: ev, Claims: cs,
 		Synthesis: synthesis, Telemetry: tel, Provider: opts.Provider,
 		Ask: opts.Ask, Bridge: opts.Bridge,
-		SessionDir: opts.SessionDir, Adapters: opts.Adapters,
+		SessionDir: opts.SessionDir, Adapters: opts.Adapters, TestFilter: opts.TestFilter,
+		hub:        newHub(),
 		JournalDir: opts.JournalDir, ClaimsPath: opts.ClaimsPath,
 		mux: http.NewServeMux(), done: make(chan struct{}),
 	}
@@ -81,6 +93,10 @@ func New(cfg *config.Config, b *bundle.Bundle, l trace.Landscape, ev []trace.Eve
 	s.mux.HandleFunc("/api/keep", s.handleKeep)
 	s.mux.HandleFunc("/api/telemetry", s.handleTelemetry)
 	s.mux.HandleFunc("/api/done", s.handleDone)
+	s.mux.HandleFunc("/api/live", s.handleLive)
+	if opts.Watch && opts.SessionDir != "" {
+		go s.watch(s.done)
+	}
 	return s
 }
 
@@ -132,6 +148,8 @@ type landscapePayload struct {
 }
 
 func (s *Server) handleLandscape(w http.ResponseWriter, r *http.Request) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	writeJSON(w, landscapePayload{
 		AskRoute:       s.askRoute(),
 		Summary:        trace.Summary(s.Landscape, s.Bundle),
@@ -299,8 +317,10 @@ func (s *Server) handleSymbol(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "symbol id required", http.StatusBadRequest)
 		return
 	}
+	s.mu.RLock()
 	pc := s.buildContext(id)
 	pc.Markdown = renderContext(pc)
+	s.mu.RUnlock()
 	writeJSON(w, pc)
 }
 
