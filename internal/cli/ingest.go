@@ -22,6 +22,7 @@ func cmdIngest(ctx context.Context, env *Env, args []string) error {
 	fs := flag.NewFlagSet("ingest", flag.ContinueOnError)
 	target := fs.String("target", "target", "the dbt target directory holding manifest.json and run_results.json")
 	chain := fs.String("chain", "hottest", "which lineage to draw: hottest|slowest|raising")
+	from := fs.String("from", "", "draw the blast radius of one model: what selects it, and what that costs")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -44,6 +45,15 @@ func cmdIngest(ctx context.Context, env *Env, args []string) error {
 	}
 
 	events := dbt.Events(manifest, results)
+	if *from != "" {
+		// "What did this need?" is answered by a descent from a root. "What does
+		// this hit?" is the question somebody editing a staging model actually
+		// has, and it is the opposite walk.
+		events, err = dbt.EventsFrom(manifest, results, *from, dbt.Downstream)
+		if err != nil {
+			return err
+		}
+	}
 	if len(events) == 0 {
 		fmt.Println("the run recorded no buildable nodes — nothing to draw")
 		return nil

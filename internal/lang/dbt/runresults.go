@@ -107,6 +107,85 @@ func (m *Manifest) symbolID(uniqueID string) bundle.SymbolID {
 	return bundle.MakeID(filepath.ToSlash(n.OriginalFilePath), n.Name)
 }
 
+// Direction decides which way the lineage is walked.
+//
+// Upstream answers "what did this need?" — the build order, and where the time
+// went. Downstream answers "what does this hit?" — the blast radius of a
+// change, which is the question somebody editing a staging model actually has,
+// and the one a descent from a root cannot show.
+type Direction string
+
+const (
+	Upstream   Direction = "upstream"
+	Downstream Direction = "downstream"
+)
+
+// EventsFrom walks the lineage of one named node in the given direction.
+//
+// Walking downstream is what makes a fan visible: a staging model selected by
+// two marts draws as one node descending into two, which is the shape of the
+// risk when you change it.
+func EventsFrom(m *Manifest, r *RunResults, rootName string, dir Direction) ([]trace.Event, error) {
+	byID := map[string]result{}
+	for _, res := range r.Results {
+		byID[res.UniqueID] = res
+	}
+	var rootID string
+	for id, n := range m.Nodes {
+		if n.Name == rootName && n.ResourceType != "test" {
+			rootID = id
+			break
+		}
+	}
+	if rootID == "" {
+		return nil, fmt.Errorf("no model named %q in this run", rootName)
+	}
+	if dir == Upstream {
+		return walkLineage(m, byID, r, rootID, childrenUpstream(m, byID), "build "+rootName), nil
+	}
+	return walkLineage(m, byID, r, rootID, childrenDownstream(m, byID), "impact of "+rootName), nil
+}
+
+// childrenUpstream is what a node needs: its own depends_on, restricted to what
+// this run actually built.
+func childrenUpstream(m *Manifest, inRun map[string]result) func(string) []string {
+	return func(id string) []string {
+		var out []string
+		for _, dep := range m.Nodes[id].DependsOn.Nodes {
+			if _, ok := inRun[dep]; !ok {
+				continue
+			}
+			if m.Nodes[dep].ResourceType == "test" {
+				continue
+			}
+			out = append(out, dep)
+		}
+		sort.Strings(out)
+		return out
+	}
+}
+
+// childrenDownstream is what selects a node — the map dbt calls child_map,
+// rebuilt here from depends_on so it works whatever the manifest version.
+func childrenDownstream(m *Manifest, inRun map[string]result) func(string) []string {
+	consumers := map[string][]string{}
+	for id, n := range m.Nodes {
+		if n.ResourceType == "test" {
+			continue
+		}
+		if _, ok := inRun[id]; !ok {
+			continue
+		}
+		for _, dep := range n.DependsOn.Nodes {
+			consumers[dep] = append(consumers[dep], id)
+		}
+	}
+	for k := range consumers {
+		sort.Strings(consumers[k])
+	}
+	return func(id string) []string { return consumers[id] }
+}
+
 // Events turns one dbt run into the event stream the landscape is derived from.
 //
 // A build is not a call stack, but the lineage of a model is a tree, and that is
@@ -155,12 +234,42 @@ func Events(m *Manifest, r *RunResults) []trace.Event {
 	}
 	sort.Strings(roots)
 
+	children := childrenUpstream(m, byID)
+	var events []trace.Event
+	for _, root := range roots {
+		events = append(events, walkLineage(m, byID, r, root, children, "build "+m.Nodes[root].Name)...)
+	}
+	return events
+}
+
+// walkLineage emits one chain: entering a node, then each of its children in
+// turn, then leaving it with what it cost.
+func walkLineage(m *Manifest, byID map[string]result, r *RunResults, root string, children func(string) []string, testID string) []trace.Event {
+	testsFor := map[string][]result{}
+	for id, res := range byID {
+		if m.Nodes[id].ResourceType != "test" {
+			continue
+		}
+		for _, dep := range m.Nodes[id].DependsOn.Nodes {
+			testsFor[dep] = append(testsFor[dep], res)
+		}
+	}
+
 	var events []trace.Event
 	clock := int64(0)
 	counter := 0
+	visiting := map[string]bool{}
 
-	var walk func(id string, depth int, parent string, testID string)
-	walk = func(id string, depth int, parent string, testID string) {
+	var walk func(id string, depth int, parent string)
+	walk = func(id string, depth int, parent string) {
+		// A DAG can reach the same node by two paths; a cycle would not
+		// terminate. Depth is bounded for the same reason a landscape is.
+		if visiting[id] || depth > 12 {
+			return
+		}
+		visiting[id] = true
+		defer delete(visiting, id)
+
 		res, ran := byID[id]
 		n := m.Nodes[id]
 		counter++
@@ -185,17 +294,8 @@ func Events(m *Manifest, r *RunResults) []trace.Event {
 			ParentID: parent, Depth: depth, TSNanos: clock, Args: args, TestID: testID,
 		})
 
-		// Upstream first: a model cannot be built before what it selects from.
-		deps := append([]string(nil), n.DependsOn.Nodes...)
-		sort.Strings(deps)
-		for _, dep := range deps {
-			if _, inRun := byID[dep]; !inRun {
-				continue
-			}
-			if m.Nodes[dep].ResourceType == "test" {
-				continue
-			}
-			walk(dep, depth+1, invocation, testID)
+		for _, child := range children(id) {
+			walk(child, depth+1, invocation)
 		}
 
 		// dbt builds a node and then runs the tests attached to it, so the tests
@@ -229,7 +329,6 @@ func Events(m *Manifest, r *RunResults) []trace.Event {
 			})
 		}
 
-		// The node's own execution time is what the transition back up costs.
 		clock += int64(res.ExecutionTime * float64(time.Second))
 		if res.ExecutionTime == 0 {
 			clock += int64(time.Millisecond)
@@ -263,14 +362,10 @@ func Events(m *Manifest, r *RunResults) []trace.Event {
 		}
 	}
 
-	for _, root := range roots {
-		walk(root, 0, "", "build "+m.Nodes[root].Name)
-	}
+	walk(root, 0, "")
 	return events
 }
 
-// scanned reports what a test cost to run, since a test in a warehouse is a
-// query and queries are billed.
 func scanned(res result) string {
 	if res.Adapter.BytesProcessed == 0 {
 		return ""

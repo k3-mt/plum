@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kelalaike/plum/internal/bundle"
 	"github.com/kelalaike/plum/internal/trace"
@@ -192,5 +193,139 @@ func TestMissingArtifactsSayWhatToDo(t *testing.T) {
 	_, _, err := LoadRun(t.TempDir())
 	if err == nil || !strings.Contains(err.Error(), "dbt compile") {
 		t.Errorf("error = %v, want it to say how to produce the manifest", err)
+	}
+}
+
+// "What did this need?" and "what does this hit?" are opposite walks, and the
+// second is the question somebody editing a staging model actually has. A
+// descent from a root cannot show it.
+func TestDownstreamWalkShowsTheFanOut(t *testing.T) {
+	dir := writeRun(t)
+	// A second mart that reads the same staging model: now stg_orders fans out.
+	addNode(t, dir, "model.shop.dim_customers", map[string]any{
+		"unique_id": "model.shop.dim_customers", "name": "dim_customers", "resource_type": "model",
+		"original_file_path": "models/marts/dim_customers.sql",
+		"depends_on":         map[string]any{"nodes": []string{"model.shop.stg_orders"}},
+		"config":             map[string]any{"materialized": "table"},
+	}, map[string]any{
+		"unique_id": "model.shop.dim_customers", "status": "success", "execution_time": 22.0,
+		"adapter_response": map[string]any{"rows_affected": 418772, "bytes_processed": 10307921510},
+	})
+
+	m, r, err := LoadRun(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	events, err := EventsFrom(m, r, "stg_orders", Downstream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if events[0].Symbol != "models/staging/stg_orders.sql::stg_orders" || events[0].Depth != 0 {
+		t.Fatalf("the walk must start at the named model: %+v", events[0])
+	}
+	if events[0].TestID != "impact of stg_orders" {
+		t.Errorf("chain label = %q", events[0].TestID)
+	}
+
+	// Both consumers must appear, each one step down from the shared model.
+	consumers := map[bundle.SymbolID]int{}
+	for _, e := range events {
+		if e.Kind == "call" && e.Depth == 1 {
+			consumers[e.Symbol]++
+		}
+	}
+	for _, want := range []bundle.SymbolID{
+		"models/marts/fct_orders.sql::fct_orders",
+		"models/marts/dim_customers.sql::dim_customers",
+	} {
+		if consumers[want] != 1 {
+			t.Errorf("%s appeared %d times at depth 1; the fan is not drawn", want, consumers[want])
+		}
+	}
+
+	// And the upstream walk from the same node must show nothing below it,
+	// because staging selects from a source rather than from another model.
+	up, err := EventsFrom(m, r, "stg_orders", Upstream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range up {
+		if e.Depth > 0 {
+			t.Errorf("walking upstream from staging found %s below it", e.Symbol)
+		}
+	}
+}
+
+// A DAG can reach the same node by two paths, and a cycle would not terminate.
+func TestDownstreamWalkTerminates(t *testing.T) {
+	dir := writeRun(t)
+	addNode(t, dir, "model.shop.loop_a", map[string]any{
+		"unique_id": "model.shop.loop_a", "name": "loop_a", "resource_type": "model",
+		"original_file_path": "models/loop_a.sql",
+		"depends_on":         map[string]any{"nodes": []string{"model.shop.loop_b"}},
+		"config":             map[string]any{},
+	}, map[string]any{"unique_id": "model.shop.loop_a", "status": "success", "execution_time": 1.0,
+		"adapter_response": map[string]any{}})
+	addNode(t, dir, "model.shop.loop_b", map[string]any{
+		"unique_id": "model.shop.loop_b", "name": "loop_b", "resource_type": "model",
+		"original_file_path": "models/loop_b.sql",
+		"depends_on":         map[string]any{"nodes": []string{"model.shop.loop_a"}},
+		"config":             map[string]any{},
+	}, map[string]any{"unique_id": "model.shop.loop_b", "status": "success", "execution_time": 1.0,
+		"adapter_response": map[string]any{}})
+
+	m, r, err := LoadRun(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan int, 1)
+	go func() {
+		events, _ := EventsFrom(m, r, "loop_a", Downstream)
+		done <- len(events)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("a cycle in the DAG did not terminate")
+	}
+}
+
+func TestUnknownModelSaysSo(t *testing.T) {
+	m, r, err := LoadRun(writeRun(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := EventsFrom(m, r, "not_a_model", Downstream); err == nil ||
+		!strings.Contains(err.Error(), "no model named") {
+		t.Errorf("error = %v", err)
+	}
+}
+
+// addNode splices one node and its result into the artifacts on disk.
+func addNode(t *testing.T, dir, id string, node, result map[string]any) {
+	t.Helper()
+	for name, key := range map[string]string{"manifest.json": "nodes", "run_results.json": "results"} {
+		path := filepath.Join(dir, name)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var doc map[string]any
+		if err := json.Unmarshal(data, &doc); err != nil {
+			t.Fatal(err)
+		}
+		if key == "nodes" {
+			doc["nodes"].(map[string]any)[id] = node
+		} else {
+			doc["results"] = append(doc["results"].([]any), result)
+		}
+		out, err := json.MarshalIndent(doc, "", "  ")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, out, 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
