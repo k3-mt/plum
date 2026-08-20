@@ -117,6 +117,48 @@ func (s *Set) MeetAll(b *bundle.Bundle) error {
 	return s.saveLocked()
 }
 
+// Item is one entry on the worklist: an unmet symbol and the reason it sits
+// where it does in the order.
+type Item struct {
+	Symbol bundle.SymbolID `json:"symbol"`
+	Name   string          `json:"name"`
+	File   string          `json:"file"`
+	Why    string          `json:"why"`
+}
+
+// rank puts the worklist in the order `plum report` reads in: what could break
+// other people first, source order never. The landscape draws one chain out of
+// however many were recorded, so most of a session's debt is never on the
+// picture — without an order to work through, the meter would be a number you
+// could read but not act on.
+func rank(b *bundle.Bundle, sym bundle.Symbol) (int, string) {
+	risky := b.HasRisk(sym.ID)
+	switch {
+	case bundle.IsTestPath(sym.File):
+		// Test code is changed code and belongs on the list, but it is never
+		// what breaks somebody else. An exported Test function outranking a
+		// changed signature would be the order backwards.
+		return 5, "test code"
+
+	case sym.Exported && sym.Change == "modified":
+		// The highest-signal event the tool produces: it breaks callers nobody
+		// looked at.
+		return 0, "signature changed on an existing export"
+	case risky:
+		return 1, "risk marker"
+	case sym.Exported:
+		return 2, "new public surface"
+	case !sym.Tested:
+		return 3, "no test execution entered it"
+	default:
+		return 4, "changed"
+	}
+}
+
+// worklistMax bounds the panel. A list nobody finishes reading is a list that
+// found nothing; what is held back is counted and named, never silently cut.
+const worklistMax = 25
+
 // Debt is the number on the window.
 type Debt struct {
 	Unmet int `json:"unmet"`
@@ -130,6 +172,11 @@ type Debt struct {
 	// dim them. The full unmet set runs to tens of thousands on a first capture
 	// and is no use to a drawing that shows a few dozen frames.
 	Frames []bundle.SymbolID `json:"frames"`
+	// Worklist is the unmet symbols in the order they are worth reading, and
+	// More is how many did not fit. The meter says how much is owed; this is
+	// what you can do about it.
+	Worklist []Item `json:"worklist"`
+	More     int    `json:"more"`
 	// Drifted counts symbols the working tree no longer agrees with the capture
 	// about: code being written right now, which no session has recorded yet.
 	// Kept apart from Unmet rather than folded into it, because they are answers
@@ -161,7 +208,10 @@ func (s *Set) Of(b *bundle.Bundle, drawn []bundle.SymbolID) Debt {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Two maps because the drawn-frames pass strikes symbols off as it names
+	// them, and the worklist still needs to know the whole set.
 	unmet := make(map[bundle.SymbolID]bool, len(b.Symbols))
+	unmetAll := make(map[bundle.SymbolID]bool, len(b.Symbols))
 	for _, sym := range b.Symbols {
 		if sym.Fingerprint == "" {
 			continue // nothing to compare against; counting it would be a guess
@@ -176,6 +226,7 @@ func (s *Set) Of(b *bundle.Bundle, drawn []bundle.SymbolID) Debt {
 			d.Stale++
 		}
 		unmet[sym.ID] = true
+		unmetAll[sym.ID] = true
 	}
 	// A landscape draws one symbol as several wells — descending into it, and
 	// again on each resume — so the drawn list repeats. The page wants to know
@@ -187,6 +238,32 @@ func (s *Set) Of(b *bundle.Bundle, drawn []bundle.SymbolID) Debt {
 		}
 	}
 	sort.Slice(d.Frames, func(i, j int) bool { return d.Frames[i] < d.Frames[j] })
+
+	type ranked struct {
+		item Item
+		tier int
+	}
+	var all []ranked
+	for _, sym := range b.Symbols {
+		if !unmetAll[sym.ID] {
+			continue
+		}
+		tier, why := rank(b, sym)
+		all = append(all, ranked{Item{Symbol: sym.ID, Name: sym.Name, File: sym.File, Why: why}, tier})
+	}
+	sort.SliceStable(all, func(i, j int) bool {
+		if all[i].tier != all[j].tier {
+			return all[i].tier < all[j].tier
+		}
+		return all[i].item.Symbol < all[j].item.Symbol
+	})
+	for i, r := range all {
+		if i >= worklistMax {
+			d.More = len(all) - worklistMax
+			break
+		}
+		d.Worklist = append(d.Worklist, r.item)
+	}
 	return d
 }
 

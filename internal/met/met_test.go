@@ -1,6 +1,7 @@
 package met
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
@@ -159,5 +160,68 @@ func TestASymbolDrawnAsSeveralFramesIsNamedOnce(t *testing.T) {
 	}
 	if d.Unmet != 2 {
 		t.Errorf("unmet = %d — deduping the drawing must not touch the count", d.Unmet)
+	}
+}
+
+// The landscape draws one chain out of however many were recorded, so most of a
+// session's debt is never on the picture. The worklist is what makes the meter
+// something you can act on rather than only read, and its order is the report's:
+// what could break other people first, source order never.
+func TestTheWorklistLeadsWithWhatBreaksOtherPeople(t *testing.T) {
+	bun := &bundle.Bundle{
+		Symbols: []bundle.Symbol{
+			{ID: "z.go::plain", Name: "plain", Fingerprint: "fp", Tested: true},
+			// Exported, new, and still last: test code never breaks anyone else.
+			{ID: "a_test.go::TestIt", Name: "TestIt", File: "a_test.go", Fingerprint: "fp", Exported: true, Change: "added"},
+			{ID: "a.go::Untested", Name: "Untested", Fingerprint: "fp"},
+			{ID: "a.go::NewExport", Name: "NewExport", Fingerprint: "fp", Exported: true, Change: "added", Tested: true},
+			{ID: "a.go::Risky", Name: "Risky", Fingerprint: "fp", Tested: true},
+			{ID: "a.go::Changed", Name: "Changed", Fingerprint: "fp", Exported: true, Change: "modified", Tested: true},
+		},
+		RiskMarkers: []bundle.RiskMarker{{Symbol: "a.go::Risky", Kind: "swallowed_error"}},
+	}
+	got := []string{}
+	for _, it := range Load(t.TempDir()).Of(bun, nil).Worklist {
+		got = append(got, it.Name)
+	}
+	want := []string{"Changed", "Risky", "NewExport", "Untested", "plain", "TestIt"}
+	for i := range want {
+		if i >= len(got) || got[i] != want[i] {
+			t.Fatalf("worklist = %v, want %v", got, want)
+		}
+	}
+}
+
+// A list nobody finishes reading is a list that found nothing. What is held back
+// is counted and named rather than silently cut.
+func TestTheWorklistIsCappedAndSaysWhatItHeldBack(t *testing.T) {
+	var syms []bundle.Symbol
+	for i := 0; i < worklistMax+7; i++ {
+		syms = append(syms, bundle.Symbol{
+			ID:          bundle.SymbolID(fmt.Sprintf("a.go::S%03d", i)),
+			Name:        fmt.Sprintf("S%03d", i),
+			Fingerprint: "fp", Tested: true,
+		})
+	}
+	d := Load(t.TempDir()).Of(&bundle.Bundle{Symbols: syms}, nil)
+	if len(d.Worklist) != worklistMax {
+		t.Errorf("worklist = %d, want the cap of %d", len(d.Worklist), worklistMax)
+	}
+	if d.More != 7 {
+		t.Errorf("more = %d, want the 7 held back named", d.More)
+	}
+}
+
+// Meeting a symbol takes it off the list. Otherwise the worklist would still be
+// telling you to read what you just read.
+func TestReadingSomethingTakesItOffTheWorklist(t *testing.T) {
+	s := Load(t.TempDir())
+	bun := b(sym("a.go::Get", "fp1"), sym("a.go::Put", "fp1"))
+	if err := s.Meet("a.go::Get", "fp1"); err != nil {
+		t.Fatal(err)
+	}
+	d := s.Of(bun, nil)
+	if len(d.Worklist) != 1 || d.Worklist[0].Symbol != "a.go::Put" {
+		t.Errorf("worklist = %+v, want only the one still owed", d.Worklist)
 	}
 }

@@ -1050,12 +1050,7 @@ func plural(n int, noun string) string {
 	return fmt.Sprintf("%d %ss", n, noun)
 }
 
-func isTestPath(path string) bool {
-	base := filepath.Base(path)
-	return strings.HasSuffix(base, "_test.go") || strings.HasPrefix(base, "test_") ||
-		strings.HasSuffix(base, "_test.py") || strings.HasSuffix(base, ".test.ts") ||
-		strings.HasSuffix(base, ".test.js") || strings.HasSuffix(base, ".spec.ts")
-}
+func isTestPath(path string) bool { return bundle.IsTestPath(path) }
 
 func oneLineOf(s string) string { return strings.Join(strings.Fields(s), " ") }
 

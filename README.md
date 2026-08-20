@@ -455,6 +455,32 @@ have different debts. An export has no reader and so shows no meter at all;
 zero would read as *you have met all of this*, which is a different claim and an
 untrue one.
 
+### A list you can work through
+
+The landscape draws one chain out of however many were recorded — on a real
+session here, six of eighty-six unmet symbols were on the picture. A meter that
+counts eighty-six while the window offers a way to meet six of them is a number
+you can read but not act on.
+
+So the window also lists what you owe, in the order `plum report` reads in — what
+could break other people first, source order never:
+
+```
+what you have not met — read-first order, not source order
+
+ 1. Server.Serve   · internal/server/server.go  signature changed on an existing export
+ 2. handleSymbol   · internal/server/server.go  risk marker
+ 3. Set            · internal/met/met.go        new public surface
+ …
+ … and 61 more, held back so this stays a list you finish
+```
+
+Clicking an entry opens its brief, which is the same act as clicking a frame:
+the debt goes down by one and the entry leaves the list. Test code sits at the
+bottom — it is changed code and belongs on the list, but an exported `Test`
+function outranking a changed signature would be the order backwards. What does
+not fit is counted and named rather than silently cut.
+
 ### Which way it is going
 
 A number on its own does not say whether it is rising, and that is most of what a

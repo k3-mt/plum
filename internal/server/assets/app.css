@@ -48,6 +48,28 @@ h2 { font-size: .75rem; text-transform: uppercase; letter-spacing: .1em; color: 
    and the number gets the space they were using. Width decides, not focus: a
    window that blanked whenever you looked elsewhere would be unusable, and
    dragging an edge is a control anyone already knows how to work. */
+/* The landscape draws one chain out of however many were recorded, so most of a
+   session's debt is never on the picture. Without this the meter would be a
+   number you could read but not act on. */
+#owed {
+  padding: .6rem 1rem; border-bottom: 1px solid var(--line); background: #16181a;
+}
+#owed > summary {
+  cursor: pointer; font-size: .75rem; text-transform: uppercase;
+  letter-spacing: .1em; color: var(--risk); list-style: none;
+}
+#owed > summary .qualifier { text-transform: none; letter-spacing: 0; color: var(--dim); }
+#owed > summary:hover { color: var(--fg); }
+#owed ol { margin: .6rem 0 0; padding-left: 1.4rem; }
+#owed li { margin-bottom: .25rem; font-size: .8rem; }
+#owed button {
+  background: none; border: 0; padding: 0; font: inherit; color: var(--enter);
+  cursor: pointer; text-align: left;
+}
+#owed button:hover { color: var(--accent); text-decoration: underline; }
+#owed .where { color: var(--dim); }
+#owed .why { color: var(--risk); font-size: .7rem; }
+
 body.peripheral > *:not(header) { display: none; }
 body.peripheral header {
   flex-direction: column; align-items: stretch; gap: .6rem;

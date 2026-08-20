@@ -30,6 +30,7 @@ async function boot() {
   DATA = OFFLINE ? OFFLINE.payload : await (await fetch('/api/landscape')).json();
   setGate();
   drawDebt();
+  drawOwed();
   document.getElementById('summary').textContent = DATA.summary || '';
   drawReading();
   render();
@@ -111,8 +112,10 @@ function drawReading() {
 // asking an agent a question, recording that you met the code, watching the
 // tree. Leaving buttons that quietly fail would be worse than not having them.
 function offlineMode() {
-  const debt = document.getElementById('debt');
-  if (debt) debt.remove();
+  for (const id of ['debt', 'owed']) {
+    const node = document.getElementById(id);
+    if (node) node.remove();
+  }
   for (const id of ['done', 'ask']) {
     const node = document.getElementById(id);
     if (node) node.remove();
@@ -153,6 +156,7 @@ async function refreshAll(note) {
   document.getElementById('summary').textContent = DATA.summary || '';
   setGate();
   drawDebt();
+  drawOwed();
   render();
   document.getElementById('svgwrap').scrollLeft = scroll;
   // Keep whatever the reader was looking at, if it still exists.
@@ -211,6 +215,40 @@ function drawDebt() {
   box.title = title.join('\n\n');
 }
 
+// The worklist is the meter made actionable. A number you can read but not act
+// on is a scold; this is the same debt as a list you can work through, in the
+// order `plum report` reads in — what could break other people first.
+function drawOwed() {
+  const box = document.getElementById('owed');
+  if (!box) return;
+  const items = (DATA.debt && DATA.debt.worklist) || [];
+  if (OFFLINE || !items.length) { box.hidden = true; return; }
+  box.hidden = false;
+
+  const list = document.getElementById('owed-list');
+  list.innerHTML = '';
+  for (const it of items) {
+    const li = document.createElement('li');
+    const b = document.createElement('button');
+    b.textContent = it.name || it.symbol;
+    b.onclick = () => select(it.symbol, null, { copy: false });
+    li.appendChild(b);
+    const where = document.createElement('span');
+    where.className = 'where';
+    where.textContent = ' \u00b7 ' + it.file + ' ';
+    li.appendChild(where);
+    const why = document.createElement('span');
+    why.className = 'why';
+    why.textContent = it.why;
+    li.appendChild(why);
+    list.appendChild(li);
+  }
+  const more = document.getElementById('owed-more');
+  more.textContent = DATA.debt.more
+    ? '\u2026 and ' + DATA.debt.more + ' more, held back so this stays a list you finish'
+    : '';
+}
+
 // Reading a symbol pays the debt down, so the number has to move when you read
 // one. Asking for the meter alone rather than reloading the landscape keeps that
 // cheap: the landscape payload carries every changed symbol in the session.
@@ -219,6 +257,7 @@ async function refreshDebt() {
   try {
     DATA.debt = await (await fetch('/api/debt')).json();
     drawDebt();
+    drawOwed();
     if (!peripheral()) render(); // the hollow frames only exist when drawn
   } catch (e) { /* the meter is not worth breaking the page over */ }
 }

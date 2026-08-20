@@ -204,3 +204,22 @@ func maj(v string) string {
 	}
 	return v
 }
+
+// IsTestPath reports whether a path holds test code.
+//
+// Four packages had grown their own copy of this and they had already drifted —
+// one knew about `.test.js` and the others did not, so the same file counted as
+// a test in the explore UI and as production code in the report. It lives here
+// because every package that asks the question already imports this one.
+func IsTestPath(path string) bool {
+	base := path
+	if i := strings.LastIndexAny(path, `/\`); i >= 0 {
+		base = path[i+1:]
+	}
+	for _, suffix := range []string{"_test.go", "_test.py", ".test.ts", ".test.js", ".spec.ts", ".spec.js"} {
+		if strings.HasSuffix(base, suffix) {
+			return true
+		}
+	}
+	return strings.HasPrefix(base, "test_")
+}
