@@ -44,6 +44,12 @@ type Config struct {
 		Enabled     bool
 		MaxEvents   int
 		TestCommand string
+		// Context decides how much of the surrounding system is recorded
+		// alongside the change, for structure only:
+		//   off   the changed symbols and nothing else
+		//   file  everything else declared in the changed files (default)
+		//   dir   everything declared beside them, same directory
+		Context string
 	}
 	Ask struct {
 		// Route is how a question from the explore UI gets answered:
@@ -77,6 +83,7 @@ func Default(root string) *Config {
 	c.Synthesis.MaxDiff = 120000
 	c.Trace.Enabled = true
 	c.Trace.MaxEvents = 200000
+	c.Trace.Context = "file"
 	c.Ask.Route = "tmux"
 	c.Ask.TimeoutSec = 300
 	return c
@@ -155,6 +162,7 @@ func (c *Config) apply(d Doc) {
 	bl("trace.enabled", &c.Trace.Enabled)
 	inum("trace.max_events", &c.Trace.MaxEvents)
 	str("trace.test_command", &c.Trace.TestCommand)
+	str("trace.context", &c.Trace.Context)
 	str("ask.route", &c.Ask.Route)
 	str("ask.tmux_target", &c.Ask.TmuxTarget)
 	inum("ask.timeout_seconds", &c.Ask.TimeoutSec)
@@ -254,6 +262,11 @@ model    = "claude-sonnet-5"
 [trace]
 enabled    = true
 max_events = 200000
+# How much of the surrounding system is recorded alongside the change, for
+# structure only: off | file | dir. A change is only legible inside the system
+# it perturbs, but recording that system as deeply as the change costs more and
+# says less.
+context    = "file"
 
 [ask]
 # How a question asked in plum explore gets answered.

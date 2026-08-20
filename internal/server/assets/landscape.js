@@ -94,16 +94,18 @@ function draw() {
     const g = el('g', { class: 'well' });
     const x = cx(i) - W / 2 + 10, y = cy(w.depth);
     const fill = w.phase === 'escape' ? 'var(--unwind)'
+      : w.context ? 'var(--context)'
       : (w.risk ? 'var(--risk)' : (w.phase === 'resume' ? 'var(--resume)' : 'var(--enter)'));
     const rect = el('rect', {
       x, y, width: W - 20, height: 26, rx: 3, fill,
-      opacity: w.phase === 'resume' ? .45 : .9,
+      opacity: w.context ? .3 : (w.phase === 'resume' ? .45 : .9),
       stroke: w.doc ? 'none' : 'var(--enter)',
       'stroke-dasharray': w.doc ? '' : '3 2',
     });
     g.appendChild(rect);
     g.appendChild(el('text', { x: cx(i), y: y + 17, 'text-anchor': 'middle', class: 'wlabel', fill: '#0f1113' },
       trunc(w.label, 15)));
+    if (w.context) g.appendChild(el('title', {}, w.symbol + ' — surrounding code, recorded for structure only'));
     g.appendChild(el('text', { x: cx(i), y: y + 38, 'text-anchor': 'middle', class: 'blabel' },
       'd' + w.depth + (w.phase === 'resume' ? ' · resumed' : w.phase === 'escape' ? ' · escaped' : '')));
     g.onclick = () => select(w.symbol, w);

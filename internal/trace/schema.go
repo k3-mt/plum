@@ -52,8 +52,9 @@ type ShimSpec struct {
 	Dir string
 	// Files maps a name inside Dir to its content.
 	Files map[string]string
-	// Env is set for the test command. Values may contain ${SHIM_DIR}, and
-	// ${SYMBOLS} for the comma-separated instrumentation set.
+	// Env is set for the test command. Values may contain ${SHIM_DIR},
+	// ${SYMBOLS} for the deep instrumentation set, and ${CONTEXT_SYMBOLS} for
+	// the surrounding code recorded for structure only.
 	Env map[string]string
 	// PathVars are environment variables with path-list semantics (PYTHONPATH,
 	// NODE_PATH) that Dir is prepended to, preserving any existing value.
@@ -76,7 +77,13 @@ type Instrumenter interface {
 type Rewriter interface {
 	// Instrument rewrites files under scratchRoot in place, returning what it
 	// managed to instrument and what it had to skip.
-	Instrument(scratchRoot string, ids []bundle.SymbolID) (Instrumented, error)
+	//
+	// ids is the changed set, recorded in full: arguments, returns, exceptions.
+	// context is the surrounding code the test may walk through, recorded for
+	// structure only — entering and leaving, nothing captured. Capturing
+	// arguments is most of the cost, and the surrounding code is there to give
+	// the change a shape to sit in, not to be inspected.
+	Instrument(scratchRoot string, ids, context []bundle.SymbolID) (Instrumented, error)
 }
 
 type Instrumented struct {

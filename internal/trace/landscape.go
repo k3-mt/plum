@@ -13,14 +13,18 @@ import (
 
 // Well is one frame on the reaction coordinate. Vertical is stack depth.
 type Well struct {
-	Symbol      bundle.SymbolID `json:"symbol"`
-	Label       string          `json:"label"`
-	Depth       int             `json:"depth"`
-	SelfNanos   int64           `json:"self_ns"` // width
-	Phase       string          `json:"phase"`   // enter | resume  ← resume renders faded
-	Doc         string          `json:"doc"`     // "" ⇒ rendered dashed
-	Risk        bool            `json:"risk"`
-	Invocations []string        `json:"invocations"`
+	Symbol    bundle.SymbolID `json:"symbol"`
+	Label     string          `json:"label"`
+	Depth     int             `json:"depth"`
+	SelfNanos int64           `json:"self_ns"` // width
+	Phase     string          `json:"phase"`   // enter | resume  ← resume renders faded
+	Doc       string          `json:"doc"`     // "" ⇒ rendered dashed
+	Risk      bool            `json:"risk"`
+	// Context marks a frame the change merely passes through: unchanged code,
+	// recorded for structure only. Rendered thin, so the change stays legible
+	// inside the system it perturbs rather than floating free of it.
+	Context     bool     `json:"context"`
+	Invocations []string `json:"invocations"`
 }
 
 // Barrier is the transition between two wells. Descent is entering a call,
@@ -124,6 +128,9 @@ func deriveChain(events []Event, b *bundle.Bundle, pick Chain) Landscape {
 		w := Well{
 			Symbol: sym, Label: s.Name, Depth: depth, Phase: phase,
 			Doc: s.Doc, Risk: b.HasRisk(sym),
+			// The bundle is the authority on what changed, so ring membership
+			// needs nothing from the shims.
+			Context: !b.Has(sym),
 		}
 		if w.Label == "" {
 			w.Label = string(sym)
@@ -452,11 +459,21 @@ func (l Landscape) Notes() []string {
 			out = append(out, fmt.Sprintf("an exception unwound %d frames at once — the error boundary sits at `%s`", bar.Frames, l.Wells[bar.ToIdx].Symbol))
 		}
 	}
-	var undocumented int
+	var undocumented, context int
 	for _, w := range l.Wells {
-		if w.Phase == "enter" && w.Doc == "" {
+		if w.Phase != "enter" {
+			continue
+		}
+		if w.Context {
+			context++
+			continue // unchanged code is not this session's documentation debt
+		}
+		if w.Doc == "" {
 			undocumented++
 		}
+	}
+	if context > 0 {
+		out = append(out, fmt.Sprintf("%d frames are surrounding code the change passes through, recorded for structure only", context))
 	}
 	if undocumented > 0 {
 		out = append(out, fmt.Sprintf("%d frames on the hot path have no declaration doc", undocumented))

@@ -18,7 +18,10 @@
 const MARKER = '/* plum: appended instrumentation — the source above is untouched */';
 
 const ROOT = process.env.PLUM_REPO_ROOT || process.cwd();
-const WANTED = new Set((process.env.PLUM_SYMBOLS || '').split(',').filter(Boolean));
+const WANTED = new Set([
+  ...(process.env.PLUM_SYMBOLS || '').split(','),
+  ...(process.env.PLUM_CONTEXT_SYMBOLS || '').split(','),
+].filter(Boolean));
 
 // symbolsByFile groups the instrumentation set by the file it lives in, so a
 // module only pays for the symbols the AST pass actually named.

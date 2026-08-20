@@ -28,6 +28,12 @@ const OUT = process.env.PLUM_TRACE_OUT;
 const MAX = parseInt(process.env.PLUM_TRACE_MAX || '200000', 10);
 const ROOT = process.env.PLUM_REPO_ROOT || process.cwd();
 const WANTED = new Set((process.env.PLUM_SYMBOLS || '').split(',').filter(Boolean));
+// CONTEXT is the surrounding code: entered and left, nothing captured. It gives
+// the change a shape to sit in at a fraction of the cost, because serialising
+// arguments is most of what tracing spends.
+const CONTEXT = new Set(
+  (process.env.PLUM_CONTEXT_SYMBOLS || '').split(',').filter((s) => s && !WANTED.has(s)),
+);
 
 // NODE_OPTIONS is inherited by worker threads, including the thread Node runs
 // module-customization hooks on, so this preload can be evaluated more than
@@ -77,6 +83,7 @@ if (OUT && process.env.PLUM_TRACE === '1' && !globalThis.__PLUM__) {
 
   const wrap = (symbol, fn) => {
     if (typeof fn !== 'function' || fn[WRAPPED]) return fn;
+    const light = CONTEXT.has(symbol);
     const traced = function (...args) {
       const invocation = `${process.pid}-${++counter}`;
       const parent = stack.length ? stack[stack.length - 1] : '';
@@ -84,7 +91,7 @@ if (OUT && process.env.PLUM_TRACE === '1' && !globalThis.__PLUM__) {
       emit({
         event: 'call', symbol_id: symbol, invocation_id: invocation,
         parent_invocation_id: parent, depth,
-        args: Object.fromEntries(args.map((a, i) => [argName(fn, i), truncate(a)])),
+        args: light ? {} : Object.fromEntries(args.map((a, i) => [argName(fn, i), truncate(a)])),
       });
       stack.push(invocation);
       const done = (kind, extra) => {
@@ -96,11 +103,11 @@ if (OUT && process.env.PLUM_TRACE === '1' && !globalThis.__PLUM__) {
         const out = fn.apply(this, args);
         if (out && typeof out.then === 'function') {
           return out.then(
-            (v) => { done('return', { result: truncate(v) }); return v; },
+            (v) => { done('return', { result: light ? '' : truncate(v) }); return v; },
             (e) => { done('raise', { exception: truncate((e && e.message) || e) }); throw e; },
           );
         }
-        done('return', { result: truncate(out) });
+        done('return', { result: light ? '' : truncate(out) });
         return out;
       } catch (e) {
         done('raise', { exception: truncate((e && e.message) || e) });
@@ -143,7 +150,7 @@ if (OUT && process.env.PLUM_TRACE === '1' && !globalThis.__PLUM__) {
       if (typeof value !== 'function') continue;
 
       const symbol = `${rel}::${key}`;
-      if (WANTED.size === 0 || WANTED.has(symbol)) {
+      if (WANTED.size === 0 || WANTED.has(symbol) || CONTEXT.has(symbol)) {
         exported[key] = wrap(symbol, value);
       }
 
@@ -157,7 +164,7 @@ if (OUT && process.env.PLUM_TRACE === '1' && !globalThis.__PLUM__) {
         const desc = Object.getOwnPropertyDescriptor(proto, name);
         if (!desc || typeof desc.value !== 'function' || !desc.writable) continue;
         const methodSymbol = `${rel}::${key}.${name}`;
-        if (WANTED.size === 0 || WANTED.has(methodSymbol)) {
+        if (WANTED.size === 0 || WANTED.has(methodSymbol) || CONTEXT.has(methodSymbol)) {
           proto[name] = wrap(methodSymbol, desc.value);
         }
       }

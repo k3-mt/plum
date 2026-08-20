@@ -186,6 +186,54 @@ Attribution works differently in each runtime, and all three reach 100%:
 The test frame itself is never drawn. The test names the recording; it is not a
 frame in it.
 
+### Change, drawn inside the system it perturbs
+
+A change is only legible in context, but recording the whole system as deeply as
+the change costs more and says less. So tracing happens in rings:
+
+| Ring | What | Recorded | Drawn |
+|---|---|---|---|
+| 1 | symbols this session changed | arguments, returns, exceptions | solid |
+| 2 | surrounding code the test walks through | entering and leaving only | thin, `(in parentheses)` |
+| 3 | `node_modules`, vendored, stdlib | never | not drawn |
+
+Ring 2 is cheap precisely because capturing arguments is most of what tracing
+spends. Without it, a landscape shows the change floating free:
+
+```
+[decorate]
+  ↓ 21µs
+  [realm]
+```
+
+With it, the change sits where it actually lives:
+
+```
+(Cache.get) ·context
+  ↓ 18µs
+  (Cache.lookup) ·context
+↑ 17µs
+(Cache.get) (resumed) ·context
+  ↓ 165µs  “(unexplained)”
+  [decorate] ·undocumented
+    ↓ 21µs
+    [realm] ·undocumented
+```
+
+Scope it in `.plum/config.toml`:
+
+```toml
+[trace]
+context = "file"   # off | file | dir
+```
+
+`file` (the default) records the other declarations in the files this session
+changed. `dir` widens to their neighbours. `off` returns to changed symbols only.
+
+Ring membership needs nothing from the shims — the bundle already knows what
+changed. And documentation debt is scoped to the session: an undocumented
+function this session never touched is not this session's to answer for.
+
 ### What this buys
 
 **"Untested" becomes exact.** It used to mean *a changed test file mentions this

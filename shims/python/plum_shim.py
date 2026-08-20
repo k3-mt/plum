@@ -32,6 +32,10 @@ _lock = threading.Lock()
 _counter = itertools.count(1)
 _local = threading.local()
 _symbols: set[str] = set()
+# _context is the surrounding code: entered and left, nothing captured. It gives
+# the change a shape to sit in at a fraction of the cost, because formatting
+# arguments is most of what tracing spends.
+_context: set[str] = set()
 _max_events = int(os.environ.get("PLUM_TRACE_MAX", "200000"))
 _written = 0
 
@@ -115,21 +119,24 @@ def _args_of(code) -> dict:
 
 def _on_call(code, _offset):
     symbol = _symbol_id(code)
-    if _symbols and symbol not in _symbols:
+    if _symbols and symbol not in _symbols and symbol not in _context:
         if _is_test(code):
             _tests().append(getattr(code, "co_qualname", code.co_name))
         return
     stack = _stack()
     invocation = f"{threading.get_ident()}-{next(_counter)}"
     parent = stack[-1][1] if stack else ""
+    args = {} if symbol in _context else _args_of(code)
     _emit(event="call", symbol_id=symbol, invocation_id=invocation,
-          parent_invocation_id=parent, depth=len(stack), args=_args_of(code))
+          parent_invocation_id=parent, depth=len(stack), args=args)
     stack.append((symbol, invocation, len(stack)))
 
 
 def _on_return(code, _offset, retval):
     symbol = _symbol_id(code)
-    if _symbols and symbol not in _symbols:
+    if symbol in _context:
+        retval = None
+    if _symbols and symbol not in _symbols and symbol not in _context:
         if _is_test(code) and _tests():
             _tests().pop()
         return
@@ -140,12 +147,12 @@ def _on_return(code, _offset, retval):
         return
     _, invocation, depth = stack.pop()
     _emit(event="return", symbol_id=symbol, invocation_id=invocation,
-          depth=depth, result=_truncate(retval))
+          depth=depth, result="" if symbol in _context else _truncate(retval))
 
 
 def _on_raise(code, _offset, exc):
     symbol = _symbol_id(code)
-    if _symbols and symbol not in _symbols:
+    if _symbols and symbol not in _symbols and symbol not in _context:
         if _is_test(code) and _tests():
             _tests().pop()
         return
@@ -161,12 +168,13 @@ def _on_raise(code, _offset, exc):
 
 def install() -> None:
     """Attach the shim. Safe to call twice; a no-op without PLUM_TRACE_OUT."""
-    global _out, _symbols
+    global _out, _symbols, _context
     path = os.environ.get("PLUM_TRACE_OUT")
     if not path:
         return
     _out = open(path, "a", buffering=1)
     _symbols = {s for s in os.environ.get("PLUM_SYMBOLS", "").split(",") if s}
+    _context = {s for s in os.environ.get("PLUM_CONTEXT_SYMBOLS", "").split(",") if s} - _symbols
 
     monitoring = getattr(sys, "monitoring", None)
     if monitoring is None:  # pragma: no cover - CPython < 3.12

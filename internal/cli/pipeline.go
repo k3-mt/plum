@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -135,11 +136,20 @@ func cmdTrace(ctx context.Context, env *Env, args []string) error {
 	for _, a := range env.Reg.All() {
 		instrumenters = append(instrumenters, a)
 	}
+	context, err := contextSymbols(env, b)
+	if err != nil {
+		return err
+	}
 	c := &trace.Collector{
-		Root: env.Cfg.Root, Scratch: scratch, Adapters: instrumenters,
+		Root: env.Cfg.Root, Scratch: scratch, Adapters: instrumenters, Context: context,
 		TestCommand: testCmd, MaxEvents: env.Cfg.Trace.MaxEvents, Out: os.Stdout,
 	}
-	fmt.Printf("instrumenting %d changed symbols, running: %s\n", len(b.Symbols), testCmd)
+	if len(context) > 0 {
+		fmt.Printf("instrumenting %d changed symbols in full, %d surrounding for structure; running: %s\n",
+			len(b.Symbols), len(context), testCmd)
+	} else {
+		fmt.Printf("instrumenting %d changed symbols, running: %s\n", len(b.Symbols), testCmd)
+	}
 	res, err := c.Run(ctx, b)
 	if err != nil {
 		return err
@@ -242,6 +252,78 @@ func cmdTests(ctx context.Context, env *Env, args []string) error {
 	return nil
 }
 
+// contextSymbols is the surrounding code recorded for structure only: the other
+// declarations in the files this session changed, and optionally their
+// neighbours in the same directory.
+//
+// A change is only legible inside the system it perturbs. Recording that system
+// as deeply as the change would cost more and say less, so these frames are
+// entered and left with nothing captured — enough to draw the path the change
+// sits on.
+func contextSymbols(env *Env, b *bundle.Bundle) ([]bundle.SymbolID, error) {
+	scope := strings.ToLower(env.Cfg.Trace.Context)
+	if scope == "off" || scope == "none" || scope == "" {
+		return nil, nil
+	}
+	changed := map[bundle.SymbolID]bool{}
+	dirs := map[string]bool{}
+	files := map[string]bool{}
+	for _, s := range b.Symbols {
+		changed[s.ID] = true
+		if s.Kind == "config_key" {
+			continue
+		}
+		files[s.File] = true
+		dirs[filepath.Dir(s.File)] = true
+	}
+
+	candidates := files
+	if scope == "dir" {
+		candidates = map[string]bool{}
+		for dir := range dirs {
+			entries, err := os.ReadDir(filepath.Join(env.Cfg.Root, dir))
+			if err != nil {
+				continue
+			}
+			for _, e := range entries {
+				if !e.IsDir() {
+					candidates[filepath.ToSlash(filepath.Join(dir, e.Name()))] = true
+				}
+			}
+		}
+	}
+
+	var out []bundle.SymbolID
+	for path := range candidates {
+		if env.Cfg.Excluded(path) {
+			continue
+		}
+		a := env.Reg.For(path)
+		if a == nil {
+			continue
+		}
+		src, err := os.ReadFile(filepath.Join(env.Cfg.Root, path))
+		if err != nil {
+			continue
+		}
+		syms, err := a.ParseSymbols(path, src)
+		if err != nil {
+			continue
+		}
+		for _, s := range syms {
+			if changed[s.ID] || (s.Kind != "func" && s.Kind != "method") {
+				continue
+			}
+			if s.Name == "init" || s.Name == "main" {
+				continue
+			}
+			out = append(out, s.ID)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out, nil
+}
+
 func cmdLandscape(ctx context.Context, env *Env, args []string) error {
 	fs := flag.NewFlagSet("landscape", flag.ContinueOnError)
 	chain := fs.String("chain", "", "re-derive from stored events: hottest|slowest|raising")
@@ -320,7 +402,9 @@ func printLandscape(l trace.Landscape) {
 	for i, w := range l.Wells {
 		indent := strings.Repeat("  ", w.Depth)
 		marks := ""
-		if w.Doc == "" {
+		if w.Context {
+			marks = " ·context"
+		} else if w.Doc == "" {
 			marks += " ·undocumented"
 		}
 		if w.Risk {
@@ -349,7 +433,11 @@ func printLandscape(l trace.Landscape) {
 		case "escape":
 			phase = " (panic escaped here)"
 		}
-		fmt.Printf("%s[%s]%s%s\n", indent, w.Label, phase, marks)
+		open, close := "[", "]"
+		if w.Context {
+			open, close = "(", ")" // thin brackets: passed through, not changed
+		}
+		fmt.Printf("%s%s%s%s%s%s\n", indent, open, w.Label, close, phase, marks)
 	}
 	fmt.Println()
 	for _, n := range l.Notes() {

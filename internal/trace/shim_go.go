@@ -142,6 +142,16 @@ func EnterTest(name string) func(...any) {
 	}
 }
 
+// EnterContext records a frame the change passes through, without capturing
+// anything from it. It gives the landscape the surrounding shape at a fraction
+// of the cost: formatting arguments is most of what tracing spends.
+func EnterContext(symbol string) func(...any) {
+	if enc == nil {
+		return func(...any) {}
+	}
+	return enter(symbol, nil)
+}
+
 // Enter records a call and returns the deferred half, which records the return
 // (or, when the frame is unwinding, a raise — then re-panics so behaviour is
 // unchanged).
@@ -149,6 +159,14 @@ func Enter(symbol string, args ...KV) func(...any) {
 	if enc == nil {
 		return func(...any) {}
 	}
+	m := map[string]string{}
+	for _, kv := range args {
+		m[kv.K] = truncate(fmt.Sprintf("%v", kv.V))
+	}
+	return enter(symbol, m)
+}
+
+func enter(symbol string, m map[string]string) func(...any) {
 	gid := goid()
 	id := strconv.FormatInt(gid, 10) + "-" + strconv.FormatInt(counter.Add(1), 10)
 
@@ -162,10 +180,6 @@ func Enter(symbol string, args ...KV) func(...any) {
 	stacks[gid] = append(st, id)
 	mu.Unlock()
 
-	m := map[string]string{}
-	for _, kv := range args {
-		m[kv.K] = truncate(fmt.Sprintf("%v", kv.V))
-	}
 	emit(event{Kind: "call", Symbol: symbol, InvocationID: id, ParentID: parent, Depth: depth, Args: m})
 
 	return func(results ...any) {

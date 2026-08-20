@@ -34,7 +34,12 @@ type Collector struct {
 	// Adapters decide what can be instrumented and how. Pass the same registry
 	// the extractor used, so the instrumentation set matches the bundle.
 	Adapters []Instrumenter
-	Out      io.Writer // progress
+	// Context is the surrounding code — unchanged symbols the test may pass
+	// through — recorded for structure only. A change is only legible inside the
+	// system it perturbs, but instrumenting that system as deeply as the change
+	// would cost more and say less.
+	Context []bundle.SymbolID
+	Out     io.Writer // progress
 }
 
 type Result struct {
@@ -74,7 +79,7 @@ func (c *Collector) Run(ctx context.Context, b *bundle.Bundle) (*Result, error) 
 			res.Skipped = append(res.Skipped, a.Name()+": "+err.Error())
 			continue
 		}
-		applied, err := c.apply(a, spec, ids, env)
+		applied, err := c.apply(a, spec, ids, c.contextFor(a), env)
 		if err != nil {
 			res.Skipped = append(res.Skipped, a.Name()+": "+err.Error())
 			continue
@@ -137,7 +142,7 @@ func removeID(ids []bundle.SymbolID, drop bundle.SymbolID) []bundle.SymbolID {
 }
 
 // apply honours one adapter's ShimSpec against the scratch copy.
-func (c *Collector) apply(a Instrumenter, spec ShimSpec, ids []bundle.SymbolID, env map[string]string) (Instrumented, error) {
+func (c *Collector) apply(a Instrumenter, spec ShimSpec, ids, context []bundle.SymbolID, env map[string]string) (Instrumented, error) {
 	switch spec.Mode {
 	case "none", "":
 		return Instrumented{}, nil
@@ -149,7 +154,7 @@ func (c *Collector) apply(a Instrumenter, spec ShimSpec, ids []bundle.SymbolID, 
 		if !ok {
 			return Instrumented{}, fmt.Errorf("declares mode \"rewrite\" but does not implement trace.Rewriter")
 		}
-		out, err := r.Instrument(c.Scratch, ids)
+		out, err := r.Instrument(c.Scratch, ids, context)
 		if err != nil {
 			return out, err
 		}
@@ -181,11 +186,11 @@ func (c *Collector) apply(a Instrumenter, spec ShimSpec, ids []bundle.SymbolID, 
 				return Instrumented{}, err
 			}
 		}
-		symbols := make([]string, 0, len(ids))
-		for _, id := range ids {
-			symbols = append(symbols, string(id))
-		}
-		expand := strings.NewReplacer("${SHIM_DIR}", abs, "${SYMBOLS}", strings.Join(symbols, ","))
+		expand := strings.NewReplacer(
+			"${SHIM_DIR}", abs,
+			"${SYMBOLS}", joinIDs(ids),
+			"${CONTEXT_SYMBOLS}", joinIDs(context),
+		)
 		for k, v := range spec.Env {
 			env[k] = expand.Replace(v)
 		}
@@ -225,6 +230,25 @@ func (c *Collector) targets(b *bundle.Bundle) map[string][]bundle.SymbolID {
 		}
 	}
 	return out
+}
+
+// contextFor is the surrounding set this adapter is responsible for.
+func (c *Collector) contextFor(a Instrumenter) []bundle.SymbolID {
+	var out []bundle.SymbolID
+	for _, id := range c.Context {
+		if c.adapterFor(id.File()) == a {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+func joinIDs(ids []bundle.SymbolID) string {
+	parts := make([]string, 0, len(ids))
+	for _, id := range ids {
+		parts = append(parts, string(id))
+	}
+	return strings.Join(parts, ",")
 }
 
 func (c *Collector) adapterFor(path string) Instrumenter {

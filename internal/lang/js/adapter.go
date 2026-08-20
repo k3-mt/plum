@@ -576,8 +576,9 @@ func (a *Adapter) ShimSpec(syms []bundle.SymbolID) (trace.ShimSpec, error) {
 			"plum-loader.mjs": trace.NodeLoaderSource,
 		},
 		Env: map[string]string{
-			"PLUM_SYMBOLS": "${SYMBOLS}",
-			"NODE_OPTIONS": "--require ${SHIM_DIR}/plum-shim.cjs",
+			"PLUM_SYMBOLS":         "${SYMBOLS}",
+			"PLUM_CONTEXT_SYMBOLS": "${CONTEXT_SYMBOLS}",
+			"NODE_OPTIONS":         "--require ${SHIM_DIR}/plum-shim.cjs",
 		},
 	}, nil
 }

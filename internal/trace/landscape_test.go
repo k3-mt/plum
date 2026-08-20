@@ -272,3 +272,54 @@ func TestFrameBudgetIsReportedNotHidden(t *testing.T) {
 		t.Error("a zero budget means unbounded")
 	}
 }
+
+// A frame the change merely passes through is drawn thin: the change has to
+// stay legible inside the system, not be lost in it.
+func TestSurroundingFramesAreMarkedAsContext(t *testing.T) {
+	b := testBundle() // knows about Verify, check, MustGet, lookup
+	ev := []Event{
+		call("a.go::Router.handle", "1", "", 0, 0), // never changed: surrounding
+		call("a.go::Verify", "2", "1", 1, 100),
+		ret("a.go::Verify", "2", 1, 200, "true"),
+		ret("a.go::Router.handle", "1", 0, 300, "200"),
+	}
+	l := Derive(ev, b)
+	byName := map[bundle.SymbolID]Well{}
+	for _, w := range l.Wells {
+		if w.Phase == "enter" {
+			byName[w.Symbol] = w
+		}
+	}
+	if !byName["a.go::Router.handle"].Context {
+		t.Error("a frame outside the changed set is surrounding code")
+	}
+	if byName["a.go::Verify"].Context {
+		t.Error("a changed symbol is the subject, not the scenery")
+	}
+	var said bool
+	for _, n := range l.Notes() {
+		if strings.Contains(n, "surrounding code") {
+			said = true
+		}
+	}
+	if !said {
+		t.Errorf("the notes should say how much of the path is context: %v", l.Notes())
+	}
+}
+
+// Documentation debt belongs to the session. An undocumented function that this
+// session did not touch is not this session's problem to answer for.
+func TestContextFramesAreNotCountedAsDocumentationDebt(t *testing.T) {
+	b := testBundle()
+	ev := []Event{
+		call("a.go::Undocumented.helper", "1", "", 0, 0), // unchanged, no doc
+		call("a.go::Verify", "2", "1", 1, 100),
+		ret("a.go::Verify", "2", 1, 200, ""),
+		ret("a.go::Undocumented.helper", "1", 0, 300, ""),
+	}
+	for _, n := range Derive(ev, b).Notes() {
+		if strings.Contains(n, "no declaration doc") {
+			t.Errorf("unchanged code was counted as this session's doc debt: %q", n)
+		}
+	}
+}

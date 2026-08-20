@@ -35,10 +35,12 @@ func (f *fakeAdapter) ShimSpec(syms []bundle.SymbolID) (ShimSpec, error) {
 type rewritingAdapter struct {
 	fakeAdapter
 	touched string
+	context []bundle.SymbolID
 }
 
-func (r *rewritingAdapter) Instrument(scratchRoot string, ids []bundle.SymbolID) (Instrumented, error) {
+func (r *rewritingAdapter) Instrument(scratchRoot string, ids, context []bundle.SymbolID) (Instrumented, error) {
 	r.touched = scratchRoot
+	r.context = context
 	return Instrumented{Done: ids, Env: map[string]string{"REWRITTEN": "1"}}, nil
 }
 
@@ -152,6 +154,7 @@ func TestRewriteModeDelegatesToTheAdapter(t *testing.T) {
 	c := &Collector{
 		Root: root, Scratch: scratch, MaxEvents: 100,
 		TestCommand: "env > env.txt", Adapters: []Instrumenter{adapter},
+		Context: []bundle.SymbolID{"a.rb::surrounding"},
 	}
 	res, err := c.Run(context.Background(), bundleWith("a.rb::f"))
 	if err != nil {
@@ -159,6 +162,9 @@ func TestRewriteModeDelegatesToTheAdapter(t *testing.T) {
 	}
 	if adapter.touched != scratch {
 		t.Errorf("the adapter was handed %q, want the scratch root %q", adapter.touched, scratch)
+	}
+	if len(adapter.context) != 1 || adapter.context[0] != "a.rb::surrounding" {
+		t.Errorf("a rewriting adapter must receive the surrounding set too: %v", adapter.context)
 	}
 	if len(res.Instrumented) != 1 {
 		t.Errorf("instrumented %v", res.Instrumented)
@@ -260,5 +266,55 @@ func TestTestsSummaryAndFiltering(t *testing.T) {
 	}
 	if _, ok := reached["a.go::h"]; ok {
 		t.Error("an unattributed call proves no test reached the symbol")
+	}
+}
+
+// The surrounding code travels to the shim separately from the changed set, so
+// a shim can record it for structure only. Instrumenting it as deeply as the
+// change would cost more and say less.
+func TestContextSymbolsReachTheShimSeparately(t *testing.T) {
+	root := repo(t)
+	scratch := filepath.Join(t.TempDir(), "scratch")
+	c := &Collector{
+		Root: root, Scratch: scratch, MaxEvents: 100,
+		TestCommand: "env > env.txt",
+		Context:     []bundle.SymbolID{"a.rb::Untouched.helper", "a.rb::alsoUntouched"},
+		Adapters: []Instrumenter{&fakeAdapter{
+			name: "ruby", exts: []string{".rb"},
+			spec: ShimSpec{Mode: "env", Dir: "shimdir", Env: map[string]string{
+				"PLUM_SYMBOLS":         "${SYMBOLS}",
+				"PLUM_CONTEXT_SYMBOLS": "${CONTEXT_SYMBOLS}",
+			}},
+		}},
+	}
+	res, err := c.Run(context.Background(), bundleWith("a.rb::Cache.get"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Only the changed set counts as instrumented: context is scenery.
+	if len(res.Instrumented) != 1 || res.Instrumented[0] != "a.rb::Cache.get" {
+		t.Errorf("instrumented = %v", res.Instrumented)
+	}
+	env, _ := os.ReadFile(filepath.Join(scratch, "env.txt"))
+	if !strings.Contains(string(env), "PLUM_SYMBOLS=a.rb::Cache.get\n") {
+		t.Errorf("deep set wrong:\n%s", grepEnv(string(env), "PLUM_SYMBOLS"))
+	}
+	if !strings.Contains(string(env), "PLUM_CONTEXT_SYMBOLS=a.rb::Untouched.helper,a.rb::alsoUntouched") {
+		t.Errorf("context set wrong:\n%s", grepEnv(string(env), "PLUM_CONTEXT_SYMBOLS"))
+	}
+}
+
+func TestContextForRoutesByAdapter(t *testing.T) {
+	goAdapter := &fakeAdapter{name: "go", exts: []string{".go"}}
+	jsAdapter := &fakeAdapter{name: "js", exts: []string{".js"}}
+	c := &Collector{
+		Adapters: []Instrumenter{goAdapter, jsAdapter},
+		Context:  []bundle.SymbolID{"a.go::f", "b.js::g", "c.rb::h"},
+	}
+	if got := c.contextFor(goAdapter); len(got) != 1 || got[0] != "a.go::f" {
+		t.Errorf("go context = %v", got)
+	}
+	if got := c.contextFor(jsAdapter); len(got) != 1 || got[0] != "b.js::g" {
+		t.Errorf("js context = %v", got)
 	}
 }

@@ -30,7 +30,7 @@ import (
 //
 // The repository itself is never written to. Instrumentation is a property of a
 // trace run, not of the code under audit.
-func (a *Adapter) Instrument(scratchRoot string, ids []bundle.SymbolID) (trace.Instrumented, error) {
+func (a *Adapter) Instrument(scratchRoot string, ids, context []bundle.SymbolID) (trace.Instrumented, error) {
 	var out trace.Instrumented
 	modPath, err := modulePath(filepath.Join(scratchRoot, "go.mod"))
 	if err != nil {
@@ -43,8 +43,16 @@ func (a *Adapter) Instrument(scratchRoot string, ids []bundle.SymbolID) (trace.I
 	if err := os.WriteFile(filepath.Join(shimDir, "plumtrace.go"), []byte(trace.GoShimSource), 0o644); err != nil {
 		return out, err
 	}
+	deep := map[bundle.SymbolID]bool{}
 	byFile := map[string][]bundle.SymbolID{}
 	for _, id := range ids {
+		deep[id] = true
+		byFile[id.File()] = append(byFile[id.File()], id)
+	}
+	for _, id := range context {
+		if deep[id] {
+			continue
+		}
 		byFile[id.File()] = append(byFile[id.File()], id)
 	}
 	files := make([]string, 0, len(byFile))
@@ -53,12 +61,16 @@ func (a *Adapter) Instrument(scratchRoot string, ids []bundle.SymbolID) (trace.I
 	}
 	sort.Strings(files)
 	for _, file := range files {
-		done, skipped, err := inject(filepath.Join(scratchRoot, file), file, byFile[file], modPath+"/plumtrace")
+		done, skipped, err := inject(filepath.Join(scratchRoot, file), file, byFile[file], deep, modPath+"/plumtrace")
 		if err != nil {
 			out.Skipped = append(out.Skipped, file+": "+err.Error())
 			continue
 		}
-		out.Done = append(out.Done, done...)
+		for _, id := range done {
+			if deep[id] {
+				out.Done = append(out.Done, id)
+			}
+		}
 		out.Skipped = append(out.Skipped, skipped...)
 	}
 
@@ -132,7 +144,7 @@ func isTestFunc(fn *ast.FuncDecl) bool {
 
 // inject rewrites one file in the scratch copy, adding a deferred probe to the
 // top of each target function body.
-func inject(path, rel string, ids []bundle.SymbolID, shimImport string) ([]bundle.SymbolID, []string, error) {
+func inject(path, rel string, ids []bundle.SymbolID, deep map[bundle.SymbolID]bool, shimImport string) ([]bundle.SymbolID, []string, error) {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return nil, nil, err
@@ -162,8 +174,10 @@ func inject(path, rel string, ids []bundle.SymbolID, shimImport string) ([]bundl
 		if !ok {
 			continue
 		}
-		nameResults(fn)
-		stmt, err := probeStmt(id, fn)
+		if deep[id] {
+			nameResults(fn)
+		}
+		stmt, err := probeStmt(id, fn, deep[id])
 		if err != nil {
 			skipped = append(skipped, string(id)+": "+err.Error())
 			continue
@@ -189,7 +203,18 @@ func inject(path, rel string, ids []bundle.SymbolID, shimImport string) ([]bundl
 // probeStmt builds `defer plumtrace.Enter("id", plumtrace.KV{...})(&r1, &r2)`.
 // Named results are passed by pointer so the deferred half reads the value the
 // caller actually saw; unnamed results are simply not recorded.
-func probeStmt(id bundle.SymbolID, fn *ast.FuncDecl) (ast.Stmt, error) {
+//
+// A context frame gets `defer plumtrace.EnterContext("id")()` instead: the
+// shape of the path, with nothing captured from it.
+func probeStmt(id bundle.SymbolID, fn *ast.FuncDecl, deep bool) (ast.Stmt, error) {
+	if !deep {
+		return &ast.DeferStmt{Call: &ast.CallExpr{
+			Fun: &ast.CallExpr{
+				Fun:  &ast.SelectorExpr{X: ast.NewIdent("plumtrace"), Sel: ast.NewIdent("EnterContext")},
+				Args: []ast.Expr{&ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(string(id))}},
+			},
+		}}, nil
+	}
 	call := &ast.CallExpr{
 		Fun: &ast.SelectorExpr{X: ast.NewIdent("plumtrace"), Sel: ast.NewIdent("Enter")},
 		Args: []ast.Expr{

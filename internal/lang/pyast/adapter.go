@@ -309,6 +309,7 @@ func (a *Adapter) ShimSpec(syms []bundle.SymbolID) (trace.ShimSpec, error) {
 		},
 		Env: map[string]string{
 			"PLUM_SYMBOLS":            "${SYMBOLS}",
+			"PLUM_CONTEXT_SYMBOLS":    "${CONTEXT_SYMBOLS}",
 			"PYTHONDONTWRITEBYTECODE": "1",
 		},
 		PathVars: []string{"PYTHONPATH"},
