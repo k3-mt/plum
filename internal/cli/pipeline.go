@@ -661,6 +661,7 @@ func cmdQuiz(ctx context.Context, env *Env, args []string) error {
 		return err
 	}
 	tel := explore.NewStore(store.StateDir(env.Cfg.Root))
+	seen := met.Load(store.StateDir(env.Cfg.Root))
 	if !tel.IsDone(id) && !*force {
 		return fmt.Errorf("explore this session first: `plum explore %s`, then click \"I have met this code\" (P8; -force overrides)", id)
 	}
@@ -702,16 +703,25 @@ func cmdQuiz(ctx context.Context, env *Env, args []string) error {
 		if len(q.Options) > 0 && len(given) == 1 && given[0] >= 'a' && int(given[0]-'a') < len(q.Options) {
 			given = q.Options[given[0]-'a']
 		}
+		// The quiz is where "I have met this code" gets checked, so it is also
+		// where the meter is corrected. Answering from the recording confirms
+		// the symbol was met; missing it says the claim did not hold, and the
+		// debt goes back on.
 		if quiz.Grade(q, given) {
 			correct++
 			fmt.Printf("  ✓ %s\n\n", q.Source)
+			_ = seen.MeetIn(b, q.Symbol)
 		} else {
 			fmt.Printf("  ✗ recorded: %s\n", q.Expected)
 			fmt.Printf("    %s\n\n", q.Source)
 			_ = tel.AppendMiss(quiz.MissFor(id, q, given))
+			_ = seen.Forget(q.Symbol)
 		}
 	}
 	fmt.Printf("%d/%d against recorded execution.\n", correct, len(qs))
+	if d := seen.Of(b, nil); d.Total > 0 {
+		fmt.Printf("%d of %d changed symbols still unmet.\n", d.Unmet, d.Total)
+	}
 	if misses, err := tel.LoadMisses(); err == nil && len(misses) > 0 {
 		fmt.Println()
 		fmt.Println("across every session in this repo:")
@@ -719,7 +729,6 @@ func cmdQuiz(ctx context.Context, env *Env, args []string) error {
 			fmt.Println(" ·", s)
 		}
 	}
-	_ = b
 	return nil
 }
 

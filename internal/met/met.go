@@ -70,6 +70,30 @@ func (s *Set) Meet(id bundle.SymbolID, fingerprint string) error {
 	return s.saveLocked()
 }
 
+// Forget puts a symbol back. It is what a missed question means: the reader
+// said they had met this code, the quiz checked that claim against a recorded
+// execution, and the claim did not hold. A meter that only ever went down would
+// be measuring clicks rather than comprehension.
+func (s *Set) Forget(id bundle.SymbolID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.symbols[id]; !ok {
+		return nil
+	}
+	delete(s.symbols, id)
+	return s.saveLocked()
+}
+
+// MeetIn records a symbol at the version the given bundle holds, which is the
+// version the debt is measured against. Callers that already have the bundle
+// should not have to go looking for the fingerprint themselves.
+func (s *Set) MeetIn(b *bundle.Bundle, id bundle.SymbolID) error {
+	if b == nil {
+		return nil
+	}
+	return s.Meet(id, b.Lookup(id).Fingerprint)
+}
+
 // MeetAll is what "I have met this code" means: the whole changed set at once.
 // It is a claim the reader makes about themselves, and plum takes it at face
 // value — the quiz is where it gets checked.
@@ -112,6 +136,13 @@ type Debt struct {
 	// to different questions — one is measured against a recording, the other
 	// against the files on disk this second.
 	Drifted int `json:"drifted"`
+	// Trend is how far the unmet count has moved across the window the meter
+	// looks back over, and TrendMinutes is how long that window is. Positive
+	// means the debt is growing — the agent is getting ahead of you. Zero means
+	// there is nothing to compare against yet, which is why the page shows no
+	// arrow rather than a flat one.
+	Trend        int `json:"trend"`
+	TrendMinutes int `json:"trend_minutes"`
 	// Unmeasured says the drift was not computed, and why. A capture that names
 	// every file in the repository cannot be re-parsed on a watcher tick, and a
 	// silent zero there would read as "nothing is being written", which is the

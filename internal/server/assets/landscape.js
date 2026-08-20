@@ -181,6 +181,18 @@ function drawDebt() {
   box.classList.toggle('clear', d.unmet === 0 && !d.drifted);
   box.classList.toggle('writing', !!d.drifted);
 
+  // Which way it is going is most of what a glance is for: fourteen unmet reads
+  // very differently depending on whether it was four ten minutes ago or forty.
+  const arrow = box.querySelector('.trend');
+  arrow.hidden = !d.trend;
+  if (d.trend) {
+    arrow.textContent = (d.trend > 0 ? '\u25b2' : '\u25bc') + Math.abs(d.trend);
+    arrow.classList.toggle('up', d.trend > 0);
+    arrow.classList.toggle('down', d.trend < 0);
+    arrow.title = (d.trend > 0 ? 'up ' : 'down ') + Math.abs(d.trend)
+      + ' in the last ' + d.trend_minutes + ' minutes';
+  }
+
   const parts = [d.unmet === 0 ? 'met, all ' + d.total : 'unmet of ' + d.total];
   if (d.stale) parts.push(d.stale + ' changed since you read it');
   if (d.drifted) parts.push(d.drifted + ' being written now');

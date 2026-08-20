@@ -97,3 +97,50 @@ func TestLoadOnAnUnreadableFileMeansNothingMet(t *testing.T) {
 }
 
 func writeGarbage(path string) error { return os.WriteFile(path, []byte("{not json"), 0o644) }
+
+// "I have met this code" is a claim. The quiz is where it gets checked against a
+// recorded execution, so a missed question has to put the debt back on — a meter
+// that only ever went down would be measuring clicks, not comprehension.
+func TestAMissedQuestionPutsTheDebtBackOn(t *testing.T) {
+	dir := t.TempDir()
+	s := Load(dir)
+	bun := b(sym("a.go::Get", "fp1"), sym("a.go::Put", "fp1"))
+	if err := s.MeetAll(bun); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Forget("a.go::Get"); err != nil {
+		t.Fatal(err)
+	}
+	d := s.Of(bun, nil)
+	if d.Unmet != 1 {
+		t.Errorf("%+v, want the missed symbol owed again", d)
+	}
+	// And it must not come back on the next window either.
+	if d := Load(dir).Of(bun, nil); d.Unmet != 1 {
+		t.Errorf("reloaded: %+v — forgetting has to survive a restart", d)
+	}
+}
+
+func TestMeetInTakesTheFingerprintFromTheBundle(t *testing.T) {
+	s := Load(t.TempDir())
+	bun := b(sym("a.go::Get", "fp1"))
+	if err := s.MeetIn(bun, "a.go::Get"); err != nil {
+		t.Fatal(err)
+	}
+	if d := s.Of(bun, nil); d.Unmet != 0 {
+		t.Errorf("%+v, want it met at the version the bundle holds", d)
+	}
+}
+
+// A symbol the bundle never captured has no fingerprint to be met at. Recording
+// one anyway would write an entry that can never match anything.
+func TestMeetInIgnoresASymbolTheBundleDoesNotHold(t *testing.T) {
+	s := Load(t.TempDir())
+	bun := b(sym("a.go::Get", "fp1"))
+	if err := s.MeetIn(bun, "a.go::Nowhere"); err != nil {
+		t.Fatal(err)
+	}
+	if d := s.Of(bun, nil); d.Unmet != 1 {
+		t.Errorf("%+v", d)
+	}
+}

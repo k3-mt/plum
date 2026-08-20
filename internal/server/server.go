@@ -78,6 +78,8 @@ type Server struct {
 	// drifted memoises the working-tree comparison, which is far too expensive
 	// to redo on every request for the meter.
 	drifted driftCache
+	// trended is where the meter has been, so it can say which way it is going.
+	trended trendLog
 	hub     *liveHub
 	mux     *http.ServeMux
 	done    chan struct{}
@@ -186,6 +188,10 @@ func (s *Server) debt() met.Debt {
 	}
 	d := s.Met.Of(s.Bundle, drawn)
 	d.Drifted, d.Unmeasured = s.drift()
+	// The trend follows the whole gap, not just the captured half: code being
+	// written right now is exactly what makes the number climb while you watch.
+	d.Trend = s.trended.observe(d.Unmet+d.Drifted, time.Now())
+	d.TrendMinutes = int(trendWindow / time.Minute)
 	return d
 }
 

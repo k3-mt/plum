@@ -425,7 +425,7 @@ install and no server to fetch them from.
 The window carries a debt meter, which is the number all of this exists to show:
 
 ```
-14  ████████░░░░  unmet of 37 · 6 changed since you read it
+▲3  14  ████████░░░░  unmet of 37 · 6 changed since you read it
 ```
 
 **Unmet** is how many of the symbols this session changed you have not seen at
@@ -440,8 +440,13 @@ It moves in both directions on its own terms. An agent working pushes it up.
 Opening a frame pulls it down by one — the brief fetch is the moment the code is
 actually in front of you, as opposed to being a shape on a picture with a name on
 it. "I have met this code" clears the changed set in one go: that is a claim you
-are making about yourself, taken at face value, and `plum quiz` is where it gets
-checked. Frames you have not met are drawn hollow, so the picture shows the same
+are making about yourself, taken at face value.
+
+**`plum quiz` is where that claim is checked, so it is also where the meter is
+corrected.** Answering from the recording confirms the symbol was met. Missing it
+says the claim did not hold, and the debt goes back on — a meter that only ever
+went down would be measuring clicks rather than comprehension. The quiz prints
+where the number stands when it finishes. Frames you have not met are drawn hollow, so the picture shows the same
 thing the number does.
 
 What you have met lives in the state dir next to the explore telemetry, never in
@@ -449,6 +454,24 @@ git — it describes you against this codebase, and two people on one repository
 have different debts. An export has no reader and so shows no meter at all;
 zero would read as *you have met all of this*, which is a different claim and an
 untrue one.
+
+### Which way it is going
+
+A number on its own does not say whether it is rising, and that is most of what a
+glance from across a room is for: fourteen unmet reads very differently depending
+on whether it was four ten minutes ago or forty. So the meter carries an arrow —
+how far it has moved over the last half hour, counting both the unmet symbols and
+the ones being written right now.
+
+It is movement across that window, not the step since the last reading. A step
+would flicker: every symbol you opened would flash *down 1* and settle, telling
+you about your own last click rather than about the session.
+
+The history lives in memory for the life of the window and is never written down.
+A trend is a live signal about what is happening now; carrying it across restarts
+would buy a file, a format and a trimming policy in exchange for a number nobody
+reads the following morning. A restarted window has no trend yet, and says so by
+showing no arrow rather than a flat one.
 
 ### It moves while the agent is still typing
 
