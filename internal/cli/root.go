@@ -53,6 +53,7 @@ func commands() []command {
 		{"tests", "list the tests that ran, and what each one reached", cmdTests},
 		{"landscape", "derive the energy landscape from recorded traces", cmdLandscape},
 		{"explain", "say what the recording actually did, in plain language", cmdExplain},
+		{"interpret", "ask what the change is for — a reading over the evidence, not a record", cmdInterpret},
 		{"explore", "serve the landscape UI — no scoring, no gate, no timer", cmdExplore},
 		{"context", "print the assembled evidence for a symbol or session, for piping into any tool", cmdContext},
 		{"ask", "ask a grounded question; the answer can be kept as rationale, a claim or a patch", cmdAsk},

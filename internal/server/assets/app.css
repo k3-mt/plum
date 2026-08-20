@@ -55,6 +55,12 @@ svg { display: block; }
 #story li.active { color: var(--accent); }
 #story li .warn { display: block; font-size: 11px; margin-top: .15rem; }
 main { align-items: start; }
+#reading { border-left: 2px solid var(--risk); background: #16181a; }
+#reading h2 { color: var(--risk); }
+#reading .meta { font-size: 11px; color: var(--dim); margin-bottom: .6rem; }
+#reading .stale { color: var(--unwind); font-size: 11px; margin-bottom: .6rem; }
+#reading .body { font-size: 12px; line-height: 1.65; color: #cdd6cf; white-space: pre-wrap; max-height: 46vh; overflow-y: auto; }
+#reading .body b { color: var(--fg); }
 main { display: grid; grid-template-columns: 1fr 420px; gap: 0; min-height: 40vh; }
 .pane { padding: 1rem; }
 #rail { border-left: 1px solid var(--line); }

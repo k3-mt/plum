@@ -15,6 +15,7 @@ import (
 	"github.com/kelalaike/plum/internal/bundle"
 	"github.com/kelalaike/plum/internal/claims"
 	"github.com/kelalaike/plum/internal/explore"
+	"github.com/kelalaike/plum/internal/interpret"
 	"github.com/kelalaike/plum/internal/quiz"
 	"github.com/kelalaike/plum/internal/server"
 	"github.com/kelalaike/plum/internal/stale"
@@ -90,17 +91,38 @@ func cmdStale(ctx context.Context, env *Env, args []string) error {
 	if err != nil {
 		return err
 	}
-	findings, err := stale.Check(env.Cfg, env.Reg, env.Store.ClaimsPath(id))
-	if err != nil {
-		return fmt.Errorf("no claims for session %s — run `plum synth` first", id)
+	findings, claimsErr := stale.Check(env.Cfg, env.Reg, env.Store.ClaimsPath(id))
+
+	// A reading goes stale the same way a claim does, and for the same reason:
+	// prose about code that has since moved is worse than no prose, because it
+	// still reads as current.
+	var readings []interpret.Finding
+	if b, err := env.Store.Load(id); err == nil {
+		if file, err := interpret.Load(env.Store.Dir(id)); err == nil {
+			readings = file.Stale(currentFingerprints(env, b))
+		}
 	}
-	if len(findings) == 0 {
-		fmt.Println("all claims still address the code they were written against")
+
+	if claimsErr != nil && len(readings) == 0 {
+		return fmt.Errorf("nothing to check for session %s — run `plum synth` or `plum interpret` first", id)
+	}
+	if len(findings) == 0 && len(readings) == 0 {
+		fmt.Println("all claims and readings still address the code they were written against")
 		return nil
 	}
 	for _, f := range findings {
-		fmt.Printf("STALE %s  %s\n", f.ID, f.Claim)
-		fmt.Printf("      %s — %s\n", f.Symbol, f.Reason)
+		fmt.Printf("STALE CLAIM    %s  %s\n", f.ID, f.Claim)
+		fmt.Printf("               %s — %s\n", f.Symbol, f.Reason)
+	}
+	for _, r := range readings {
+		subject := string(r.Scope)
+		if r.Subject != "" {
+			subject += " " + r.Subject
+		}
+		fmt.Printf("STALE READING  %s\n", subject)
+		for _, id := range r.Moved {
+			fmt.Printf("               %s changed since it was written\n", id)
+		}
 	}
 	os.Exit(1)
 	return nil
@@ -508,6 +530,8 @@ func cmdExplore(ctx context.Context, env *Env, args []string) error {
 	opts := server.Config{
 		JournalDir: env.Cfg.Repo.JournalDir,
 		ClaimsPath: env.Store.ClaimsPath(id),
+		SessionDir: env.Store.Dir(id),
+		Adapters:   env.Reg,
 	}
 	switch env.Cfg.Ask.Route {
 	case "tmux":

@@ -23,6 +23,7 @@ async function boot() {
   }
   document.getElementById('summary').textContent = DATA.summary || '';
   drawNarration();
+  drawReading();
   draw();
   document.getElementById('done').onclick = async () => {
     await fetch('/api/done', { method: 'POST' });
@@ -59,6 +60,38 @@ function drawNarration() {
     }
     list.appendChild(li);
   });
+}
+
+// The reading is the only part of this page a model wrote. It is kept visually
+// apart from everything else, and labelled, because prose that reads like a
+// record but was inferred is worse than no prose at all.
+function drawReading() {
+  const box = document.getElementById('reading-body');
+  const r = DATA.interpretation;
+  if (!r) return;
+  box.className = '';
+  box.innerHTML = '';
+
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.textContent = r.provider + ' · ' + r.generated_at;
+  box.appendChild(meta);
+
+  if (r.stale) {
+    const stale = document.createElement('div');
+    stale.className = 'stale';
+    stale.textContent = '\u26a0 stale — ' + r.stale_reason;
+    box.appendChild(stale);
+  }
+
+  const body = document.createElement('div');
+  body.className = 'body';
+  // Headings and emphasis only; the text is displayed as written otherwise.
+  body.innerHTML = escape(r.markdown)
+    .replace(/^#+\s*(.+)$/gm, '<b>$1</b>')
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>');
+  box.appendChild(body);
 }
 
 // stepFor maps a shape back to its sentence: frames by well index, transitions

@@ -22,6 +22,8 @@ import (
 	"github.com/kelalaike/plum/internal/claims"
 	"github.com/kelalaike/plum/internal/config"
 	"github.com/kelalaike/plum/internal/explore"
+	"github.com/kelalaike/plum/internal/interpret"
+	"github.com/kelalaike/plum/internal/lang"
 	"github.com/kelalaike/plum/internal/synth"
 	"github.com/kelalaike/plum/internal/trace"
 )
@@ -42,6 +44,10 @@ type Server struct {
 	Bridge     *ask.Tmux
 	JournalDir string
 	ClaimsPath string
+	// SessionDir and Adapters let the server read the stored interpretation and
+	// check it against the working tree.
+	SessionDir string
+	Adapters   *lang.Registry
 	mux        *http.ServeMux
 	done       chan struct{}
 }
@@ -53,6 +59,8 @@ type Config struct {
 	Provider   synth.Provider
 	JournalDir string
 	ClaimsPath string
+	SessionDir string
+	Adapters   *lang.Registry
 }
 
 func New(cfg *config.Config, b *bundle.Bundle, l trace.Landscape, ev []trace.Event, cs []claims.Claim, synthesis string, tel *explore.Store, opts Config) *Server {
@@ -60,6 +68,7 @@ func New(cfg *config.Config, b *bundle.Bundle, l trace.Landscape, ev []trace.Eve
 		Cfg: cfg, Bundle: b, Landscape: l, Events: ev, Claims: cs,
 		Synthesis: synthesis, Telemetry: tel, Provider: opts.Provider,
 		Ask: opts.Ask, Bridge: opts.Bridge,
+		SessionDir: opts.SessionDir, Adapters: opts.Adapters,
 		JournalDir: opts.JournalDir, ClaimsPath: opts.ClaimsPath,
 		mux: http.NewServeMux(), done: make(chan struct{}),
 	}
@@ -107,24 +116,28 @@ type landscapePayload struct {
 	// Summary and Narration say what the recording actually did, in plain
 	// language composed from the evidence. A landscape names symbols; on its own
 	// it does not tell you what happened.
-	Summary     string          `json:"summary"`
-	Narration   []trace.Step    `json:"narration"`
-	Session     bundle.Session  `json:"session"`
-	Landscape   trace.Landscape `json:"landscape"`
-	Gate        bundle.Gate     `json:"gate"`
-	Synthesis   string          `json:"synthesis"`
-	Claims      []claims.Claim  `json:"claims"`
-	Symbols     []bundle.Symbol `json:"symbols"`
-	Notes       []string        `json:"notes"`
-	Unannotated []string        `json:"unannotated"`
+	Summary   string       `json:"summary"`
+	Narration []trace.Step `json:"narration"`
+	// Interpretation is a reading, not a record: what a model made of the
+	// evidence. Kept separate from everything above it, which is verified.
+	Interpretation *interpretationPayload `json:"interpretation,omitempty"`
+	Session        bundle.Session         `json:"session"`
+	Landscape      trace.Landscape        `json:"landscape"`
+	Gate           bundle.Gate            `json:"gate"`
+	Synthesis      string                 `json:"synthesis"`
+	Claims         []claims.Claim         `json:"claims"`
+	Symbols        []bundle.Symbol        `json:"symbols"`
+	Notes          []string               `json:"notes"`
+	Unannotated    []string               `json:"unannotated"`
 }
 
 func (s *Server) handleLandscape(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, landscapePayload{
-		AskRoute:  s.askRoute(),
-		Summary:   trace.Summary(s.Landscape, s.Bundle),
-		Narration: trace.Narrate(s.Landscape, s.Bundle),
-		Session:   s.Bundle.Session, Landscape: s.Landscape, Gate: s.Bundle.Gate,
+		AskRoute:       s.askRoute(),
+		Summary:        trace.Summary(s.Landscape, s.Bundle),
+		Narration:      trace.Narrate(s.Landscape, s.Bundle),
+		Interpretation: s.interpretation(),
+		Session:        s.Bundle.Session, Landscape: s.Landscape, Gate: s.Bundle.Gate,
 		Synthesis: s.Synthesis, Claims: s.Claims, Symbols: s.Bundle.Symbols,
 		Notes: s.Landscape.Notes(), Unannotated: s.Landscape.UnannotatedExpensive(),
 	})
@@ -438,6 +451,75 @@ func (s *Server) handleKeep(w http.ResponseWriter, r *http.Request) {
 		SessionID: s.Bundle.Session.ID, Symbol: req.Symbol, Action: "keep", Query: req.AskID,
 	})
 	writeJSON(w, res)
+}
+
+type interpretationPayload struct {
+	Markdown    string `json:"markdown"`
+	Provider    string `json:"provider"`
+	GeneratedAt string `json:"generated_at"`
+	Stale       bool   `json:"stale"`
+	StaleReason string `json:"stale_reason,omitempty"`
+}
+
+// interpretation returns the stored reading for this session, if one was made,
+// along with whether the code has moved under it.
+func (s *Server) interpretation() *interpretationPayload {
+	if s.SessionDir == "" {
+		return nil
+	}
+	file, err := interpret.Load(s.SessionDir)
+	if err != nil {
+		return nil
+	}
+	entry, ok := file.Entries[string(interpret.ScopeSession)]
+	if !ok {
+		return nil
+	}
+	out := &interpretationPayload{
+		Markdown:    entry.Markdown,
+		Provider:    entry.Provider,
+		GeneratedAt: entry.GeneratedAt.Format("2006-01-02 15:04"),
+	}
+	// Checked against the working tree, not against the bundle: a reading is
+	// only useful while it still describes the code as it is now.
+	current := map[bundle.SymbolID]string{}
+	seen := map[string]bool{}
+	for _, sym := range s.Bundle.Symbols {
+		if seen[sym.File] {
+			continue
+		}
+		seen[sym.File] = true
+		src, err := os.ReadFile(filepath.Join(s.Cfg.Root, sym.File))
+		if err != nil {
+			continue
+		}
+		a := s.Adapters.For(sym.File)
+		if a == nil {
+			continue
+		}
+		parsed, err := a.ParseSymbols(sym.File, src)
+		if err != nil {
+			continue
+		}
+		for _, p := range parsed {
+			current[p.ID] = p.Fingerprint
+		}
+	}
+	for _, f := range file.Stale(current) {
+		if f.Key == string(interpret.ScopeSession) {
+			out.Stale = true
+			out.StaleReason = strings.Join(idsToStrings(f.Moved), ", ") + " changed since this was written"
+		}
+	}
+	return out
+}
+
+func idsToStrings(ids []bundle.SymbolID) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, string(id))
+	}
+	return out
 }
 
 // askRoute names how questions will be answered, so the UI can say so plainly

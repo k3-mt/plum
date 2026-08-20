@@ -328,6 +328,55 @@ Each test contributes a named path. The union over a suite is a map of the
 covered system, assembled from real execution rather than static analysis — and
 code no test reaches is visible by its absence, which is itself the finding.
 
+## Two layers, kept apart
+
+There are two different kinds of statement about a change, and mixing them is
+how a tool stops being trusted.
+
+**What happened** — `plum explain`. Composed from the recording: the arguments
+that went in, the values that came back, the comment above the call, the cost of
+each step. No model, no network, identical every run, and where the evidence is
+silent it says so:
+
+```
+Cache.Get was called with key = "user:42" and opts = nothing. It returned
+"tok@prod" and no error. Its own description: "Get returns the token for a key,
+or ErrMiss.". Flagged: parameter opts is typed as any/interface{} — the compiler
+stops helping callers.
+    Cache.Get then called Cache.decorate, which took 27µs. The code says why:
+    "the realm suffix is applied on the way out so callers never see a raw token".
+        ⚠ no description was written for this function, so what it is for is
+          not recorded anywhere
+```
+
+**What it is for** — `plum interpret`. Purpose is not recoverable from a trace;
+it lives in a head, a ticket, or a comment nobody wrote. So this one asks a model
+— routed to your agent session over the same tmux bridge, or to the API — and
+everything about it is arranged so the answer stays honest:
+
+- the brief leads with the mechanical narration, **labelled as established**, and
+  the prompt forbids contradicting it
+- the reading must separate *"the recording shows"* from *"my inference"*
+- it must include a section naming what the evidence does **not** settle, and
+  what would settle each thing
+- it is stored with the fingerprint of every frame it describes, so it goes
+  stale the moment one changes — the same mechanism that keeps claims honest
+- it is labelled everywhere it appears: *a reading, not a record*
+
+```sh
+plum interpret                     # the session
+plum interpret -test TestGetPut    # one test's path
+plum interpret -symbol 'a.go::F'   # one frame
+plum interpret -show               # the stored reading, without asking again
+plum interpret -route print        # just print the prompt, ask nobody
+plum stale                         # claims AND readings that no longer apply
+```
+
+In the UI the reading gets its own panel, bordered and titled *"what this is for
+— a reading, not a record"*, kept visually apart from the landscape and the
+narration above it. Prose that reads like a record but was inferred is worse
+than no prose at all.
+
 ## Feeding the evidence to an LLM
 
 `plum context` prints the assembled evidence to stdout, so it pipes anywhere:
