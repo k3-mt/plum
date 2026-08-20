@@ -40,10 +40,11 @@ def _emit(**fields) -> None:
     global _written
     if _out is None or _written >= _max_events:
         return
+    tests = _tests()
     event = {
         "schema_version": SCHEMA_VERSION,
         "ts_ns": time.time_ns(),
-        "test_id": os.environ.get("PLUM_TEST_ID", ""),
+        "test_id": tests[-1] if tests else os.environ.get("PLUM_TEST_ID", ""),
     }
     event.update(fields)
     with _lock:
@@ -56,6 +57,29 @@ def _stack() -> list:
     if not hasattr(_local, "stack"):
         _local.stack = []
     return _local.stack
+
+
+def _tests() -> list:
+    """The tests this thread is currently inside, innermost last.
+
+    A test is the only artifact that is named, executable, committed and about
+    one intention, which makes it the natural label for everything recorded
+    underneath it. Test frames are tracked but never emitted: the test names the
+    recording, it is not a frame in it.
+    """
+    if not hasattr(_local, "tests"):
+        _local.tests = []
+    return _local.tests
+
+
+def _is_test(code) -> bool:
+    name = getattr(code, "co_qualname", code.co_name)
+    leaf = name.rsplit(".", 1)[-1]
+    if not (leaf.startswith("test") or leaf.startswith("Test")):
+        return False
+    path = os.path.basename(code.co_filename)
+    return (path.startswith("test_") or path.endswith("_test.py")
+            or "test" in path or "/tests/" in code.co_filename)
 
 
 def _truncate(value: object, limit: int = 200) -> str:
@@ -92,6 +116,8 @@ def _args_of(code) -> dict:
 def _on_call(code, _offset):
     symbol = _symbol_id(code)
     if _symbols and symbol not in _symbols:
+        if _is_test(code):
+            _tests().append(getattr(code, "co_qualname", code.co_name))
         return
     stack = _stack()
     invocation = f"{threading.get_ident()}-{next(_counter)}"
@@ -102,11 +128,13 @@ def _on_call(code, _offset):
 
 
 def _on_return(code, _offset, retval):
-    stack = _stack()
-    if not stack:
-        return
     symbol = _symbol_id(code)
     if _symbols and symbol not in _symbols:
+        if _is_test(code) and _tests():
+            _tests().pop()
+        return
+    stack = _stack()
+    if not stack:
         return
     if stack[-1][0] != symbol:
         return
@@ -116,11 +144,13 @@ def _on_return(code, _offset, retval):
 
 
 def _on_raise(code, _offset, exc):
-    stack = _stack()
-    if not stack:
-        return
     symbol = _symbol_id(code)
     if _symbols and symbol not in _symbols:
+        if _is_test(code) and _tests():
+            _tests().pop()
+        return
+    stack = _stack()
+    if not stack:
         return
     if stack[-1][0] != symbol:
         return

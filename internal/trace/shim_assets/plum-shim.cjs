@@ -22,6 +22,7 @@
 const fs = require('fs');
 const Module = require('module');
 const path = require('path');
+const { AsyncLocalStorage } = require('node:async_hooks');
 
 const OUT = process.env.PLUM_TRACE_OUT;
 const MAX = parseInt(process.env.PLUM_TRACE_MAX || '200000', 10);
@@ -38,13 +39,19 @@ if (OUT && process.env.PLUM_TRACE === '1' && !globalThis.__PLUM__) {
   let counter = 0;
   let written = 0;
 
+  // currentTest carries the name of the test a frame is running under.
+  // AsyncLocalStorage rather than a plain variable, because a test runner may
+  // interleave async tests — a shared variable would attribute frames to
+  // whichever test happened to start last.
+  const currentTest = new AsyncLocalStorage();
+
   const emit = (fields) => {
     if (written >= MAX) return;
     written++;
     fs.writeSync(fd, JSON.stringify(Object.assign({
       schema_version: '1.0',
       ts_ns: Number(process.hrtime.bigint()),
-      test_id: process.env.PLUM_TEST_ID || '',
+      test_id: currentTest.getStore() || process.env.PLUM_TEST_ID || '',
     }, fields)) + '\n');
   };
 
@@ -183,6 +190,37 @@ if (OUT && process.env.PLUM_TRACE === '1' && !globalThis.__PLUM__) {
     },
     uninstrumented: () => uninstrumentable,
   };
+
+  // A test is the only artifact that is named, executable, committed and about
+  // one intention, which makes it the natural label for everything recorded
+  // underneath it. node:test is a builtin, so patching its exports here — before
+  // any test file loads — is seen by `require('node:test')` and by
+  // `import { test } from 'node:test'` alike.
+  try {
+    const runner = require('node:test');
+    const label = (fn, name) => function (...args) {
+      return currentTest.run(String(name), () => fn.apply(this, args));
+    };
+    for (const key of ['test', 'it']) {
+      const original = runner[key];
+      if (typeof original !== 'function') continue;
+      const wrapped = function (name, ...rest) {
+        // The runner accepts (name, opts?, fn) and (fn); only the named forms
+        // can label anything, so the rest pass through untouched.
+        const at = rest.findIndex((a) => typeof a === 'function');
+        if (typeof name === 'string' && at >= 0) {
+          rest[at] = label(rest[at], name);
+        }
+        return original.call(this, name, ...rest);
+      };
+      Object.assign(wrapped, original);
+      runner[key] = wrapped;
+    }
+  } catch (e) {
+    if (process.env.PLUM_TRACE_DEBUG) {
+      process.stderr.write(`plum: node:test not patched: ${e && e.message}\n`);
+    }
+  }
 
   // ESM cannot be reached by hooking require, so register a module-customization
   // hook. Available since Node 18.19 / 20.6; older runtimes keep CJS tracing.

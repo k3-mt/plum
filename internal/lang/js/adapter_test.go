@@ -332,3 +332,41 @@ func keysOfEdges(m map[string]bool) []string {
 	}
 	return out
 }
+
+// A local inside a function body is not a declaration. Reporting one is not
+// merely noise: hunk mapping credits the innermost declaration, so a stray
+// local displaces the function that contains it and the function vanishes from
+// the bundle entirely.
+func TestLocalsInsideFunctionBodiesAreNotSymbols(t *testing.T) {
+	src := `export function mustGet(cache, key) {
+  const v = cache.lookup(key);
+  let attempts = 0;
+  const retry = () => attempts++;
+  if (v === undefined) {
+    throw new Error('missing');
+  }
+  return v;
+}
+
+export const TOP = 1;
+`
+	syms, err := New().ParseSymbols("x.js", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]bundle.Symbol{}
+	for _, s := range syms {
+		found[s.Name] = s
+	}
+	if _, ok := found["mustGet"]; !ok {
+		t.Fatalf("the function itself is missing: %v", names(syms))
+	}
+	for _, local := range []string{"v", "attempts", "retry"} {
+		if _, ok := found[local]; ok {
+			t.Errorf("local %q leaked into the symbol table: %v", local, names(syms))
+		}
+	}
+	if _, ok := found["TOP"]; !ok {
+		t.Error("a module-scope const is a real declaration and should be kept")
+	}
+}

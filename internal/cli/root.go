@@ -50,6 +50,7 @@ func commands() []command {
 		{"synth", "synthesise the seams doc in a fresh context, extract claims", cmdSynth},
 		{"stale", "re-fingerprint claims against the working tree", cmdStale},
 		{"trace", "run the test suite under instrumentation, ingest events", cmdTrace},
+		{"tests", "list the tests that ran, and what each one reached", cmdTests},
 		{"landscape", "derive the energy landscape from recorded traces", cmdLandscape},
 		{"explore", "serve the landscape UI — no scoring, no gate, no timer", cmdExplore},
 		{"context", "print the assembled evidence for a symbol or session, for piping into any tool", cmdContext},

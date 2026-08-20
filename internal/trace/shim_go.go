@@ -52,6 +52,11 @@ var (
 	enc     *json.Encoder
 	counter atomic.Int64
 	stacks  = map[int64][]string{}
+	// tests maps a goroutine to the test it is running, so every frame beneath
+	// a test carries that test's name. A test is the only artifact that is
+	// named, executable, committed and about one intention — which makes it the
+	// natural key for everything recorded underneath it.
+	tests   = map[int64]string{}
 	maxEv   int64 = 200000
 	written atomic.Int64
 )
@@ -79,7 +84,11 @@ func emit(e event) {
 	}
 	e.SchemaVersion = "1.0"
 	e.TSNanos = time.Now().UnixNano()
-	e.TestID = os.Getenv("PLUM_TEST_ID")
+	if e.TestID == "" {
+		mu.Lock()
+		e.TestID = tests[goid()]
+		mu.Unlock()
+	}
 	mu.Lock()
 	_ = enc.Encode(e)
 	written.Add(1)
@@ -108,6 +117,29 @@ func truncate(s string) string {
 		return s[:200] + "..."
 	}
 	return s
+}
+
+// EnterTest marks the goroutine as running a named test for as long as the test
+// body runs. It emits nothing itself: the test is the label on the recording,
+// not a frame in it.
+func EnterTest(name string) func(...any) {
+	if enc == nil {
+		return func(...any) {}
+	}
+	gid := goid()
+	mu.Lock()
+	previous := tests[gid]
+	tests[gid] = name
+	mu.Unlock()
+	return func(...any) {
+		mu.Lock()
+		if previous == "" {
+			delete(tests, gid)
+		} else {
+			tests[gid] = previous
+		}
+		mu.Unlock()
+	}
 }
 
 // Enter records a call and returns the deferred half, which records the return

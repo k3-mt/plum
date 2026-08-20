@@ -182,13 +182,70 @@ func cmdTrace(ctx context.Context, env *Env, args []string) error {
 	}
 	fmt.Println("traces →", rel(env, env.Store.TracePath(id)))
 	fmt.Println("landscape →", rel(env, env.Store.LandscapePath(id)))
+	printTests(trace.Tests(res.Events))
 	printLandscape(l)
+	return nil
+}
+
+// printTests lists what each test actually reached. A test is the unit a
+// developer already thinks in, so it is the unit the recording is reported in.
+func printTests(runs []trace.TestRun) {
+	if len(runs) == 0 {
+		return
+	}
+	fmt.Println()
+	for _, r := range runs {
+		flag := ""
+		if r.Raised {
+			flag = "  ⚠ raised"
+		}
+		fmt.Printf("  %-38s %2d frames  %d symbols  depth %d%s\n",
+			r.Name, r.Frames, len(r.Symbols), r.MaxDepth, flag)
+	}
+}
+
+// cmdTests lists the recording one test at a time, and what each reached.
+func cmdTests(ctx context.Context, env *Env, args []string) error {
+	fs := flag.NewFlagSet("tests", flag.ContinueOnError)
+	verbose := fs.Bool("v", false, "list the symbols each test reached")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	id, err := env.Store.Resolve(first(fs.Args()))
+	if err != nil {
+		return err
+	}
+	events, err := trace.ReadFile(env.Store.TracePath(id))
+	if err != nil {
+		return fmt.Errorf("no traces for %s — run `plum trace` first", id)
+	}
+	runs := trace.Tests(events)
+	if len(runs) == 0 {
+		fmt.Println("no tests recorded")
+		return nil
+	}
+	for _, r := range runs {
+		flag := ""
+		if r.Raised {
+			flag = "  ⚠ raised"
+		}
+		fmt.Printf("%-38s %2d frames  %d symbols  depth %d%s\n",
+			r.Name, r.Frames, len(r.Symbols), r.MaxDepth, flag)
+		if *verbose {
+			for _, sym := range r.Symbols {
+				fmt.Printf("    %s\n", sym)
+			}
+		}
+	}
+	fmt.Println()
+	fmt.Printf("explore one of them: plum explore -test %q\n", runs[0].Name)
 	return nil
 }
 
 func cmdLandscape(ctx context.Context, env *Env, args []string) error {
 	fs := flag.NewFlagSet("landscape", flag.ContinueOnError)
 	chain := fs.String("chain", "", "re-derive from stored events: hottest|slowest|raising")
+	testName := fs.String("test", "", "draw the path of one named test")
 	frames := fs.Int("frames", trace.DefaultMaxFrames, "how many frames to render (0 = all)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -196,6 +253,32 @@ func cmdLandscape(ctx context.Context, env *Env, args []string) error {
 	id, err := env.Store.Resolve(first(fs.Args()))
 	if err != nil {
 		return err
+	}
+	if *testName != "" {
+		b, err := env.Store.Load(id)
+		if err != nil {
+			return err
+		}
+		events, err := trace.ReadFile(env.Store.TracePath(id))
+		if err != nil {
+			return fmt.Errorf("no traces for %s — run `plum trace` first", id)
+		}
+		scoped, err := scopeToTest(events, *testName)
+		if err != nil {
+			return err
+		}
+		policy := trace.Chain(*chain)
+		if policy == "" {
+			policy = trace.ChainHottest
+		}
+		l := trace.DeriveChainN(scoped, b, policy, *frames)
+		l.TestID = *testName
+		if err := l.Save(env.Store.LandscapePath(id)); err != nil {
+			return err
+		}
+		fmt.Printf("landscape for test %q\n", *testName)
+		printLandscape(l)
+		return nil
 	}
 	if *chain != "" {
 		// Re-deriving from the stored events is cheap; re-running the suite is not.
@@ -283,11 +366,26 @@ func loadLandscape(env *Env, id string) (*trace.Landscape, error) {
 	return trace.LoadLandscape(env.Store.LandscapePath(id))
 }
 
+// scopeToTest narrows a recording to one test, naming the alternatives when the
+// requested test is not among them.
+func scopeToTest(events []trace.Event, name string) ([]trace.Event, error) {
+	scoped := trace.ForTest(events, name)
+	if len(scoped) > 0 {
+		return scoped, nil
+	}
+	var names []string
+	for _, r := range trace.Tests(events) {
+		names = append(names, r.Name)
+	}
+	return nil, fmt.Errorf("no test named %q in this recording; recorded: %s", name, strings.Join(names, ", "))
+}
+
 // cmdExplore serves the landscape. No score, no gate, no timer (P8).
 func cmdExplore(ctx context.Context, env *Env, args []string) error {
 	fs := flag.NewFlagSet("explore", flag.ContinueOnError)
 	addr := fs.String("addr", "127.0.0.1:0", "listen address")
 	noOpen := fs.Bool("no-open", false, "do not open a browser")
+	testName := fs.String("test", "", "serve the path of one named test")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -306,6 +404,16 @@ func cmdExplore(ctx context.Context, env *Env, args []string) error {
 		fmt.Println("no landscape yet — run `plum trace` to record one; the UI will show the bundle only")
 	}
 	events, _ := trace.ReadFile(env.Store.TracePath(id))
+	if *testName != "" {
+		scoped, err := scopeToTest(events, *testName)
+		if err != nil {
+			return err
+		}
+		events = scoped
+		l = trace.DeriveChainN(events, b, trace.ChainHottest, trace.DefaultMaxFrames)
+		l.TestID = *testName
+		fmt.Printf("serving the path of test %q\n", *testName)
+	}
 	cs, _ := claims.Load(env.Store.ClaimsPath(id))
 	synthesis, _ := os.ReadFile(env.Store.SynthesisPath(id))
 

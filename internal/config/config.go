@@ -177,6 +177,13 @@ func (c *Config) HasLanguage(name string) bool {
 // without pulling in a glob library.
 func (c *Config) Excluded(path string) bool {
 	path = filepath.ToSlash(path)
+	// plum's own directory is excluded unconditionally, not by configuration.
+	// Its bundles and landscapes are JSON, so reading them back in would make
+	// the tool analyse its own output — and an explicit `exclude` list in an
+	// existing repo replaces the defaults, so a default alone would not hold.
+	if path == Dir || strings.HasPrefix(path, Dir+"/") {
+		return true
+	}
 	for _, pattern := range c.Repo.Exclude {
 		pattern = filepath.ToSlash(pattern)
 		switch {

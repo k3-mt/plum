@@ -221,3 +221,44 @@ func grepEnv(env, key string) string {
 	}
 	return "(" + key + " not set)"
 }
+
+func TestTestsSummaryAndFiltering(t *testing.T) {
+	events := []Event{
+		{Kind: "call", Symbol: "a.go::f", TestID: "TestOne", Depth: 0},
+		{Kind: "call", Symbol: "a.go::g", TestID: "TestOne", Depth: 1},
+		{Kind: "return", Symbol: "a.go::g", TestID: "TestOne", Depth: 1},
+		{Kind: "call", Symbol: "a.go::f", TestID: "TestTwo", Depth: 0},
+		{Kind: "raise", Symbol: "a.go::f", TestID: "TestTwo", Depth: 0},
+		{Kind: "call", Symbol: "a.go::h", Depth: 0}, // no test attribution
+	}
+	runs := Tests(events)
+	if len(runs) != 3 {
+		t.Fatalf("got %d runs: %+v", len(runs), runs)
+	}
+	byName := map[string]TestRun{}
+	for _, r := range runs {
+		byName[r.Name] = r
+	}
+	one := byName["TestOne"]
+	if one.Frames != 2 || one.MaxDepth != 2 || one.Raised {
+		t.Errorf("TestOne = %+v", one)
+	}
+	if two := byName["TestTwo"]; !two.Raised {
+		t.Error("a test whose execution raised should say so")
+	}
+	if _, ok := byName["(no test)"]; !ok {
+		t.Error("unattributed events must still be visible, not dropped")
+	}
+
+	if got := ForTest(events, "TestOne"); len(got) != 3 {
+		t.Errorf("filtering to one test gave %d events", len(got))
+	}
+
+	reached := Reached(events)
+	if tests := reached["a.go::f"]; len(tests) != 2 || tests[0] != "TestOne" {
+		t.Errorf("a.go::f reached by %v, want both tests", tests)
+	}
+	if _, ok := reached["a.go::h"]; ok {
+		t.Error("an unattributed call proves no test reached the symbol")
+	}
+}

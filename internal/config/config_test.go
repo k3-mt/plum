@@ -68,3 +68,44 @@ func TestCommentInsideStringSurvives(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// plum's own artifacts are committed by design and are JSON, so without an
+// exclusion the config adapter reads its own bundles back in as if they were
+// the project's configuration — thousands of "symbols" that are really plum
+// looking at itself.
+func TestPlumsOwnDirectoryIsExcludedWhateverTheConfigSays(t *testing.T) {
+	c := Default("/repo")
+	// An explicit list in an existing repo replaces the defaults, so relying on
+	// a default entry would silently fail for every repo initialised earlier.
+	c.Repo.Exclude = []string{"something/else/"}
+	for _, path := range []string{
+		".plum/sessions/2026-08-20-a1b2/bundle.json",
+		".plum/sessions/2026-08-20-a1b2/landscape.json",
+		".plum/config.toml",
+		".plum",
+	} {
+		if !c.Excluded(path) {
+			t.Errorf("%s must never be analysed, whatever the config says", path)
+		}
+	}
+}
+
+func TestDefaultExclusions(t *testing.T) {
+	c := Default("/repo")
+	for _, path := range []string{
+		"testdata/fixtures/authcache/golden.json",
+		"vendor/thing/config.yaml",
+		"node_modules/pkg/package.json",
+	} {
+		if !c.Excluded(path) {
+			t.Errorf("%s should be excluded by default", path)
+		}
+	}
+	for _, path := range []string{
+		"config/app.yaml", "src/cache.js", "app/settings.json", "deploy/values.yaml",
+	} {
+		if c.Excluded(path) {
+			t.Errorf("%s is the project's own file and must be analysed", path)
+		}
+	}
+}

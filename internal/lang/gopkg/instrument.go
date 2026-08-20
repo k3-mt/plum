@@ -61,7 +61,73 @@ func (a *Adapter) Instrument(scratchRoot string, ids []bundle.SymbolID) (trace.I
 		out.Done = append(out.Done, done...)
 		out.Skipped = append(out.Skipped, skipped...)
 	}
+
+	// Tests are instrumented too, but only as labels: entering one names the
+	// recording that follows. Without this every frame is attributed to the run
+	// as a whole, and "which test exercises this?" has no answer.
+	if err := markTests(scratchRoot, modPath+"/plumtrace"); err != nil {
+		out.Skipped = append(out.Skipped, "test attribution: "+err.Error())
+	}
 	return out, nil
+}
+
+// markTests injects a label probe at the top of every Test function in the
+// scratch copy, so each recorded frame knows which test it ran under.
+func markTests(scratchRoot, shimImport string) error {
+	return filepath.Walk(scratchRoot, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		src, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		fset := token.NewFileSet()
+		f, err := parser.ParseFile(fset, path, src, parser.ParseComments)
+		if err != nil {
+			return nil
+		}
+		marked := false
+		for _, d := range f.Decls {
+			fn, ok := d.(*ast.FuncDecl)
+			if !ok || fn.Body == nil || fn.Recv != nil || !isTestFunc(fn) {
+				continue
+			}
+			fn.Body.List = append([]ast.Stmt{&ast.DeferStmt{Call: &ast.CallExpr{
+				Fun: &ast.CallExpr{
+					Fun: &ast.SelectorExpr{X: ast.NewIdent("plumtrace"), Sel: ast.NewIdent("EnterTest")},
+					Args: []ast.Expr{&ast.BasicLit{
+						Kind: token.STRING, Value: strconv.Quote(fn.Name.Name),
+					}},
+				},
+			}}}, fn.Body.List...)
+			marked = true
+		}
+		if !marked {
+			return nil
+		}
+		addImport(f, shimImport)
+		var buf bytes.Buffer
+		if err := format.Node(&buf, fset, f); err != nil {
+			return nil
+		}
+		return os.WriteFile(path, buf.Bytes(), 0o644)
+	})
+}
+
+// isTestFunc recognises the shapes `go test` will actually run.
+func isTestFunc(fn *ast.FuncDecl) bool {
+	name := fn.Name.Name
+	if !strings.HasPrefix(name, "Test") && !strings.HasPrefix(name, "Benchmark") && !strings.HasPrefix(name, "Fuzz") {
+		return false
+	}
+	if len(name) > 4 && name[4] >= 'a' && name[4] <= 'z' {
+		return false // TestingHelper is not a test
+	}
+	return fn.Type.Params != nil && len(fn.Type.Params.List) == 1
 }
 
 // inject rewrites one file in the scratch copy, adding a deferred probe to the

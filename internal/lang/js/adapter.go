@@ -182,20 +182,27 @@ func (a *Adapter) declarations(src []byte) []decl {
 			classes = append(classes, classFrame{name: m[1], depth: l.depth})
 			continue
 		}
-		if m := funcRe.FindStringSubmatch(code); m != nil {
+		// Only module scope and class bodies declare symbols this tool can name.
+		// A function or a const inside another function body is a local: giving
+		// it a SymbolID would be wrong, and — because hunk mapping credits the
+		// innermost declaration — it would displace the function that contains it.
+		atTop := l.depth == 0
+		inClassBody := len(classes) > 0 && l.depth == classes[len(classes)-1].depth+1
+
+		if m := funcRe.FindStringSubmatch(code); m != nil && (atTop || inClassBody) {
 			out = append(out, decl{name: qualify(classes, m[1]), kind: kindFor(classes), start: l.num,
 				end: blockEnd(lines, i), signature: strings.TrimSpace(l.raw),
 				doc: docAbove(lines, i), exported: exported})
 			continue
 		}
-		if m := arrowRe.FindStringSubmatch(code); m != nil {
+		if m := arrowRe.FindStringSubmatch(code); m != nil && (atTop || inClassBody) {
 			out = append(out, decl{name: qualify(classes, m[1]), kind: kindFor(classes), start: l.num,
 				end: blockEnd(lines, i), signature: strings.TrimSpace(l.raw),
 				doc: docAbove(lines, i), exported: exported})
 			continue
 		}
 		// A method is only a method inside a class body, one level in.
-		if len(classes) > 0 && l.depth == classes[len(classes)-1].depth+1 {
+		if inClassBody {
 			if m := methodRe.FindStringSubmatch(code); m != nil && !notCallable[m[2]] {
 				name := classes[len(classes)-1].name + "." + m[2]
 				out = append(out, decl{name: name, kind: "method", start: l.num,
@@ -204,7 +211,7 @@ func (a *Adapter) declarations(src []byte) []decl {
 				continue
 			}
 		}
-		if len(classes) == 0 {
+		if atTop && len(classes) == 0 {
 			if m := varRe.FindStringSubmatch(code); m != nil {
 				kind := "var"
 				if m[1] == "const" {

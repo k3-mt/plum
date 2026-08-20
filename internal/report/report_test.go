@@ -99,3 +99,71 @@ func TestTestFilesAreNotFlaggedAsDebt(t *testing.T) {
 		}
 	}
 }
+
+// Recorded execution beats the name-matching heuristic: "untested" should stop
+// meaning "no test file mentions this" and start meaning "no test's execution
+// ever entered it".
+func TestCoverageUsesRecordedExecutionWhenTraced(t *testing.T) {
+	b := sample()
+	b.Symbols = []bundle.Symbol{
+		{ID: "a.go::Reached", Name: "Reached", Kind: "func", File: "a.go", LineStart: 1, LineEnd: 3, Change: "added"},
+		{ID: "a.go::NeverRun", Name: "NeverRun", Kind: "func", File: "a.go", LineStart: 5, LineEnd: 7, Change: "added"},
+		{ID: "a.go::Gone", Name: "Gone", Kind: "func", File: "a.go", LineStart: 9, LineEnd: 9, Change: "deleted"},
+		{ID: "a.go::Config", Name: "Config", Kind: "type", File: "a.go", LineStart: 11, LineEnd: 11, Change: "added"},
+	}
+	b.Coverage = bundle.Coverage{}
+
+	out := Render(b, Options{
+		Traced:  true,
+		Reached: map[bundle.SymbolID][]string{"a.go::Reached": {"TestOne", "TestTwo"}},
+	})
+
+	if !strings.Contains(out, "never entered by any test's execution") {
+		t.Error("traced coverage should say what it actually means")
+	}
+	if !strings.Contains(out, "`a.go::NeverRun`") {
+		t.Error("a symbol no test entered should be listed as untested")
+	}
+	if section := sectionOf(out, "## Untested new symbols"); strings.Contains(section, "a.go::Reached") {
+		t.Errorf("a symbol two tests entered was listed as untested:\n%s", section)
+	}
+	// A deleted function is not untested; it is gone.
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "Gone") && strings.Contains(line, "no test reaches it") {
+			t.Errorf("a deleted symbol was flagged as untested: %q", line)
+		}
+	}
+	// The tests-reach section is the map that grows with the suite.
+	if !strings.Contains(out, "## Which tests reach this change") ||
+		!strings.Contains(out, "**TestOne** reaches") {
+		t.Error("the report should name which tests reach the change")
+	}
+	if !strings.Contains(out, `plum explore -test "TestOne"`) {
+		t.Error("it should say how to open that test's path")
+	}
+}
+
+func TestCoverageFallsBackToNameMatchingWithoutTraces(t *testing.T) {
+	b := sample()
+	out := Render(b, Options{})
+	if !strings.Contains(out, "not named by any changed test") {
+		t.Error("without traces the report must say the check is a name match")
+	}
+	if !strings.Contains(out, "becomes exact") {
+		t.Error("it should say how to make it exact")
+	}
+}
+
+// sectionOf returns one markdown section's body, so an assertion about a
+// section cannot accidentally read the next one.
+func sectionOf(doc, heading string) string {
+	start := strings.Index(doc, heading)
+	if start < 0 {
+		return ""
+	}
+	rest := doc[start+len(heading):]
+	if end := strings.Index(rest, "\n## "); end >= 0 {
+		return rest[:end]
+	}
+	return rest
+}

@@ -25,7 +25,13 @@ type Options struct {
 	UnannotatedBarriers []string
 	// Landscape notes from a trace run, e.g. an unclosed path.
 	LandscapeNotes []string
-	Verbose        bool
+	// Reached maps each changed symbol to the tests whose execution entered it.
+	// When traces exist this replaces the name-matching heuristic: "untested"
+	// stops meaning "no test file mentions this" and starts meaning "no test's
+	// execution ever entered it", which is the thing you actually wanted to know.
+	Reached map[bundle.SymbolID][]string
+	Traced  bool
+	Verbose bool
 }
 
 type StaleClaim struct {
@@ -174,7 +180,12 @@ func Render(b *bundle.Bundle, opt Options) string {
 				if s.Doc == "" && s.Kind != "var" && s.Kind != "const" {
 					flags = append(flags, "undocumented")
 				}
-				if !s.Tested {
+				// Prefer recorded execution over the name match wherever it exists.
+				switch {
+				case opt.Traced && len(opt.Reached[s.ID]) > 0:
+				case opt.Traced && s.Change != "deleted" && (s.Kind == "func" || s.Kind == "method"):
+					flags = append(flags, "no test reaches it")
+				case !opt.Traced && !s.Tested:
 					flags = append(flags, "untested")
 				}
 				if isTest(s.File) {
@@ -283,17 +294,53 @@ func Render(b *bundle.Bundle, opt Options) string {
 		p("")
 	}
 
-	if len(b.Coverage.Untested) > 0 {
+	untested, tested := coverage(b, opt)
+	if len(untested) > 0 {
 		p("## Untested new symbols")
 		p("")
-		p("%d of %d changed symbols are not named by any changed test.", len(b.Coverage.Untested), b.Coverage.SymbolCount)
+		if opt.Traced {
+			p("%d of %d changed code symbols were never entered by any test's execution.", len(untested), len(untested)+len(tested))
+		} else {
+			p("%d of %d changed symbols are not named by any changed test.", len(untested), b.Coverage.SymbolCount)
+			p("")
+			p("_This is a name match. Run `plum trace` and it becomes exact._")
+		}
 		p("")
-		shown, hidden := limit(len(b.Coverage.Untested), opt.Verbose)
-		for _, id := range b.Coverage.Untested[:shown] {
+		shown, hidden := limit(len(untested), opt.Verbose)
+		for _, id := range untested[:shown] {
 			p("- `%s`", id)
 		}
 		if hidden > 0 {
 			p("- … and %d more — `plum report -v`", hidden)
+		}
+		p("")
+	}
+
+	// Which test reaches which change is the map that grows as the suite does.
+	if opt.Traced && len(tested) > 0 {
+		p("## Which tests reach this change")
+		p("")
+		byTest := map[string][]bundle.SymbolID{}
+		for _, id := range tested {
+			for _, name := range opt.Reached[id] {
+				byTest[name] = append(byTest[name], id)
+			}
+		}
+		var names []string
+		for name := range byTest {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		shown, hidden := limit(len(names), opt.Verbose)
+		for _, name := range names[:shown] {
+			p("- **%s** reaches %s", name, plural(len(byTest[name]), "changed symbol"))
+			for _, id := range byTest[name] {
+				p("    - `%s`", id)
+			}
+			p("    - `plum explore -test %q`", name)
+		}
+		if hidden > 0 {
+			p("- … and %d more tests — `plum report -v`", hidden)
 		}
 		p("")
 	}
@@ -402,6 +449,30 @@ func crossModule(edges []bundle.Edge) []bundle.Edge {
 		}
 	}
 	return out
+}
+
+// coverage splits the changed code symbols into those some test's execution
+// entered and those none did, preferring recorded execution over the name match.
+func coverage(b *bundle.Bundle, opt Options) (untested, tested []bundle.SymbolID) {
+	if !opt.Traced {
+		return b.Coverage.Untested, nil
+	}
+	for _, s := range b.Symbols {
+		if s.Change == "deleted" || isTest(s.File) || s.Kind == "config_key" {
+			continue
+		}
+		if s.Kind != "func" && s.Kind != "method" {
+			continue // a type or a constant is not something a test enters
+		}
+		if len(opt.Reached[s.ID]) > 0 {
+			tested = append(tested, s.ID)
+		} else {
+			untested = append(untested, s.ID)
+		}
+	}
+	sort.Slice(untested, func(i, j int) bool { return untested[i] < untested[j] })
+	sort.Slice(tested, func(i, j int) bool { return tested[i] < tested[j] })
+	return untested, tested
 }
 
 func isTest(path string) bool {

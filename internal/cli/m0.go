@@ -17,6 +17,7 @@ import (
 	"github.com/kelalaike/plum/internal/journal"
 	"github.com/kelalaike/plum/internal/report"
 	"github.com/kelalaike/plum/internal/stale"
+	"github.com/kelalaike/plum/internal/trace"
 )
 
 func cmdInit(ctx context.Context, env *Env, args []string) error {
@@ -244,6 +245,11 @@ func renderReport(env *Env, b *bundle.Bundle, verbose bool) (string, error) {
 	if l, err := loadLandscape(env, id); err == nil {
 		opt.LandscapeNotes = l.Notes()
 		opt.UnannotatedBarriers = l.UnannotatedExpensive()
+	}
+	// Recorded execution beats the name-matching heuristic wherever it exists.
+	if events, err := trace.ReadFile(env.Store.TracePath(id)); err == nil && len(events) > 0 {
+		opt.Reached = trace.Reached(events)
+		opt.Traced = true
 	}
 	return report.Render(b, opt), nil
 }

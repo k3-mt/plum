@@ -160,6 +160,61 @@ way — Go, where a probe has to go *inside* a function — implements
 the engine never learns the language. There is a test that instruments a
 made-up Ruby adapter end to end to keep that honest.
 
+## The test is the unit
+
+A test is the only artifact that is simultaneously named, executable, committed,
+and about one intention. So every recorded frame is attributed to the test that
+produced it, and the landscape can be drawn per test rather than per heuristic:
+
+```sh
+plum tests
+  get and put                    2 frames  2 symbols  depth 2
+  verify throws through frames   3 frames  3 symbols  depth 3  ⚠ raised
+
+plum explore -test "verify throws through frames"
+plum landscape -test "verify throws through frames"
+```
+
+Attribution works differently in each runtime, and all three reach 100%:
+
+| | How the test is identified |
+|---|---|
+| Go | `Test*` functions get a label probe injected into the scratch copy; every frame on that goroutine inherits it |
+| Python | `sys.monitoring` sees test functions and tracks them as roots — tracked, never emitted |
+| Node | `node:test` is a builtin, so patching its `test`/`it` exports in the preload is seen by `require` **and** by `import`; `AsyncLocalStorage` keeps concurrent tests from mislabelling each other |
+
+The test frame itself is never drawn. The test names the recording; it is not a
+frame in it.
+
+### What this buys
+
+**"Untested" becomes exact.** It used to mean *a changed test file mentions this
+name*. With traces it means *no test's execution ever entered this symbol*:
+
+```
+## Untested new symbols
+1 of 2 changed code symbols were never entered by any test's execution.
+- `a.go::NeverRun`
+```
+
+Without traces the report says so, rather than passing a name match off as
+coverage.
+
+**And you get the map that grows with the suite:**
+
+```
+## Which tests reach this change
+- **verify throws through frames** reaches 3 changed symbols
+    - `src/cache.js::Cache.check`
+    - `src/cache.js::Cache.verify`
+    - `src/cache.js::mustGet`
+    - `plum explore -test "verify throws through frames"`
+```
+
+Each test contributes a named path. The union over a suite is a map of the
+covered system, assembled from real execution rather than static analysis — and
+code no test reaches is visible by its absence, which is itself the finding.
+
 ## Feeding the evidence to an LLM
 
 `plum context` prints the assembled evidence to stdout, so it pipes anywhere:
