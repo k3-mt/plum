@@ -14,7 +14,8 @@ function drawFlow() {
   svg.innerHTML = '';
   document.getElementById('closed').textContent = '';
 
-  const nodes = flow.nodes || [], links = flow.links || [];
+  const nodes = relayerOutsideTables(flow.nodes || [], flow.links || []);
+  const links = flow.links || [];
   if (!nodes.length) {
     svg.setAttribute('height', 40);
     svg.appendChild(el('text', { x: 8, y: 24, class: 'blabel' }, 'Nothing in the DAG. Run: plum ingest'));
@@ -33,6 +34,7 @@ function drawFlow() {
     byLayer.get(n.layer).push(n);
   }
   const layers = [...byLayer.keys()].sort((a, b) => a - b);
+  orderColumns(layers, byLayer, links);
 
   const stack = layers.map(L => {
     const col = byLayer.get(L);
@@ -64,6 +66,7 @@ function drawFlow() {
   const arriving = new Map();
   for (const l of links) arriving.set(l.to, (arriving.get(l.to) || 0) + 1);
   const placed = new Map();
+  const labels = [];
 
   for (const l of links) {
     const a = pos.get(l.from), b = pos.get(l.to);
@@ -86,13 +89,29 @@ function drawFlow() {
     // unrelated table.
     const label = linkLabel(l);
     if (label) {
-      const lx = x2 - 12;
-      const ly = y2 + (k - (arriving.get(l.to) - 1) / 2) * 28 - 4;
-      svg.appendChild(el('text', { x: lx, y: ly, 'text-anchor': 'end', class: 'blabel' }, label));
-      if (l.rows) {
-        svg.appendChild(el('text', { x: lx, y: ly + 12, 'text-anchor': 'end', class: 'rowlabel' },
-          fmtRows(l.rows) + ' rows'));
-      }
+      labels.push({
+        x: x2 - 16, // clear of the arrowhead
+        y: y2 + (k - (arriving.get(l.to) - 1) / 2) * 36 - 4,
+        label, rows: l.rows,
+      });
+    }
+  }
+  // Every label goes on after every arrow. Drawing them per link meant a later
+  // link's arrow painted over an earlier link's text — which read as a typo in
+  // the join key rather than as an overlap.
+  for (const t of labels) {
+    const rows = t.rows ? fmtRows(t.rows) + ' rows' : '';
+    // A plate behind the text, not a halo around the glyphs. An outline stroke
+    // only covers the line where it runs under a letter; between the letters it
+    // still shows, and a horizontal arrow reads as a strikethrough.
+    const chars = Math.max(t.label.length, rows.length);
+    const w = chars * CHARW + 8;
+    svg.appendChild(el('rect', {
+      x: t.x - w + 4, y: t.y - 10, width: w, height: rows ? 27 : 14, class: 'labelplate',
+    }));
+    svg.appendChild(el('text', { x: t.x, y: t.y, 'text-anchor': 'end', class: 'flabel' }, t.label));
+    if (rows) {
+      svg.appendChild(el('text', { x: t.x, y: t.y + 14, 'text-anchor': 'end', class: 'rowlabel' }, rows));
     }
   }
   svg.appendChild(arrowhead());
@@ -108,7 +127,7 @@ function drawFlow() {
     if (failing) cls += ' fn-failing';
 
     g.appendChild(el('rect', { x: p.x, y: p.y, width: BOXW, height: p.h, rx: 4, class: 'fnbox ' + cls }));
-    g.appendChild(el('text', { x: p.x + 12, y: p.y + 21, class: 'fntitle' }, trunc(n.name, 27)));
+    g.appendChild(el('text', { x: p.x + 12, y: p.y + 21, class: 'fntitle' }, truncName(n.name, 27)));
 
     let line = p.y + 39;
     const put = (text, klass) => {
@@ -138,14 +157,75 @@ function drawFlow() {
   }
 }
 
+// A table written straight into the SQL has nothing upstream, so the
+// longest-path layering puts it at 0, beside the sources, with its arrow
+// crossing the whole picture and passing behind unrelated tables. It is not a
+// source — it is an input to one model — so it is moved to sit beside that
+// model's other inputs. The layer is presentation; the edge is unchanged.
+function relayerOutsideTables(nodes, links) {
+  const layerOf = new Map(nodes.map(n => [n.symbol, n.layer]));
+  return nodes.map(n => {
+    if (n.kind !== 'outside') return n;
+    let deepest = 0;
+    for (const l of links) {
+      if (l.from === n.symbol) deepest = Math.max(deepest, layerOf.get(l.to) || 0);
+    }
+    return deepest > 1 ? { ...n, layer: deepest - 1 } : n;
+  });
+}
+
+// orderColumns puts each table near the ones it connects to, so the arrows
+// mostly do not cross. Sorting a column by name instead put the hardcoded
+// refunds table at the top of its column while the model that reads it sat at
+// the bottom of the next one, dragging a line across everything between.
+//
+// This is the barycentre sweep: order a column by the mean position of its
+// neighbours in the column beside it, forwards then backwards, a few times.
+// It is a heuristic and it does not promise zero crossings — but on a DAG this
+// shape it removes the ones that make the picture hard to follow.
+function orderColumns(layers, byLayer, links) {
+  const index = new Map();
+  const reindex = () => {
+    for (const L of layers) byLayer.get(L).forEach((n, i) => index.set(n.symbol, i));
+  };
+  reindex();
+  const neighbours = (n, back) => {
+    const out = [];
+    for (const l of links) {
+      const other = back ? (l.to === n.symbol && l.from) : (l.from === n.symbol && l.to);
+      if (other && index.has(other)) out.push(index.get(other));
+    }
+    return out;
+  };
+  for (let pass = 0; pass < 4; pass++) {
+    const back = pass % 2 === 0;
+    const order = back ? layers : [...layers].reverse();
+    for (const L of order) {
+      const col = byLayer.get(L);
+      const key = new Map(col.map(n => {
+        const ns = neighbours(n, back);
+        // A table with nothing to anchor it keeps where it is, rather than
+        // being sorted to one end for no reason.
+        return [n.symbol, ns.length ? ns.reduce((a, b) => a + b, 0) / ns.length : index.get(n.symbol)];
+      }));
+      col.sort((a, b) => key.get(a.symbol) - key.get(b.symbol) || a.name.localeCompare(b.name));
+      reindex();
+    }
+  }
+}
+
 // boxHeight sizes a table to what it has to say. Everything on a node is a fact
 // from the run or the statement, so nothing is dropped to make the boxes tidy.
 // LINE is the leading inside a table box, and boxHeight has to agree with it or
 // the text runs out through the bottom edge.
 const LINE = 14;
 
+// The page is monospace throughout, so a string's width is its length. That is
+// what makes a background plate sizeable without measuring text in the DOM.
+const CHARW = 6.05;
+
 function boxHeight(n) {
-  let lines = 0;
+  let lines = 1; // materialization, always drawn
   if (n.rows || n.bytes || n.nanos) lines++;
   if (n.grain) lines++;
   if (n.unresolved) lines++;
@@ -154,6 +234,15 @@ function boxHeight(n) {
   lines += (n.tests || []).length;
   if ((n.risks || []).length) lines++;
   return 30 + lines * LINE + 10; // title band, the lines themselves, bottom padding
+}
+
+// truncName drops the front of a long qualified name, not the back. What
+// identifies shop-prod-1234.shop_raw.refunds is "refunds"; cutting it to
+// "shop-prod-1234.shop_raw.re…" throws away the only part you would recognise.
+function truncName(s, n) {
+  if (s.length <= n) return s;
+  if (s.includes('.')) return '…' + s.slice(s.length - (n - 1));
+  return trunc(s, n);
 }
 
 function materialization(n) {
