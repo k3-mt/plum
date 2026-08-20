@@ -5,15 +5,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"go/ast"
-	"go/format"
-	"go/parser"
-	"go/token"
 	"io"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -23,32 +20,39 @@ import (
 // Collector runs a repository's test suite with only the changed symbols
 // instrumented. The AST pass already named them, which is why M2 is nearly free
 // once M0 exists (spec §9.1).
+//
+// The collector knows nothing about any particular language. It asks each
+// adapter for a ShimSpec and honours it: writing the declared files into a
+// scratch copy and setting the declared environment, or handing the scratch
+// copy to an adapter that rewrites source itself. Adding a language means
+// writing an adapter, not editing this file.
 type Collector struct {
 	Root        string // repo root
 	Scratch     string // where the instrumented copy is built
 	TestCommand string
 	MaxEvents   int
-	Out         io.Writer // progress
+	// Adapters decide what can be instrumented and how. Pass the same registry
+	// the extractor used, so the instrumentation set matches the bundle.
+	Adapters []Instrumenter
+	Out      io.Writer // progress
 }
 
 type Result struct {
 	Events       []Event
 	Instrumented []bundle.SymbolID
 	Skipped      []string
+	Languages    []string
 	TestOutput   string
 	TestErr      error
 	ScratchDir   string
 }
 
-// Run copies the tree, attaches the instrumentation each language needs, runs
-// the suite and ingests the JSONL. Go is instrumented by rewriting the scratch
-// copy; Python attaches a sys.monitoring shim through the environment. Both can
-// be active in the same run — the event schema is the same either way.
+// Run copies the tree, attaches whatever instrumentation each adapter asks for,
+// runs the suite and ingests the JSONL every shim speaks.
 func (c *Collector) Run(ctx context.Context, b *bundle.Bundle) (*Result, error) {
-	goIDs := targetsFor(b, ".go")
-	pyIDs := targetsFor(b, ".py")
-	if len(goIDs)+len(pyIDs) == 0 {
-		return nil, fmt.Errorf("no instrumentable symbols in this session (tracing covers Go and Python; other languages need a shim under shims/)")
+	targets := c.targets(b)
+	if len(targets) == 0 {
+		return nil, fmt.Errorf("no instrumentable symbols in this session (%s)", c.coverageNote())
 	}
 	if err := os.RemoveAll(c.Scratch); err != nil {
 		return nil, err
@@ -58,20 +62,28 @@ func (c *Collector) Run(ctx context.Context, b *bundle.Bundle) (*Result, error) 
 	}
 
 	res := &Result{ScratchDir: c.Scratch}
-	env := []string{"PLUM_TRACE=1", "PLUM_REPO_ROOT=" + c.Scratch}
+	env := map[string]string{"PLUM_TRACE": "1", "PLUM_REPO_ROOT": c.Scratch}
 
-	if len(goIDs) > 0 {
-		if err := c.instrumentGo(b, goIDs, res); err != nil {
-			res.Skipped = append(res.Skipped, "go: "+err.Error())
+	for _, a := range c.Adapters {
+		ids := targets[a.Name()]
+		if len(ids) == 0 {
+			continue
 		}
-	}
-	if len(pyIDs) > 0 {
-		pyEnv, err := c.instrumentPython(pyIDs, res)
+		spec, err := a.ShimSpec(ids)
 		if err != nil {
-			res.Skipped = append(res.Skipped, "python: "+err.Error())
-		} else {
-			env = append(env, pyEnv...)
+			res.Skipped = append(res.Skipped, a.Name()+": "+err.Error())
+			continue
 		}
+		applied, err := c.apply(a, spec, ids, env)
+		if err != nil {
+			res.Skipped = append(res.Skipped, a.Name()+": "+err.Error())
+			continue
+		}
+		if len(applied.Done) > 0 {
+			res.Languages = append(res.Languages, a.Name())
+		}
+		res.Instrumented = append(res.Instrumented, applied.Done...)
+		res.Skipped = append(res.Skipped, applied.Skipped...)
 	}
 	if len(res.Instrumented) == 0 {
 		return res, fmt.Errorf("nothing could be instrumented: %s", strings.Join(res.Skipped, "; "))
@@ -81,13 +93,12 @@ func (c *Collector) Run(ctx context.Context, b *bundle.Bundle) (*Result, error) 
 	if err := os.WriteFile(tracePath, nil, 0o644); err != nil {
 		return nil, err
 	}
+	env["PLUM_TRACE_OUT"] = tracePath
+	env["PLUM_TRACE_MAX"] = strconv.Itoa(c.MaxEvents)
 
 	cmd := exec.CommandContext(ctx, "sh", "-c", c.TestCommand)
 	cmd.Dir = c.Scratch
-	cmd.Env = append(os.Environ(), append(env,
-		"PLUM_TRACE_OUT="+tracePath,
-		fmt.Sprintf("PLUM_TRACE_MAX=%d", c.MaxEvents),
-	)...)
+	cmd.Env = append(os.Environ(), flatten(env)...)
 	var buf bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &buf, &buf
 	res.TestErr = cmd.Run() // a failing suite still produced real execution
@@ -102,254 +113,144 @@ func (c *Collector) Run(ctx context.Context, b *bundle.Bundle) (*Result, error) 
 	return res, nil
 }
 
-// targetsFor is the instrumentation set for one language: changed, non-deleted,
-// non-test functions. Only symbols present in Bundle.Symbols are ever
-// instrumented — the AST pass decided this, and paying for anything else is waste.
-func targetsFor(b *bundle.Bundle, ext string) []bundle.SymbolID {
-	var out []bundle.SymbolID
+// apply honours one adapter's ShimSpec against the scratch copy.
+func (c *Collector) apply(a Instrumenter, spec ShimSpec, ids []bundle.SymbolID, env map[string]string) (Instrumented, error) {
+	switch spec.Mode {
+	case "none", "":
+		return Instrumented{}, nil
+
+	case "rewrite":
+		// Source instrumentation is the adapter's own business: it is the only
+		// thing that knows how to put a probe inside a function of its language.
+		r, ok := a.(Rewriter)
+		if !ok {
+			return Instrumented{}, fmt.Errorf("declares mode \"rewrite\" but does not implement trace.Rewriter")
+		}
+		out, err := r.Instrument(c.Scratch, ids)
+		if err != nil {
+			return out, err
+		}
+		for k, v := range out.Env {
+			env[k] = v
+		}
+		return out, nil
+
+	case "env":
+		dir := spec.Dir
+		if dir == "" {
+			dir = ".plum-shim-" + a.Name()
+		}
+		abs := filepath.Join(c.Scratch, dir)
+		if err := os.MkdirAll(abs, 0o755); err != nil {
+			return Instrumented{}, err
+		}
+		names := make([]string, 0, len(spec.Files))
+		for name := range spec.Files {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			path := filepath.Join(abs, name)
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				return Instrumented{}, err
+			}
+			if err := os.WriteFile(path, []byte(spec.Files[name]), 0o644); err != nil {
+				return Instrumented{}, err
+			}
+		}
+		symbols := make([]string, 0, len(ids))
+		for _, id := range ids {
+			symbols = append(symbols, string(id))
+		}
+		expand := strings.NewReplacer("${SHIM_DIR}", abs, "${SYMBOLS}", strings.Join(symbols, ","))
+		for k, v := range spec.Env {
+			env[k] = expand.Replace(v)
+		}
+		// Path-list variables are prepended to, never replaced: the project may
+		// depend on its own PYTHONPATH or NODE_PATH to import at all.
+		for _, name := range spec.PathVars {
+			value := abs
+			if existing, ok := env[name]; ok && existing != "" {
+				value = abs + string(os.PathListSeparator) + existing
+			} else if existing := os.Getenv(name); existing != "" {
+				value = abs + string(os.PathListSeparator) + existing
+			}
+			env[name] = value
+		}
+		return Instrumented{Done: ids}, nil
+	}
+	return Instrumented{}, fmt.Errorf("unknown shim mode %q", spec.Mode)
+}
+
+// targets groups the instrumentation set by adapter: changed, non-deleted,
+// non-test functions whose file that adapter claims. Only symbols present in
+// Bundle.Symbols are ever instrumented, and paying for anything else is waste.
+func (c *Collector) targets(b *bundle.Bundle) map[string][]bundle.SymbolID {
+	out := map[string][]bundle.SymbolID{}
 	for _, s := range b.Symbols {
-		if s.Change == "deleted" || filepath.Ext(s.File) != ext {
+		if s.Change == "deleted" || isTestPath(s.File) {
 			continue
 		}
 		if s.Kind != "func" && s.Kind != "method" {
 			continue
 		}
-		if isTestPath(s.File) || s.Name == "init" || s.Name == "main" {
+		if s.Name == "init" || s.Name == "main" {
 			continue
 		}
-		out = append(out, s.ID)
+		if a := c.adapterFor(s.File); a != nil {
+			out[a.Name()] = append(out[a.Name()], s.ID)
+		}
 	}
 	return out
+}
+
+func (c *Collector) adapterFor(path string) Instrumenter {
+	ext := strings.ToLower(filepath.Ext(path))
+	for _, a := range c.Adapters {
+		for _, e := range a.Extensions() {
+			if e == ext {
+				return a
+			}
+		}
+	}
+	return nil
+}
+
+// coverageNote says which languages this build can actually trace, so a session
+// with nothing to instrument explains itself.
+func (c *Collector) coverageNote() string {
+	var names []string
+	for _, a := range c.Adapters {
+		if spec, err := a.ShimSpec(nil); err == nil && spec.Mode != "none" {
+			names = append(names, a.Name())
+		}
+	}
+	if len(names) == 0 {
+		return "no configured language has a shim"
+	}
+	return "tracing covers " + strings.Join(names, ", ") + " in this repository's configured languages"
 }
 
 func isTestPath(path string) bool {
 	base := filepath.Base(path)
 	return strings.HasSuffix(base, "_test.go") ||
 		strings.HasPrefix(base, "test_") || strings.HasSuffix(base, "_test.py") ||
+		strings.HasSuffix(base, ".test.ts") || strings.HasSuffix(base, ".test.js") ||
+		strings.HasSuffix(base, ".spec.ts") || strings.HasSuffix(base, ".spec.js") ||
 		strings.Contains(filepath.ToSlash(path), "/tests/")
 }
 
-// instrumentGo rewrites the scratch copy, adding a deferred probe to each target.
-func (c *Collector) instrumentGo(b *bundle.Bundle, ids []bundle.SymbolID, res *Result) error {
-	modPath, err := modulePath(filepath.Join(c.Scratch, "go.mod"))
-	if err != nil {
-		return fmt.Errorf("tracing Go needs a go.mod at the repo root: %w", err)
+func flatten(env map[string]string) []string {
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
 	}
-	shimDir := filepath.Join(c.Scratch, "plumtrace")
-	if err := os.MkdirAll(shimDir, 0o755); err != nil {
-		return err
+	sort.Strings(keys)
+	out := make([]string, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, k+"="+env[k])
 	}
-	if err := os.WriteFile(filepath.Join(shimDir, "plumtrace.go"), []byte(GoShimSource), 0o644); err != nil {
-		return err
-	}
-	byFile := map[string][]bundle.SymbolID{}
-	for _, id := range ids {
-		byFile[id.File()] = append(byFile[id.File()], id)
-	}
-	for file, fileIDs := range byFile {
-		done, skipped, err := inject(filepath.Join(c.Scratch, file), file, fileIDs, modPath+"/plumtrace")
-		if err != nil {
-			res.Skipped = append(res.Skipped, file+": "+err.Error())
-			continue
-		}
-		res.Instrumented = append(res.Instrumented, done...)
-		res.Skipped = append(res.Skipped, skipped...)
-	}
-	return nil
-}
-
-// instrumentPython writes the sys.monitoring shim into the scratch copy and
-// returns the environment that attaches it. Nothing in the project's own source
-// is touched: CPython imports sitecustomize at startup when it is on PYTHONPATH,
-// which reaches pytest, unittest and plain scripts identically.
-func (c *Collector) instrumentPython(ids []bundle.SymbolID, res *Result) ([]string, error) {
-	shimDir := filepath.Join(c.Scratch, ".plum-shim")
-	if err := os.MkdirAll(shimDir, 0o755); err != nil {
-		return nil, err
-	}
-	if err := os.WriteFile(filepath.Join(shimDir, "plum_shim.py"), []byte(PythonShimSource), 0o644); err != nil {
-		return nil, err
-	}
-	if err := os.WriteFile(filepath.Join(shimDir, "sitecustomize.py"), []byte(PythonSiteCustomize), 0o644); err != nil {
-		return nil, err
-	}
-	symbols := make([]string, 0, len(ids))
-	for _, id := range ids {
-		symbols = append(symbols, string(id))
-	}
-	res.Instrumented = append(res.Instrumented, ids...)
-
-	pythonPath := shimDir
-	if existing := os.Getenv("PYTHONPATH"); existing != "" {
-		pythonPath += string(os.PathListSeparator) + existing
-	}
-	return []string{
-		"PYTHONPATH=" + pythonPath,
-		"PLUM_SYMBOLS=" + strings.Join(symbols, ","),
-		"PYTHONDONTWRITEBYTECODE=1",
-	}, nil
-}
-
-// inject rewrites one file in the scratch copy, adding a deferred probe to the
-// top of each target function body.
-func inject(path, rel string, ids []bundle.SymbolID, shimImport string) ([]bundle.SymbolID, []string, error) {
-	src, err := os.ReadFile(path)
-	if err != nil {
-		return nil, nil, err
-	}
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, path, src, parser.ParseComments)
-	if err != nil {
-		return nil, nil, err
-	}
-	want := map[string]bundle.SymbolID{}
-	for _, id := range ids {
-		want[id.Qualified()] = id
-	}
-
-	var done []bundle.SymbolID
-	var skipped []string
-	for _, d := range f.Decls {
-		fn, ok := d.(*ast.FuncDecl)
-		if !ok || fn.Body == nil {
-			continue
-		}
-		qual := fn.Name.Name
-		if fn.Recv != nil && len(fn.Recv.List) > 0 {
-			qual = recvName(fn.Recv.List[0].Type) + "." + fn.Name.Name
-		}
-		id, ok := want[qual]
-		if !ok {
-			continue
-		}
-		nameResults(fn)
-		stmt, err := probeStmt(id, fn)
-		if err != nil {
-			skipped = append(skipped, string(id)+": "+err.Error())
-			continue
-		}
-		fn.Body.List = append([]ast.Stmt{stmt}, fn.Body.List...)
-		done = append(done, id)
-	}
-	if len(done) == 0 {
-		return nil, skipped, nil
-	}
-	addImport(f, shimImport)
-
-	var buf bytes.Buffer
-	if err := format.Node(&buf, fset, f); err != nil {
-		return nil, skipped, err
-	}
-	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
-		return nil, skipped, err
-	}
-	return done, skipped, nil
-}
-
-// probeStmt builds `defer plumtrace.Enter("id", plumtrace.KV{...})(&r1, &r2)`.
-// Named results are passed by pointer so the deferred half reads the value the
-// caller actually saw; unnamed results are simply not recorded.
-func probeStmt(id bundle.SymbolID, fn *ast.FuncDecl) (ast.Stmt, error) {
-	call := &ast.CallExpr{
-		Fun: &ast.SelectorExpr{X: ast.NewIdent("plumtrace"), Sel: ast.NewIdent("Enter")},
-		Args: []ast.Expr{
-			&ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(string(id))},
-		},
-	}
-	if fn.Type.Params != nil {
-		for _, p := range fn.Type.Params.List {
-			if _, variadic := p.Type.(*ast.Ellipsis); variadic {
-				continue // a variadic slice formats poorly and is rarely the question
-			}
-			for _, n := range p.Names {
-				if n.Name == "_" {
-					continue
-				}
-				call.Args = append(call.Args, &ast.CompositeLit{
-					Type: &ast.SelectorExpr{X: ast.NewIdent("plumtrace"), Sel: ast.NewIdent("KV")},
-					Elts: []ast.Expr{
-						&ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(n.Name)},
-						ast.NewIdent(n.Name),
-					},
-				})
-			}
-		}
-	}
-
-	outer := &ast.CallExpr{Fun: call}
-	if fn.Type.Results != nil {
-		for _, r := range fn.Type.Results.List {
-			for _, n := range r.Names {
-				if n.Name == "_" {
-					continue
-				}
-				outer.Args = append(outer.Args, &ast.UnaryExpr{Op: token.AND, X: ast.NewIdent(n.Name)})
-			}
-		}
-	}
-	return &ast.DeferStmt{Call: outer}, nil
-}
-
-// nameResults gives unnamed results generated names, so the deferred half can
-// read the value the caller actually saw. Naming a result never changes
-// behaviour in Go — a bare `return a, b` still compiles and still returns a, b.
-func nameResults(fn *ast.FuncDecl) {
-	if fn.Type.Results == nil {
-		return
-	}
-	i := 0
-	for _, r := range fn.Type.Results.List {
-		if len(r.Names) > 0 {
-			i += len(r.Names)
-			continue
-		}
-		r.Names = []*ast.Ident{ast.NewIdent(fmt.Sprintf("plumR%d", i))}
-		i++
-	}
-}
-
-func recvName(e ast.Expr) string {
-	switch t := e.(type) {
-	case *ast.StarExpr:
-		return recvName(t.X)
-	case *ast.Ident:
-		return t.Name
-	case *ast.IndexExpr:
-		return recvName(t.X)
-	case *ast.IndexListExpr:
-		return recvName(t.X)
-	}
-	return ""
-}
-
-func addImport(f *ast.File, path string) {
-	for _, imp := range f.Imports {
-		if imp.Path != nil && imp.Path.Value == strconv.Quote(path) {
-			return
-		}
-	}
-	spec := &ast.ImportSpec{Path: &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(path)}}
-	for _, d := range f.Decls {
-		if gd, ok := d.(*ast.GenDecl); ok && gd.Tok == token.IMPORT {
-			gd.Specs = append(gd.Specs, spec)
-			return
-		}
-	}
-	f.Decls = append([]ast.Decl{&ast.GenDecl{Tok: token.IMPORT, Specs: []ast.Spec{spec}}}, f.Decls...)
-}
-
-func modulePath(gomod string) (string, error) {
-	data, err := os.ReadFile(gomod)
-	if err != nil {
-		return "", err
-	}
-	sc := bufio.NewScanner(bytes.NewReader(data))
-	for sc.Scan() {
-		if line := strings.TrimSpace(sc.Text()); strings.HasPrefix(line, "module ") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "module ")), nil
-		}
-	}
-	return "", fmt.Errorf("no module line in %s", gomod)
+	return out
 }
 
 // copyTree mirrors the working tree into the scratch directory, skipping .git

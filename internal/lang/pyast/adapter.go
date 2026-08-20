@@ -294,20 +294,24 @@ func (a *Adapter) Normalise(src []byte) ([]byte, error) {
 }
 
 // ShimSpec instruments Python with sys.monitoring, filtered to the changed set.
-// The shim is a separate process speaking JSONL; the core never absorbs it.
+// CPython imports any sitecustomize.py it finds on PYTHONPATH at startup, which
+// is what reaches pytest, unittest and plain scripts alike without any of them
+// knowing plum exists.
 func (a *Adapter) ShimSpec(syms []bundle.SymbolID) (trace.ShimSpec, error) {
-	ids := make([]string, 0, len(syms))
-	for _, s := range syms {
-		ids = append(ids, string(s))
-	}
 	return trace.ShimSpec{
 		Language: "python",
 		Mode:     "env",
 		Symbols:  syms,
-		Env: map[string]string{
-			"PLUM_TRACE":   "1",
-			"PLUM_SYMBOLS": strings.Join(ids, ","),
+		Dir:      ".plum-shim-python",
+		Files: map[string]string{
+			"plum_shim.py":     trace.PythonShimSource,
+			"sitecustomize.py": trace.PythonSiteCustomize,
 		},
+		Env: map[string]string{
+			"PLUM_SYMBOLS":            "${SYMBOLS}",
+			"PYTHONDONTWRITEBYTECODE": "1",
+		},
+		PathVars: []string{"PYTHONPATH"},
 	}, nil
 }
 

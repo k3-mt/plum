@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// The Python shim exists twice: once under shims/ where it is meant to be read
+// Each shim exists twice: once under shims/ where it is meant to be read
 // and edited, and once under internal/trace/shim_assets/ because go:embed cannot
 // reach outside its own package directory. Nothing in the compiler stops those
 // two copies drifting, and a drifted copy is the worst kind: the shipped binary
@@ -17,6 +17,7 @@ func TestEmbeddedShimsMatchTheReadableOnes(t *testing.T) {
 	}{
 		{"../../shims/python/plum_shim.py", PythonShimSource},
 		{"../../shims/python/sitecustomize.py", PythonSiteCustomize},
+		{"../../shims/node/plum-shim.cjs", NodeShimSource},
 	} {
 		want, err := os.ReadFile(tc.readable)
 		if err != nil {

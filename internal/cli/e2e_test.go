@@ -225,6 +225,7 @@ func TestPipelineEndToEnd(t *testing.T) {
 	col := &trace.Collector{
 		Root: root, Scratch: filepath.Join(t.TempDir(), "scratch"),
 		TestCommand: "go test ./...", MaxEvents: 10000,
+		Adapters: []trace.Instrumenter{gopkg.New()},
 	}
 	tres, err := col.Run(ctx, b)
 	if err != nil {

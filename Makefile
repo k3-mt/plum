@@ -21,10 +21,10 @@ test:
 golden:
 	go test ./internal/extract -run Golden -update
 
-# The Python shim is embedded from internal/trace/shim_assets because go:embed
-# cannot reach outside its package. Edit shims/python/, then run this.
+# Shims are embedded from internal/trace/shim_assets because go:embed cannot
+# reach outside its package. Edit the readable copy under shims/, then run this.
 shims:
-	cp shims/python/plum_shim.py shims/python/sitecustomize.py internal/trace/shim_assets/
+	cp shims/python/plum_shim.py shims/python/sitecustomize.py shims/node/plum-shim.cjs internal/trace/shim_assets/
 
 lint:
 	gofmt -l . | tee /dev/stderr | (! read)

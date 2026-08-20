@@ -94,7 +94,14 @@ plum gate || tmux display-popup -E -w 80% -h 80% "plum report"
 | **Go** | native `go/ast` | source-rewritten scratch copy | exact everything |
 | **Python** | the interpreter's own `ast` + `tokenize` | `sys.monitoring` shim | needs python3 on PATH; falls back to a line-based adapter without it |
 | **Config** | YAML, TOML, JSON, `.env`, INI | n/a — config is read, not executed | see below |
-| **TypeScript / JS** | line-based fallback | shim written, not yet wired | honest about what it cannot resolve |
+| **JavaScript / TypeScript** | structural scanner (brace depth, class bodies, comment state) | `--require` preload hook | CommonJS only; native ES modules are not traced |
+
+JavaScript has no parser to borrow — Node exposes no AST to userland — so its
+adapter is a structural scanner that tracks brace depth, class bodies and
+comment state rather than matching lines in isolation. That is enough to name
+every function and method exactly, which is what the SymbolIDs and the
+instrumentation set need. Braces inside strings, template literals and comments
+do not move it.
 
 Python gets the same treatment Go does: exact signatures including defaults,
 keyword-only markers and annotations; docstrings; the comment above a call site;
@@ -103,6 +110,31 @@ default arguments; `except: pass` however many lines it spans; and real recorded
 arguments and return values from `sys.monitoring`. The shim attaches through
 `sitecustomize.py` on `PYTHONPATH`, so pytest, unittest and plain scripts all
 work without knowing plum exists.
+
+### Adding a language
+
+The engine contains no language-specific instrumentation. An adapter declares
+how it attaches, and the collector honours it:
+
+```go
+func (a *Adapter) ShimSpec(syms []bundle.SymbolID) (trace.ShimSpec, error) {
+    return trace.ShimSpec{
+        Mode:     "env",                     // write these files, set this environment
+        Dir:      ".plum-shim-ruby",
+        Files:    map[string]string{"shim.rb": rubyShimSource},
+        Env:      map[string]string{"RUBYOPT": "-r${SHIM_DIR}/shim.rb",
+                                    "PLUM_SYMBOLS": "${SYMBOLS}"},
+        PathVars: []string{"RUBYLIB"},       // prepended to, never replaced
+    }, nil
+}
+```
+
+`${SHIM_DIR}` expands to the shim's absolute path in the scratch copy and
+`${SYMBOLS}` to the instrumentation set. A language that cannot be attached this
+way — Go, where a probe has to go *inside* a function — implements
+`trace.Rewriter` instead and is handed the scratch copy to rewrite. Either way
+the engine never learns the language. There is a test that instruments a
+made-up Ruby adapter end to end to keep that honest.
 
 ## Configuration files are part of the code
 

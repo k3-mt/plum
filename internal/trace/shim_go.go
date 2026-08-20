@@ -1,5 +1,8 @@
 package trace
 
+// GoShimSource is the runtime half of the Go shim, written into a scratch copy
+// by the Go adapter (which implements trace.Rewriter).
+//
 // GoShimSource is the runtime half of the Go shim. It is written into a scratch
 // copy of the repository, never into the repository itself: instrumentation is
 // a property of a trace run, not of the code under audit.

@@ -129,8 +129,14 @@ func cmdTrace(ctx context.Context, env *Env, args []string) error {
 		testCmd = *cmdOverride
 	}
 	scratch := filepath.Join(store.StateDir(env.Cfg.Root), "scratch", id)
+	// The collector instruments through whatever the configured adapters declare,
+	// so it stays the same file whether this repo is Go, Python or TypeScript.
+	var instrumenters []trace.Instrumenter
+	for _, a := range env.Reg.All() {
+		instrumenters = append(instrumenters, a)
+	}
 	c := &trace.Collector{
-		Root: env.Cfg.Root, Scratch: scratch,
+		Root: env.Cfg.Root, Scratch: scratch, Adapters: instrumenters,
 		TestCommand: testCmd, MaxEvents: env.Cfg.Trace.MaxEvents, Out: os.Stdout,
 	}
 	fmt.Printf("instrumenting %d changed symbols, running: %s\n", len(b.Symbols), testCmd)
@@ -138,7 +144,11 @@ func cmdTrace(ctx context.Context, env *Env, args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("instrumented %d symbols, recorded %d events\n", len(res.Instrumented), len(res.Events))
+	langs := ""
+	if len(res.Languages) > 0 {
+		langs = " (" + strings.Join(res.Languages, ", ") + ")"
+	}
+	fmt.Printf("instrumented %d symbols%s, recorded %d events\n", len(res.Instrumented), langs, len(res.Events))
 	for _, s := range res.Skipped {
 		fmt.Println("  skipped:", s)
 	}

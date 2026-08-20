@@ -1,9 +1,11 @@
 # Go shim
 
-The Go shim is not a file you install — it is generated. `plum trace` copies the
-working tree to a scratch directory, writes the `plumtrace` runtime package into
-it (see `internal/trace/shim_go.go`), and injects one deferred probe at the top of
-each **changed** function:
+The Go shim is not a file you install — it is generated. Go cannot be
+instrumented by dropping in a file and setting an environment variable, so its
+adapter implements `trace.Rewriter` (see `internal/lang/gopkg/instrument.go`):
+`plum trace` hands it a scratch copy of the tree, it writes the `plumtrace`
+runtime package into it (source in `internal/trace/shim_go.go`), and injects one
+deferred probe at the top of each **changed** function:
 
 ```go
 defer plumtrace.Enter("internal/auth/cache.go::Cache.Get",

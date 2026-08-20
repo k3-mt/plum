@@ -32,14 +32,57 @@ type Event struct {
 // ShimSpec tells the collector how to instrument one language for a given
 // symbol set. Only symbols present in Bundle.Symbols are ever instrumented —
 // the AST pass determines the instrumentation set (spec §4.2).
+//
+// It is declarative on purpose. Everything an "env" shim needs — the files to
+// drop into the scratch copy and the environment that attaches them — travels
+// in this struct, so the collector can honour a new language without knowing
+// anything about it. That is what makes the language seam real rather than
+// decorative: adding Ruby means writing an adapter, not editing the engine.
 type ShimSpec struct {
 	Language string
-	// Mode is how the shim attaches: "rewrite" (source instrumentation in a
-	// scratch copy), "env" (preload/require hook), or "none".
+	// Mode is how the shim attaches:
+	//   env      write Files into Dir and set Env for the test command
+	//   rewrite  the adapter rewrites the scratch copy itself (see Rewriter)
+	//   none     nothing to instrument (configuration, for instance)
 	Mode    string
-	Env     map[string]string
-	Command []string
 	Symbols []bundle.SymbolID
+
+	// Dir is the scratch subdirectory Files are written into, relative to the
+	// scratch root. Its absolute path substitutes for ${SHIM_DIR} in Env.
+	Dir string
+	// Files maps a name inside Dir to its content.
+	Files map[string]string
+	// Env is set for the test command. Values may contain ${SHIM_DIR}, and
+	// ${SYMBOLS} for the comma-separated instrumentation set.
+	Env map[string]string
+	// PathVars are environment variables with path-list semantics (PYTHONPATH,
+	// NODE_PATH) that Dir is prepended to, preserving any existing value.
+	PathVars []string
+}
+
+// Instrumenter is the slice of a language adapter the collector needs. Defined
+// here rather than imported from internal/lang so the dependency runs one way:
+// adapters know about traces, the tracer does not know about adapters.
+type Instrumenter interface {
+	Name() string
+	Extensions() []string
+	ShimSpec(syms []bundle.SymbolID) (ShimSpec, error)
+}
+
+// Rewriter is implemented by adapters whose instrumentation cannot be expressed
+// as files plus environment — Go, where a probe is injected into the source of
+// a scratch copy. The rewriting itself lives in the adapter, next to the parser
+// that understands the language.
+type Rewriter interface {
+	// Instrument rewrites files under scratchRoot in place, returning what it
+	// managed to instrument and what it had to skip.
+	Instrument(scratchRoot string, ids []bundle.SymbolID) (Instrumented, error)
+}
+
+type Instrumented struct {
+	Done    []bundle.SymbolID
+	Skipped []string
+	Env     map[string]string
 }
 
 // ReadJSONL ingests a shim's event stream. Malformed lines are skipped rather

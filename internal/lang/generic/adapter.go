@@ -349,16 +349,41 @@ func (a *Adapter) Normalise(src []byte) ([]byte, error) {
 	return []byte(strings.Join(kept, "\n")), nil
 }
 
+// ShimSpec attaches the shim for this adapter's language. Both are "env" mode:
+// files dropped into a scratch directory plus the environment that loads them.
+// The collector honours this without knowing anything about either runtime.
 func (a *Adapter) ShimSpec(syms []bundle.SymbolID) (trace.ShimSpec, error) {
 	switch a.name {
 	case "python":
-		return trace.ShimSpec{Language: "python", Mode: "env", Symbols: syms,
-			Env: map[string]string{"PYTHONPATH": "shims/python", "PLUM_TRACE": "1"}}, nil
+		return trace.ShimSpec{
+			Language: "python",
+			Mode:     "env",
+			Symbols:  syms,
+			Dir:      ".plum-shim-python",
+			Files: map[string]string{
+				"plum_shim.py":     trace.PythonShimSource,
+				"sitecustomize.py": trace.PythonSiteCustomize,
+			},
+			Env:      map[string]string{"PLUM_SYMBOLS": "${SYMBOLS}", "PYTHONDONTWRITEBYTECODE": "1"},
+			PathVars: []string{"PYTHONPATH"},
+		}, nil
+
 	case "typescript":
-		return trace.ShimSpec{Language: "node", Mode: "env", Symbols: syms,
-			Env: map[string]string{"NODE_OPTIONS": "--require ./shims/node/plum-shim.cjs", "PLUM_TRACE": "1"}}, nil
+		// NODE_OPTIONS --require preloads the shim into every node process the
+		// test command spawns, including the workers a test runner forks.
+		return trace.ShimSpec{
+			Language: "node",
+			Mode:     "env",
+			Symbols:  syms,
+			Dir:      ".plum-shim-node",
+			Files:    map[string]string{"plum-shim.cjs": trace.NodeShimSource},
+			Env: map[string]string{
+				"PLUM_SYMBOLS": "${SYMBOLS}",
+				"NODE_OPTIONS": "--require ${SHIM_DIR}/plum-shim.cjs",
+			},
+		}, nil
 	}
-	return trace.ShimSpec{}, fmt.Errorf("no shim for %s", a.name)
+	return trace.ShimSpec{Mode: "none"}, fmt.Errorf("no shim for %s", a.name)
 }
 
 func lineOffsets(src []byte) []int {

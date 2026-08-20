@@ -14,6 +14,7 @@ import (
 	"github.com/kelalaike/plum/internal/lang/conf"
 	"github.com/kelalaike/plum/internal/lang/generic"
 	"github.com/kelalaike/plum/internal/lang/gopkg"
+	"github.com/kelalaike/plum/internal/lang/js"
 	"github.com/kelalaike/plum/internal/lang/pyast"
 	"github.com/kelalaike/plum/internal/store"
 	"github.com/kelalaike/plum/internal/vcs"
@@ -145,8 +146,8 @@ func registry(cfg *config.Config) *lang.Registry {
 			} else {
 				as = append(as, generic.Python())
 			}
-		case "typescript", "javascript", "ts", "js":
-			as = append(as, generic.TypeScript())
+		case "typescript", "javascript", "ts", "js", "node":
+			as = append(as, js.New())
 		}
 	}
 	if len(as) == 0 {
