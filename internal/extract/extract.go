@@ -413,9 +413,16 @@ func isBinary(b []byte) bool {
 	return false
 }
 
+// isMigration recognises a schema migration. The .sql extension alone is not
+// enough: in a dbt project every model is a .sql file, and treating each one as
+// a migration fires the gate on every session for no reason.
 func isMigration(path string) bool {
 	p := strings.ToLower(filepath.ToSlash(path))
-	return strings.Contains(p, "migration") || strings.Contains(p, "/migrate/") || strings.HasSuffix(p, ".sql")
+	if !strings.HasSuffix(p, ".sql") {
+		return strings.Contains(p, "migration")
+	}
+	return strings.Contains(p, "migration") || strings.Contains(p, "/migrate/") ||
+		strings.Contains(p, "/schema/") || strings.Contains(p, "/ddl/")
 }
 
 func isTestFile(path string) bool {

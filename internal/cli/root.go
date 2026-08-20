@@ -12,6 +12,7 @@ import (
 	"github.com/kelalaike/plum/internal/config"
 	"github.com/kelalaike/plum/internal/lang"
 	"github.com/kelalaike/plum/internal/lang/conf"
+	"github.com/kelalaike/plum/internal/lang/dbt"
 	"github.com/kelalaike/plum/internal/lang/generic"
 	"github.com/kelalaike/plum/internal/lang/gopkg"
 	"github.com/kelalaike/plum/internal/lang/js"
@@ -144,6 +145,10 @@ func registry(cfg *config.Config) *lang.Registry {
 		switch strings.ToLower(l) {
 		case "go":
 			as = append(as, gopkg.New())
+		case "dbt", "sql":
+			// dbt publishes its own symbol table, so this reads the project
+			// rather than parsing SQL.
+			as = append(as, dbt.New(cfg.Root))
 		case "python", "py":
 			// Python parses Python: exact signatures, docstrings and comments.
 			// Falls back to the line-based adapter when no interpreter is found.

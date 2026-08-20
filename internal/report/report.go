@@ -70,20 +70,16 @@ func Render(b *bundle.Bundle, opt Options) string {
 		// Signature changes on existing exports are never truncated: they are the
 		// highest-signal event this tool produces.
 		for _, m := range b.Surface.Modified {
-			if m.Kind == "config_key" {
-				p("- **value changed** `%s`", m.Name)
-				p("    - before: `%s`", m.Before)
-				p("    - after:  `%s`", m.After)
-				p("    - nothing fails to build when a setting changes; behaviour just differs")
-				continue
-			}
-			p("- **signature changed** `%s`", m.Name)
+			p("- **%s** `%s`", changeVerb(m.Kind), m.Name)
 			p("    - before: `%s`", m.Before)
 			p("    - after:  `%s`", m.After)
-			p("    - every existing caller was written against the old shape")
+			p("    - %s", consequenceOf(m.Kind))
 		}
 		for _, it := range b.Surface.Removed {
 			p("- **removed** %s `%s` (`%s`)", it.Kind, it.Name, it.File)
+			if it.Kind == "column" {
+				p("    - every downstream model that selects it breaks at run time, not at compile time")
+			}
 		}
 		added := b.Surface.Added
 		shown, hidden := limit(len(added), opt.Verbose)
@@ -473,6 +469,40 @@ func coverage(b *bundle.Bundle, opt Options) (untested, tested []bundle.SymbolID
 	sort.Slice(untested, func(i, j int) bool { return untested[i] < untested[j] })
 	sort.Slice(tested, func(i, j int) bool { return tested[i] < tested[j] })
 	return untested, tested
+}
+
+// changeVerb and consequenceOf say what a change is and what it costs in the
+// vocabulary of the thing that changed. "Signature changed" is right for a
+// function and meaningless for a column; "callers were written against the old
+// shape" is true of code and misleading about a warehouse table, where the
+// consumers are queries that will keep running and quietly return something
+// else.
+func changeVerb(kind string) string {
+	switch kind {
+	case "config_key":
+		return "value changed"
+	case "column":
+		return "column changed"
+	case "model":
+		return "model changed"
+	case "route", "env_var", "cli_flag":
+		return "definition changed"
+	}
+	return "signature changed"
+}
+
+func consequenceOf(kind string) string {
+	switch kind {
+	case "config_key":
+		return "nothing fails to build when a setting changes; behaviour just differs"
+	case "column":
+		return "every downstream query that selects this column keeps running and returns something else"
+	case "model":
+		return "how and when this is built changed, which changes what it costs and how fresh it is"
+	case "env_var":
+		return "every environment that sets this needs updating, and nothing checks that they were"
+	}
+	return "every existing caller was written against the old shape"
 }
 
 func isTest(path string) bool {

@@ -442,6 +442,62 @@ So: cache it, diff it in a PR, feed it to a model and get a reproducible answer
 about structure. Do not treat a barrier height as a stable number — it is a
 measurement, and it is labelled as one.
 
+## dbt
+
+A dbt project publishes its own symbol table, so the adapter reads it rather
+than parsing SQL. Set `languages = ["dbt"]` and the same loop applies.
+
+| PLUM concept | dbt equivalent |
+|---|---|
+| symbol | a model, and **each declared column** |
+| public surface | a column's **type and its tests** |
+| fingerprint | normalised SQL, comments and whitespace stripped |
+| edges | the DAG, from `ref()` and `source()` |
+| call-site rationale | the `--` comment above a `ref()` |
+
+Columns are symbols in their own right because a column is the unit other people
+depend on. A dropped column breaks every downstream model that selects it and
+**nothing fails to compile**, which is exactly the change this tool exists to put
+in front of a reader:
+
+```
+- **column changed** `fct_orders.order_total`
+    - before: `NUMERIC [untested]`
+    - after:  `FLOAT64 [untested]`
+    - every downstream query that selects this column keeps running and returns something else
+- **removed** column `fct_orders.customer_id`
+    - every downstream model that selects it breaks at run time, not at compile time
+```
+
+The contract comes from the committed `schema.yml`, not from `target/manifest.json`.
+The manifest is richer but it is a build artifact and normally gitignored, so
+there is no manifest at `StartSHA` to diff against — the declared contract is
+what a reviewer actually changes, and it is what can be compared across a range.
+
+### Predicates that earn their place
+
+The failures these catch are not crashes. A model with `select *` keeps running
+perfectly while silently changing shape; an incremental model with no partition
+filter keeps returning the right answer while scanning the whole table nightly.
+Nothing goes red, which is why they are worth naming.
+
+`select_star` (including `o.*`) · `hardcoded_table` — a fully-qualified table
+instead of `ref()`, so dbt cannot see the dependency · `incremental_without_guard`
+· `incremental_without_partition` · `incremental_without_unique_key` — appends
+instead of merges, so a re-run duplicates · `nondeterministic_incremental` —
+reads the clock, so a backfill cannot reproduce · `cross_join` · `untested_key`
+· `no_grain_test` · `float_money` — decimal amounts do not round-trip through
+binary floating point.
+
+### What is not built yet
+
+Tracing. `run_results.json` already records per-node status, timing and
+BigQuery's `bytes_processed` and `slot_ms`, which maps onto the landscape
+directly — descent is a model waiting on its upstream, barrier height is bytes
+scanned, and a cliff is a failed node skipping everything downstream. Nothing
+needs instrumenting because dbt reports it natively. That is a separate slice,
+and it is the one that turns this from a linter into PLUM.
+
 ## Configuration files are part of the code
 
 A YAML key is not code, but changing one changes behaviour exactly as surely as
