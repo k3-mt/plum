@@ -228,7 +228,48 @@ function draw() {
     const wStep = stepFor('frame', i);
     g.onmouseenter = () => showStep(wStep);
     svg.appendChild(g);
+    drawJoins(svg, w, x, y, W - 20);
   });
+}
+
+// drawJoins hangs the edges the path walks past off the shoulder of a frame.
+//
+// They are deliberately not drawn as lines to other frames. The landscape reads
+// because it is a path — descend, ascend, close — and drawing the real graph
+// turns it into the hairball every lineage tool already gives you. So a join is
+// a stub: it shows that something else touches this frame, from which side, and
+// what it cost, and clicking it opens that symbol.
+function drawJoins(svg, w, x, y, width) {
+  const joins = w.joins || [];
+  if (!joins.length && !w.joins_more) return;
+  const sides = { in: joins.filter(j => j.dir === 'in'), out: joins.filter(j => j.dir !== 'in') };
+  for (const [dir, list] of Object.entries(sides)) {
+    if (!list.length) continue;
+    const edge = dir === 'in' ? x : x + width;      // enters the left, leaves the right
+    const sign = dir === 'in' ? -1 : 1;
+    list.slice(0, 3).forEach((j, k) => {
+      const gap = 5 + k * 5;
+      const g = el('g', { class: 'join' });
+      // A short hook from above the shoulder into the side of the frame.
+      g.appendChild(el('path', {
+        class: 'jstub',
+        d: `M${edge + sign * (7 + gap)},${y - 9 - k * 4} L${edge + sign * gap},${y + 6} L${edge},${y + 13}`,
+      }));
+      g.appendChild(el('path', { d: `M${edge + sign * (7 + gap)},${y - 9 - k * 4} L${edge},${y + 13}`, stroke: 'transparent', 'stroke-width': 12, fill: 'none' }));
+      const cost = j.cost_ns ? ' · ' + fmtNs(j.cost_ns) : '';
+      const where = j.on_path ? ' · also drawn on this path' : '';
+      g.appendChild(el('title', {}, (dir === 'in' ? 'also flows in: ' : 'also flows out: ') + j.symbol + cost + where));
+      g.onclick = (e) => { e.stopPropagation(); select(j.symbol, null, { copy: true }); };
+      svg.appendChild(g);
+    });
+    // Only three stubs are drawn per side; the count is the truth about how
+    // many there are, and a trailing + means the frame has more joins than the
+    // landscape kept at all (Well.JoinsMore).
+    svg.appendChild(el('text', {
+      class: 'jcount', x: edge + sign * 10, y: y - 14,
+      'text-anchor': dir === 'in' ? 'end' : 'start',
+    }, (dir === 'in' ? '↘' : '↗') + list.length + (w.joins_more ? '+' : '')));
+  }
 }
 
 // copyCallSite hands over one transition: who called whom, what it cost, and
@@ -308,6 +349,19 @@ async function select(symbol, well, opts) {
       : 'evidence copied');
   }
 
+  // What touches this frame that the drawn path walks past. Named here in full,
+  // because the canvas only has room for three stubs a side.
+  const joinRow = (well && (well.joins || []).length)
+    ? '<dt>joins</dt><dd>' + well.joins.map(j =>
+      '<div class="inv"><span class="sp-cost">' + (j.dir === 'in' ? 'also flows in' : 'also flows out') + '</span> ' +
+      '<span class="sp-code">' + escape(j.label || j.symbol) + '</span>' +
+      (j.cost_ns ? ' <span class="sp-cost">' + fmtNs(j.cost_ns) + '</span>' : '') +
+      (j.on_path ? ' <span class="muted">also drawn on this path</span>' : '') +
+      '</div>').join('') +
+    (well.joins_more ? '<div class="muted">and ' + well.joins_more + ' more not listed</div>' : '') +
+    '</dd>'
+    : '';
+
   const body = document.getElementById('rail-body');
   // Recorded values are data, and are coloured as data wherever they appear.
   const val = (v) => '<span class="sp-value">' + escape(v) + '</span>';
@@ -328,6 +382,7 @@ async function select(symbol, well, opts) {
       <dt>signature</dt><dd><code class="sp-code">${escape(pc.signature || '—')}</code></dd>
       <dt>doc</dt><dd>${pc.doc ? '<span class="sp-quote">' + escape(pc.doc) + '</span>' : '<span class="warn">no declaration doc</span>'}</dd>
       <dt>recorded invocations</dt><dd>${invs}</dd>
+      ${joinRow}
       <dt>risks</dt><dd>${(pc.risks || []).map(r => `<div class="warn">${escape(r.kind)} — ${escape(r.note)}</div>`).join('') || '<span class="muted">none</span>'}</dd>
       <dt>rationale</dt><dd>${(pc.rationale || []).map(j => '<span class="sp-quote">' + escape(j.rationale) + '</span>').join('<br>') || '<span class="muted">never recorded</span>'}</dd>
       <dt>claims</dt><dd>${(pc.seams || []).map(c => `[${c.executable ? 'executable' : 'assertion'}] ${escape(c.claim)}`).join('<br>') || '<span class="muted">none</span>'}</dd>

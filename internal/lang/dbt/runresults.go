@@ -140,10 +140,52 @@ func EventsFrom(m *Manifest, r *RunResults, rootName string, dir Direction) ([]t
 	if rootID == "" {
 		return nil, fmt.Errorf("no model named %q in this run", rootName)
 	}
+	seq, clock := 0, int64(0)
 	if dir == Upstream {
-		return walkLineage(m, byID, r, rootID, childrenUpstream(m, byID), "build "+rootName), nil
+		return walkLineage(m, byID, r, rootID, childrenUpstream(m, byID), "build "+rootName, &seq, &clock), nil
 	}
-	return walkLineage(m, byID, r, rootID, childrenDownstream(m, byID), "impact of "+rootName), nil
+	return walkLineage(m, byID, r, rootID, childrenDownstream(m, byID), "impact of "+rootName, &seq, &clock), nil
+}
+
+// joinsFor names every model edge touching a node, in both directions, with
+// what the neighbour cost in this run. The landscape subtracts whatever the
+// drawn path already walked; what survives is the lineage the picture omits —
+// the other model feeding a mart, the other mart reading a staging table.
+//
+// Inflows that did not run at all are reported too, at zero cost. "fct_orders
+// also selects stg_payments, which nothing rebuilt" is the kind of thing you
+// want to know before trusting the numbers, not after.
+func joinsFor(m *Manifest, inRun map[string]result) func(string) []trace.Join {
+	consumers := map[string][]string{}
+	for id, n := range m.Nodes {
+		if n.ResourceType == "test" {
+			continue
+		}
+		for _, dep := range n.DependsOn.Nodes {
+			consumers[dep] = append(consumers[dep], id)
+		}
+	}
+	cost := func(id string) int64 {
+		if res, ok := inRun[id]; ok {
+			return int64(res.ExecutionTime * float64(time.Second))
+		}
+		return 0
+	}
+	return func(id string) []trace.Join {
+		var out []trace.Join
+		for _, dep := range m.Nodes[id].DependsOn.Nodes {
+			n, known := m.Nodes[dep]
+			if !known || n.ResourceType == "test" || n.ResourceType == "source" {
+				continue
+			}
+			out = append(out, trace.Join{Symbol: m.symbolID(dep), Dir: "in", Nanos: cost(dep)})
+		}
+		for _, down := range consumers[id] {
+			out = append(out, trace.Join{Symbol: m.symbolID(down), Dir: "out", Nanos: cost(down)})
+		}
+		sort.Slice(out, func(a, b int) bool { return out[a].Symbol < out[b].Symbol })
+		return out
+	}
 }
 
 // childrenUpstream is what a node needs: its own depends_on, restricted to what
@@ -236,15 +278,20 @@ func Events(m *Manifest, r *RunResults) []trace.Event {
 
 	children := childrenUpstream(m, byID)
 	var events []trace.Event
+	seq, clock := 0, int64(0)
 	for _, root := range roots {
-		events = append(events, walkLineage(m, byID, r, root, children, "build "+m.Nodes[root].Name)...)
+		events = append(events, walkLineage(m, byID, r, root, children, "build "+m.Nodes[root].Name, &seq, &clock)...)
 	}
 	return events
 }
 
 // walkLineage emits one chain: entering a node, then each of its children in
 // turn, then leaving it with what it cost.
-func walkLineage(m *Manifest, byID map[string]result, r *RunResults, root string, children func(string) []string, testID string) []trace.Event {
+// seq and clock are owned by the caller and shared across every root it walks.
+// Two chains that mint the same invocation IDs and the same timestamps are one
+// chain as far as anything downstream can tell, and the landscape splices them.
+func walkLineage(m *Manifest, byID map[string]result, r *RunResults, root string, children func(string) []string, testID string, seq *int, clock *int64) []trace.Event {
+	joins := joinsFor(m, byID)
 	testsFor := map[string][]result{}
 	for id, res := range byID {
 		if m.Nodes[id].ResourceType != "test" {
@@ -256,8 +303,6 @@ func walkLineage(m *Manifest, byID map[string]result, r *RunResults, root string
 	}
 
 	var events []trace.Event
-	clock := int64(0)
-	counter := 0
 	visiting := map[string]bool{}
 
 	var walk func(id string, depth int, parent string)
@@ -272,8 +317,8 @@ func walkLineage(m *Manifest, byID map[string]result, r *RunResults, root string
 
 		res, ran := byID[id]
 		n := m.Nodes[id]
-		counter++
-		invocation := fmt.Sprintf("%s-%d", r.Metadata.InvocationID, counter)
+		*seq++
+		invocation := fmt.Sprintf("%s-%d", r.Metadata.InvocationID, *seq)
 		sym := m.symbolID(id)
 
 		args := map[string]string{}
@@ -287,11 +332,12 @@ func walkLineage(m *Manifest, byID map[string]result, r *RunResults, root string
 			args["not in this run"] = "true"
 		}
 
-		clock += int64(time.Millisecond)
+		*clock += int64(time.Millisecond)
 		events = append(events, trace.Event{
 			SchemaVersion: trace.SchemaVersion,
 			Kind:          "call", Symbol: sym, InvocationID: invocation,
-			ParentID: parent, Depth: depth, TSNanos: clock, Args: args, TestID: testID,
+			ParentID: parent, Depth: depth, TSNanos: *clock, Args: args, TestID: testID,
+			Joins: joins(id),
 		})
 
 		for _, child := range children(id) {
@@ -303,60 +349,60 @@ func walkLineage(m *Manifest, byID map[string]result, r *RunResults, root string
 		// part of building it, and a failing test is what makes the answer
 		// untrustworthy rather than a separate event afterwards.
 		for _, test := range testsFor[id] {
-			counter++
-			clock += int64(time.Millisecond)
-			testInvocation := fmt.Sprintf("%s-t%d", r.Metadata.InvocationID, counter)
+			*seq++
+			*clock += int64(time.Millisecond)
+			testInvocation := fmt.Sprintf("%s-t%d", r.Metadata.InvocationID, *seq)
 			testSym := m.symbolID(test.UniqueID)
 			events = append(events, trace.Event{
 				SchemaVersion: trace.SchemaVersion, Kind: "call", Symbol: testSym,
 				InvocationID: testInvocation, ParentID: invocation, Depth: depth + 1,
-				TSNanos: clock, TestID: testID,
+				TSNanos: *clock, TestID: testID,
 				Args: map[string]string{"tests": n.Name},
 			})
-			clock += int64(test.ExecutionTime * float64(time.Second))
+			*clock += int64(test.ExecutionTime * float64(time.Second))
 			if test.Status == "fail" || test.Status == "error" {
 				events = append(events, trace.Event{
 					SchemaVersion: trace.SchemaVersion, Kind: "raise", Symbol: testSym,
 					InvocationID: testInvocation, ParentID: invocation, Depth: depth + 1,
-					TSNanos: clock, Exception: testFailure(m, test), TestID: testID,
+					TSNanos: *clock, Exception: testFailure(m, test), TestID: testID,
 				})
 				continue
 			}
 			events = append(events, trace.Event{
 				SchemaVersion: trace.SchemaVersion, Kind: "return", Symbol: testSym,
-				InvocationID: testInvocation, Depth: depth + 1, TSNanos: clock,
+				InvocationID: testInvocation, Depth: depth + 1, TSNanos: *clock,
 				Result: "passed" + scanned(test), TestID: testID,
 			})
 		}
 
-		clock += int64(res.ExecutionTime * float64(time.Second))
+		*clock += int64(res.ExecutionTime * float64(time.Second))
 		if res.ExecutionTime == 0 {
-			clock += int64(time.Millisecond)
+			*clock += int64(time.Millisecond)
 		}
 
 		switch {
 		case !ran:
 			events = append(events, trace.Event{
 				SchemaVersion: trace.SchemaVersion, Kind: "return", Symbol: sym,
-				InvocationID: invocation, Depth: depth, TSNanos: clock,
+				InvocationID: invocation, Depth: depth, TSNanos: *clock,
 				Result: "not selected in this run", TestID: testID,
 			})
 		case res.Status == "error" || res.Status == "fail" || res.Status == "runtime error":
 			events = append(events, trace.Event{
 				SchemaVersion: trace.SchemaVersion, Kind: "raise", Symbol: sym,
-				InvocationID: invocation, Depth: depth, TSNanos: clock,
+				InvocationID: invocation, Depth: depth, TSNanos: *clock,
 				Exception: failureText(res), TestID: testID,
 			})
 		case res.Status == "skipped":
 			events = append(events, trace.Event{
 				SchemaVersion: trace.SchemaVersion, Kind: "return", Symbol: sym,
-				InvocationID: invocation, Depth: depth, TSNanos: clock,
+				InvocationID: invocation, Depth: depth, TSNanos: *clock,
 				Result: "skipped — an upstream node failed", TestID: testID,
 			})
 		default:
 			events = append(events, trace.Event{
 				SchemaVersion: trace.SchemaVersion, Kind: "return", Symbol: sym,
-				InvocationID: invocation, Depth: depth, TSNanos: clock,
+				InvocationID: invocation, Depth: depth, TSNanos: *clock,
 				Result: outcome(res), TestID: testID,
 			})
 		}

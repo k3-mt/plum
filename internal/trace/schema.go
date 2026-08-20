@@ -27,6 +27,29 @@ type Event struct {
 	Result        string            `json:"result"`
 	Exception     string            `json:"exception"`
 	TestID        string            `json:"test_id"`
+	// Joins names edges touching this frame that the recorded path does not
+	// walk: the other callers of a shared helper, the other models feeding a
+	// mart. A trace is one cut through a graph, and without this a frame looks
+	// like it has one source when it has three. Producers fill Symbol, Dir and
+	// Nanos; the landscape fills the rest once it knows what it drew.
+	Joins []Join `json:"joins,omitempty"`
+}
+
+// Join is one edge into or out of a frame that the drawn path does not follow.
+type Join struct {
+	Symbol bundle.SymbolID `json:"symbol"`
+	// Dir is which way the untaken edge points, from this frame's point of view:
+	//   in   something else also feeds this frame
+	//   out  something else also consumes this frame
+	Dir string `json:"dir"`
+	// Nanos is what that neighbour cost in the same run, when the producer knows.
+	// Zero means unknown, never free.
+	Nanos int64 `json:"cost_ns,omitempty"`
+
+	// Label and OnPath are filled by Derive, which is the only thing that knows
+	// what ended up on the picture.
+	Label  string `json:"label,omitempty"`
+	OnPath bool   `json:"on_path,omitempty"`
 }
 
 // ShimSpec tells the collector how to instrument one language for a given

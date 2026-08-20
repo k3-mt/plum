@@ -460,6 +460,9 @@ func printLandscape(l trace.Landscape) {
 			open, close = "(", ")" // thin brackets: passed through, not changed
 		}
 		fmt.Printf("%s%s%s%s%s%s\n", indent, open, w.Label, close, phase, marks)
+		for _, line := range joinLines(w) {
+			fmt.Println(indent + "  " + line)
+		}
 	}
 	fmt.Println()
 	for _, n := range l.Notes() {
@@ -468,6 +471,49 @@ func printLandscape(l trace.Landscape) {
 	for _, u := range l.UnannotatedExpensive() {
 		fmt.Println("·", strings.ReplaceAll(u, "`", ""))
 	}
+}
+
+// joinLines names what touches a frame that the drawn path walks past. The path
+// stays one line; this hangs off its shoulder, because the alternative is
+// drawing the graph and losing the reason the path is readable at all.
+func joinLines(w trace.Well) []string {
+	if len(w.Joins) == 0 && w.JoinsMore == 0 {
+		return nil
+	}
+	byDir := map[string][]string{}
+	for _, j := range w.Joins {
+		part := j.Label
+		if j.Nanos > 0 {
+			part += " " + time.Duration(j.Nanos).Round(time.Millisecond).String()
+		}
+		if j.OnPath {
+			part += " (drawn elsewhere)"
+		}
+		byDir[j.Dir] = append(byDir[j.Dir], part)
+	}
+	var out []string
+	for _, d := range []struct{ dir, arrow, word string }{
+		{"in", "⇢", "in"},
+		{"out", "⇠", "out"},
+	} {
+		names := byDir[d.dir]
+		if len(names) == 0 {
+			continue
+		}
+		out = append(out, fmt.Sprintf("%s %d other way%s %s · %s",
+			d.arrow, len(names), plural(len(names)), d.word, strings.Join(names, ", ")))
+	}
+	if w.JoinsMore > 0 {
+		out = append(out, fmt.Sprintf("  … and %d more not listed", w.JoinsMore))
+	}
+	return out
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }

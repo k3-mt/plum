@@ -323,3 +323,164 @@ func TestContextFramesAreNotCountedAsDocumentationDebt(t *testing.T) {
 		}
 	}
 }
+
+// wellFor finds the entered frame for a symbol.
+func wellFor(t *testing.T, l Landscape, sym bundle.SymbolID) Well {
+	t.Helper()
+	for _, w := range l.Wells {
+		if w.Symbol == sym && w.Phase == "enter" {
+			return w
+		}
+	}
+	t.Fatalf("no entered well for %s", sym)
+	return Well{}
+}
+
+func joinNames(w Well, dir string) []string {
+	var out []string
+	for _, j := range w.Joins {
+		if j.Dir == dir {
+			out = append(out, j.Label)
+		}
+	}
+	return out
+}
+
+// A trace is one cut through a graph. The frames on either side of that cut —
+// the other callers of a shared helper — are the thing the picture leaves out,
+// and leaving them out silently is how a landscape reads as complete when it is
+// a slice.
+func TestJoinsNameTheCallersThePathDidNotWalk(t *testing.T) {
+	b := testBundle()
+	// Two chains in one run. Only the first is drawn, but lookup is reached
+	// from both, so the drawn one is a slice of lookup's real traffic.
+	ev := []Event{
+		call("a.go::Verify", "1", "", 0, 0),
+		call("a.go::lookup", "2", "1", 1, 100),
+		ret("a.go::lookup", "2", 1, 200, "tok"),
+		ret("a.go::Verify", "1", 0, 300, "ok"),
+
+		call("a.go::MustGet", "3", "", 0, 400),
+		call("a.go::lookup", "4", "3", 1, 500),
+		ret("a.go::lookup", "4", 1, 600, "tok"),
+		ret("a.go::MustGet", "3", 0, 700, "tok"),
+	}
+	l := DeriveChain(ev, b, ChainHottest)
+
+	w := wellFor(t, l, "a.go::lookup")
+	if got := joinNames(w, "in"); len(got) != 1 || got[0] != "MustGet" {
+		t.Fatalf("lookup's other caller should be named, got %v", got)
+	}
+	if w.Joins[0].OnPath {
+		t.Error("MustGet is not on the drawn path; saying it is sends the reader looking for it")
+	}
+
+	// The frame the path *did* come in through is on the picture already.
+	for _, j := range w.Joins {
+		if j.Symbol == "a.go::Verify" {
+			t.Error("the way in is drawn as a barrier; repeating it as a join is noise")
+		}
+	}
+	// And a frame reached only one way has nothing to report.
+	if got := joinNames(wellFor(t, l, "a.go::Verify"), "in"); len(got) != 0 {
+		t.Errorf("Verify has no other callers, got %v", got)
+	}
+}
+
+// A neighbour the path descends into from this very frame is on the picture. A
+// neighbour it reached from somewhere else is not, but it is still drawn, and
+// saying so keeps the reader from hunting for a frame that is right there.
+func TestJoinsSkipWhatThePathAlreadyDraws(t *testing.T) {
+	b := testBundle()
+	ev := []Event{
+		call("a.go::Verify", "1", "", 0, 0),
+		call("a.go::check", "2", "1", 1, 100),
+		call("a.go::lookup", "3", "2", 2, 200),
+		ret("a.go::lookup", "3", 2, 300, "tok"),
+		ret("a.go::check", "2", 1, 400, "true"),
+		call("a.go::lookup", "4", "1", 1, 500), // Verify calls lookup directly too
+		ret("a.go::lookup", "4", 1, 600, "tok"),
+		ret("a.go::Verify", "1", 0, 700, "ok"),
+	}
+	l := DeriveChain(ev, b, ChainHottest)
+
+	// Verify descends into both check and lookup, so neither is a road not taken.
+	if got := len(wellFor(t, l, "a.go::Verify").Joins); got != 0 {
+		t.Errorf("Verify walks to everything it touches; got %d joins", got)
+	}
+	// check's other outflow is lookup — but the path draws lookup elsewhere.
+	w := wellFor(t, l, "a.go::lookup")
+	for _, j := range w.Joins {
+		if j.Symbol == "a.go::check" && !j.OnPath {
+			t.Error("check is drawn on this path; the join should say so")
+		}
+	}
+}
+
+// Static edges answer the same question as the run, one step earlier: a caller
+// that exists in the code but never fired is still a way into this frame.
+func TestJoinsIncludeStaticCallersThatNeverRan(t *testing.T) {
+	b := testBundle()
+	b.Edges = []bundle.Edge{{From: "a.go::MustGet", To: "a.go::lookup", Kind: "call"}}
+	ev := []Event{
+		call("a.go::Verify", "1", "", 0, 0),
+		call("a.go::lookup", "2", "1", 1, 100),
+		ret("a.go::lookup", "2", 1, 200, "tok"),
+		ret("a.go::Verify", "1", 0, 300, "ok"),
+	}
+	l := DeriveChain(ev, b, ChainHottest)
+	if got := joinNames(wellFor(t, l, "a.go::lookup"), "in"); len(got) != 1 || got[0] != "MustGet" {
+		t.Errorf("a caller that never fired is still a caller, got %v", got)
+	}
+}
+
+// A ref edge points at what it selects, so its source sits downstream. Reading
+// it as a call puts the lineage backwards, which is worse than omitting it.
+func TestRefEdgesJoinOutwardNotInward(t *testing.T) {
+	b := &bundle.Bundle{
+		Session: bundle.Session{ID: "s1"},
+		Symbols: []bundle.Symbol{
+			{ID: "stg.sql::stg_orders", Name: "stg_orders"},
+			{ID: "fct.sql::fct_orders", Name: "fct_orders"},
+			{ID: "dim.sql::dim_customers", Name: "dim_customers"},
+		},
+		Edges: []bundle.Edge{{From: "dim.sql::dim_customers", To: "stg.sql::stg_orders", Kind: "ref"}},
+	}
+	ev := []Event{
+		call("fct.sql::fct_orders", "1", "", 0, 0),
+		call("stg.sql::stg_orders", "2", "1", 1, 100),
+		ret("stg.sql::stg_orders", "2", 1, 200, ""),
+		ret("fct.sql::fct_orders", "1", 0, 300, ""),
+	}
+	l := DeriveChain(ev, b, ChainHottest)
+	w := wellFor(t, l, "stg.sql::stg_orders")
+	if got := joinNames(w, "out"); len(got) != 1 || got[0] != "dim_customers" {
+		t.Fatalf("dim_customers selects stg_orders, so it is a way out; got out=%v in=%v",
+			got, joinNames(w, "in"))
+	}
+}
+
+// A hub with a hundred callers is a fact worth knowing. Printing a hundred names
+// on a shoulder is not reading material, and silently keeping eight would make
+// the frame look better connected than it is.
+func TestJoinsAreBoundedAndTheRemainderIsReported(t *testing.T) {
+	b := testBundle()
+	ev := []Event{
+		call("a.go::Verify", "1", "", 0, 0),
+		call("a.go::lookup", "2", "1", 1, 100),
+		ret("a.go::lookup", "2", 1, 200, "tok"),
+		ret("a.go::Verify", "1", 0, 300, "ok"),
+	}
+	for i := 0; i < maxJoins+5; i++ {
+		id := bundle.SymbolID("h.go::caller" + string(rune('a'+i)))
+		b.Symbols = append(b.Symbols, bundle.Symbol{ID: id, Name: "caller" + string(rune('a'+i))})
+		b.Edges = append(b.Edges, bundle.Edge{From: id, To: "a.go::lookup", Kind: "call"})
+	}
+	w := wellFor(t, DeriveChain(ev, b, ChainHottest), "a.go::lookup")
+	if len(w.Joins) != maxJoins {
+		t.Errorf("kept %d joins, want the budget of %d", len(w.Joins), maxJoins)
+	}
+	if w.JoinsMore != 5 {
+		t.Errorf("JoinsMore = %d, want 5 — the count is the honest part", w.JoinsMore)
+	}
+}

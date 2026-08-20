@@ -329,3 +329,105 @@ func addNode(t *testing.T, dir, id string, node, result map[string]any) {
 		}
 	}
 }
+
+// Walking one line of lineage hides the others. fct_orders selects two staging
+// models; a walk that arrives from one of them must still say the other exists,
+// or the picture reads as the whole story when it is one branch of it.
+func TestDownstreamWalkNamesTheOtherInflow(t *testing.T) {
+	dir := writeRun(t)
+	addNode(t, dir, "model.shop.stg_payments", map[string]any{
+		"unique_id": "model.shop.stg_payments", "name": "stg_payments", "resource_type": "model",
+		"original_file_path": "models/staging/stg_payments.sql",
+		"depends_on":         map[string]any{"nodes": []string{}},
+		"config":             map[string]any{"materialized": "view"},
+	}, map[string]any{
+		"unique_id": "model.shop.stg_payments", "status": "success", "execution_time": 3.0,
+		"adapter_response": map[string]any{"rows_affected": 900000},
+	})
+	// The mart now selects both staging models; the walk still arrives from one.
+	addNode(t, dir, "model.shop.fct_orders", map[string]any{
+		"unique_id": "model.shop.fct_orders", "name": "fct_orders", "resource_type": "model",
+		"original_file_path": "models/marts/fct_orders.sql",
+		"depends_on": map[string]any{"nodes": []string{
+			"model.shop.stg_orders", "model.shop.stg_payments"}},
+		"config": map[string]any{"materialized": "incremental", "unique_key": "order_id"},
+	}, map[string]any{
+		"unique_id": "model.shop.fct_orders", "status": "success", "execution_time": 40.0,
+		"adapter_response": map[string]any{"rows_affected": 2481003},
+	})
+
+	m, r, err := LoadRun(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := EventsFrom(m, r, "stg_orders", Downstream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fct *trace.Event
+	for i, e := range events {
+		if e.Kind == "call" && e.Symbol == "models/marts/fct_orders.sql::fct_orders" {
+			fct = &events[i]
+			break
+		}
+	}
+	if fct == nil {
+		t.Fatal("no fct_orders frame")
+	}
+	var in []string
+	for _, j := range fct.Joins {
+		if j.Dir == "in" {
+			in = append(in, string(j.Symbol))
+		}
+	}
+	want := "models/staging/stg_payments.sql::stg_payments"
+	if !slicesContains(in, want) {
+		t.Errorf("inflows = %v, want %s among them", in, want)
+	}
+	// Cost travels with the join: an inflow you cannot see is still on the bill.
+	for _, j := range fct.Joins {
+		if string(j.Symbol) == want && j.Nanos <= 0 {
+			t.Error("stg_payments ran in this run, so its cost is known and belongs on the join")
+		}
+	}
+}
+
+// Every root walked its own chain from a zero clock and a zero counter, so two
+// chains minted the same invocation IDs at the same timestamps — which is one
+// chain as far as the landscape can tell, and it spliced them.
+func TestChainsDoNotShareInvocationIDs(t *testing.T) {
+	dir := writeRun(t)
+	addNode(t, dir, "model.shop.dim_customers", map[string]any{
+		"unique_id": "model.shop.dim_customers", "name": "dim_customers", "resource_type": "model",
+		"original_file_path": "models/marts/dim_customers.sql",
+		"depends_on":         map[string]any{"nodes": []string{"model.shop.stg_orders"}},
+		"config":             map[string]any{"materialized": "table"},
+	}, map[string]any{
+		"unique_id": "model.shop.dim_customers", "status": "success", "execution_time": 22.0,
+		"adapter_response": map[string]any{"rows_affected": 418772},
+	})
+	m, r, err := LoadRun(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	events := Events(m, r)
+	seen := map[string]bool{}
+	for _, e := range events {
+		if e.Kind != "call" {
+			continue
+		}
+		if seen[e.InvocationID] {
+			t.Fatalf("invocation %s minted twice; chains will splice", e.InvocationID)
+		}
+		seen[e.InvocationID] = true
+	}
+}
+
+func slicesContains(hay []string, needle string) bool {
+	for _, s := range hay {
+		if s == needle {
+			return true
+		}
+	}
+	return false
+}

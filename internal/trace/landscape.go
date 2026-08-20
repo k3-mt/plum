@@ -25,7 +25,18 @@ type Well struct {
 	// inside the system it perturbs rather than floating free of it.
 	Context     bool     `json:"context"`
 	Invocations []string `json:"invocations"`
+	// Joins are the edges touching this frame that the drawn path does not
+	// follow. The path stays a path — this is what it is not showing, named on
+	// the shoulder of the frame rather than drawn as another line.
+	Joins []Join `json:"joins,omitempty"`
+	// JoinsMore counts joins past the render budget. Reported, never hidden.
+	JoinsMore int `json:"joins_more,omitempty"`
 }
+
+// maxJoins bounds what one frame reports. A hub with two hundred callers is a
+// fact worth knowing, but listing all two hundred on a shoulder is not reading
+// material (P6); the count survives in JoinsMore.
+const maxJoins = 8
 
 // Barrier is the transition between two wells. Descent is entering a call,
 // ascent is returning, and an unwind spanning several frames is a cliff.
@@ -122,6 +133,11 @@ func deriveChain(events []Event, b *bundle.Bundle, pick Chain) Landscape {
 
 	var stack []int // indices into wells, innermost last
 	openArgs := map[string]map[string]string{}
+	// What the drawn path actually walked, per entered well: the frame above it
+	// and the frames below it. Joins are everything else touching the node, so
+	// this is the set that gets subtracted.
+	parentOf := map[int]bundle.SymbolID{}
+	childrenOf := map[int]map[bundle.SymbolID]bool{}
 
 	emit := func(sym bundle.SymbolID, depth int, phase string, inv string) int {
 		s := b.Lookup(sym)
@@ -179,12 +195,21 @@ func deriveChain(events []Event, b *bundle.Bundle, pick Chain) Landscape {
 			if len(stack) > 0 {
 				parent = l.Wells[stack[len(stack)-1]].Symbol
 			}
-			emit(ev.Symbol, ev.Depth, "enter", formatArgs(ev))
+			idx := emit(ev.Symbol, ev.Depth, "enter", formatArgs(ev))
+			l.Wells[idx].Joins = append(l.Wells[idx].Joins, ev.Joins...)
 			openArgs[ev.InvocationID] = ev.Args
 			if i > 0 {
 				link("descend", ev.TSNanos-prevTS, 1, ev, parent)
 			}
-			stack = append(stack, len(l.Wells)-1)
+			if len(stack) > 0 {
+				above := stack[len(stack)-1]
+				parentOf[idx] = parent
+				if childrenOf[above] == nil {
+					childrenOf[above] = map[bundle.SymbolID]bool{}
+				}
+				childrenOf[above][ev.Symbol] = true
+			}
+			stack = append(stack, idx)
 
 		case "return":
 			if len(stack) == 0 {
@@ -247,7 +272,120 @@ func deriveChain(events []Event, b *bundle.Bundle, pick Chain) Landscape {
 			l.HotPath = append(l.HotPath, string(w.Symbol))
 		}
 	}
+	attachJoins(&l, events, b, parentOf, childrenOf)
 	return l
+}
+
+// attachJoins names, per entered frame, the edges the drawn path did not walk.
+//
+// Three sources, all evidence already on disk (P1). Producers that know their
+// own graph — dbt reading depends_on — declare joins on the call event. The
+// bundle's static edges say who calls a symbol. And the full event stream says
+// who called it in this run, across every chain, not only the one drawn. The
+// third is the interesting one: it is the difference between "this has four
+// callers" and "your test exercised one of its four callers".
+func attachJoins(l *Landscape, events []Event, b *bundle.Bundle, parentOf map[int]bundle.SymbolID, childrenOf map[int]map[bundle.SymbolID]bool) {
+	// Who invoked whom, over every chain in the run.
+	invSym := make(map[string]bundle.SymbolID, len(events))
+	for _, ev := range events {
+		if ev.Kind == "call" {
+			invSym[ev.InvocationID] = ev.Symbol
+		}
+	}
+	callers := map[bundle.SymbolID]map[bundle.SymbolID]bool{}
+	callees := map[bundle.SymbolID]map[bundle.SymbolID]bool{}
+	for _, ev := range events {
+		if ev.Kind != "call" || ev.ParentID == "" {
+			continue
+		}
+		up, ok := invSym[ev.ParentID]
+		if !ok || up == ev.Symbol {
+			continue
+		}
+		add(callers, ev.Symbol, up)
+		add(callees, up, ev.Symbol)
+	}
+
+	drawn := map[bundle.SymbolID]bool{}
+	for _, w := range l.Wells {
+		if w.Phase == "enter" {
+			drawn[w.Symbol] = true
+		}
+	}
+
+	for i := range l.Wells {
+		w := &l.Wells[i]
+		if w.Phase != "enter" {
+			continue
+		}
+		seen := map[bundle.SymbolID]bool{w.Symbol: true}
+		if p, ok := parentOf[i]; ok {
+			seen[p] = true // the way in is on the picture already
+		}
+		var found []Join
+		keep := func(j Join) {
+			if j.Symbol == "" || seen[j.Symbol] {
+				return
+			}
+			// A neighbour the path descends into from this very frame is on the
+			// picture already, whichever way the data flows through it. Only
+			// what the path walks past is a road not taken.
+			if childrenOf[i][j.Symbol] {
+				return
+			}
+			seen[j.Symbol] = true
+			s := b.Lookup(j.Symbol)
+			j.Label = s.Name
+			if j.Label == "" {
+				j.Label = string(j.Symbol)
+			}
+			j.OnPath = drawn[j.Symbol]
+			found = append(found, j)
+		}
+		for _, j := range w.Joins { // declared by the producer
+			keep(j)
+		}
+		for _, e := range b.EdgesTo(w.Symbol) { // static: who points at this
+			// A call edge points at what it invokes, so its source is another
+			// way in. A dbt ref edge points at what it selects, so its source
+			// sits downstream and is another way out. Same arrow, opposite
+			// meaning; reading it as a call would put the lineage backwards.
+			dir := "in"
+			if e.Kind == "ref" {
+				dir = "out"
+			}
+			keep(Join{Symbol: e.From, Dir: dir})
+		}
+		for up := range callers[w.Symbol] { // dynamic: who did, this run
+			keep(Join{Symbol: up, Dir: "in"})
+		}
+		// Outflow comes only from what the run actually did. Static callees
+		// would list every branch this frame never took, which is a different
+		// question and already answered in the symbol brief.
+		for down := range callees[w.Symbol] {
+			keep(Join{Symbol: down, Dir: "out"})
+		}
+		sort.Slice(found, func(a, c int) bool {
+			if found[a].Dir != found[c].Dir {
+				return found[a].Dir < found[c].Dir // "in" before "out"
+			}
+			if found[a].Nanos != found[c].Nanos {
+				return found[a].Nanos > found[c].Nanos // dearest first
+			}
+			return found[a].Symbol < found[c].Symbol
+		})
+		w.Joins = found
+		if len(found) > maxJoins {
+			w.Joins, w.JoinsMore = found[:maxJoins], len(found)-maxJoins
+		}
+	}
+}
+
+func add(m map[bundle.SymbolID]map[bundle.SymbolID]bool, k, v bundle.SymbolID) {
+	if m[k] == nil {
+		m[k] = map[bundle.SymbolID]bool{}
+	}
+	m[k][v] = true
 }
 
 // representativeChain picks one invocation tree to render: the hottest path, or

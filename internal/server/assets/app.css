@@ -1,7 +1,7 @@
 :root {
   --bg: #0f1113; --fg: #e6e3dd; --dim: #8b8b86; --line: #2a2d31;
   --enter: #7fb5d5; --resume: #43596b; --risk: #d98b6a; --accent: #b6d97f;
-  --unwind: #d9666a; --context: #4a4f55;
+  --unwind: #d9666a; --context: #4a4f55; --join: #9d8ec9;
 }
 * { box-sizing: border-box; }
 body {
@@ -30,6 +30,12 @@ button:hover { border-color: var(--accent); color: var(--accent); }
 .k-risk { background: var(--risk); }
 .k-unwind { background: var(--unwind); }
 .k-context { background: var(--context); }
+.k-join { border-left: 2px dashed var(--join); }
+.join { cursor: pointer; }
+.join:hover .jstub { stroke: var(--accent); }
+.join:hover .jcount { fill: var(--accent); }
+.jstub { stroke: var(--join); fill: none; stroke-width: 1.2; stroke-dasharray: 2 2; }
+.jcount { font-size: 9px; fill: var(--join); pointer-events: none; }
 #svgwrap { overflow-x: auto; }
 svg { display: block; }
 .well { cursor: pointer; }
