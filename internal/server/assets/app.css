@@ -39,6 +39,22 @@ svg { display: block; }
 .wlabel { font-size: 10px; fill: var(--fg); pointer-events: none; }
 .blabel { font-size: 9px; fill: var(--dim); pointer-events: none; }
 .closed { color: var(--unwind); font-size: .8rem; padding: .3rem 0 .6rem; }
+.summary {
+  padding: .7rem 1rem; border-bottom: 1px solid var(--line);
+  font-size: .85rem; line-height: 1.6; color: #cdd6cf;
+}
+.hover {
+  min-height: 2.6rem; padding: .5rem .7rem; margin: .4rem 0 .2rem;
+  border-left: 2px solid var(--accent); background: #14181b;
+  font-size: .82rem; line-height: 1.55; color: #cdd6cf;
+}
+.hover .warn { display: block; margin-top: .25rem; }
+#story ol { margin: 0; padding-left: 1.2rem; }
+#story li { margin-bottom: .5rem; font-size: 12px; line-height: 1.55; color: #cdd6cf; cursor: pointer; }
+#story li.transition { color: var(--dim); list-style: none; margin-left: -.6rem; }
+#story li.active { color: var(--accent); }
+#story li .warn { display: block; font-size: 11px; margin-top: .15rem; }
+main { align-items: start; }
 main { display: grid; grid-template-columns: 1fr 420px; gap: 0; min-height: 40vh; }
 .pane { padding: 1rem; }
 #rail { border-left: 1px solid var(--line); }

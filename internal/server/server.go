@@ -103,7 +103,12 @@ func (s *Server) Serve(ctx context.Context, addr string, open bool) error {
 }
 
 type landscapePayload struct {
-	AskRoute    string          `json:"ask_route"`
+	AskRoute string `json:"ask_route"`
+	// Summary and Narration say what the recording actually did, in plain
+	// language composed from the evidence. A landscape names symbols; on its own
+	// it does not tell you what happened.
+	Summary     string          `json:"summary"`
+	Narration   []trace.Step    `json:"narration"`
 	Session     bundle.Session  `json:"session"`
 	Landscape   trace.Landscape `json:"landscape"`
 	Gate        bundle.Gate     `json:"gate"`
@@ -116,8 +121,10 @@ type landscapePayload struct {
 
 func (s *Server) handleLandscape(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, landscapePayload{
-		AskRoute: s.askRoute(),
-		Session:  s.Bundle.Session, Landscape: s.Landscape, Gate: s.Bundle.Gate,
+		AskRoute:  s.askRoute(),
+		Summary:   trace.Summary(s.Landscape, s.Bundle),
+		Narration: trace.Narrate(s.Landscape, s.Bundle),
+		Session:   s.Bundle.Session, Landscape: s.Landscape, Gate: s.Bundle.Gate,
 		Synthesis: s.Synthesis, Claims: s.Claims, Symbols: s.Bundle.Symbols,
 		Notes: s.Landscape.Notes(), Unannotated: s.Landscape.UnannotatedExpensive(),
 	})

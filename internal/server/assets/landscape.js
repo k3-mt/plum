@@ -21,6 +21,8 @@ async function boot() {
     notes.innerHTML += '<br>expensive and unexplained: ' +
       DATA.unannotated.map(u => u.replace(/`(.+?)`/g, '<code>$1</code>')).join('; ');
   }
+  document.getElementById('summary').textContent = DATA.summary || '';
+  drawNarration();
   draw();
   document.getElementById('done').onclick = async () => {
     await fetch('/api/done', { method: 'POST' });
@@ -33,6 +35,58 @@ async function boot() {
     document.getElementById('keep-' + kind).onclick = () => keep(kind);
   }
   document.getElementById('q').addEventListener('keydown', e => { if (e.key === 'Enter') ask(); });
+}
+
+// The narration is the same evidence the landscape draws, said in sentences.
+// Hovering a shape shows its line; the list below shows all of them in order.
+function drawNarration() {
+  const list = document.getElementById('steps');
+  list.innerHTML = '';
+  (DATA.narration || []).forEach((step, i) => {
+    const li = document.createElement('li');
+    li.className = step.kind;
+    li.dataset.step = i;
+    li.textContent = step.text;
+    if (step.note) {
+      const warn = document.createElement('span');
+      warn.className = 'warn';
+      warn.textContent = '\u26a0 ' + step.note;
+      li.appendChild(warn);
+    }
+    if (step.kind === 'frame' && step.index >= 0) {
+      li.onclick = () => select(DATA.landscape.wells[step.index].symbol);
+      li.onmouseenter = () => showStep(i);
+    }
+    list.appendChild(li);
+  });
+}
+
+// stepFor maps a shape back to its sentence: frames by well index, transitions
+// by the well they land on.
+function stepFor(kind, idx) {
+  const steps = DATA.narration || [];
+  for (let i = 0; i < steps.length; i++) {
+    if (kind === 'frame' && steps[i].kind === 'frame' && steps[i].index === idx) return i;
+    if (kind === 'transition' && steps[i].kind === 'transition' &&
+        steps[i + 1] && steps[i + 1].index === idx) return i;
+  }
+  return -1;
+}
+
+function showStep(i) {
+  const step = (DATA.narration || [])[i];
+  const box = document.getElementById('hover');
+  if (!step) { box.textContent = 'Hover a frame or a step to read what happened there.'; return; }
+  box.textContent = step.text;
+  if (step.note) {
+    const warn = document.createElement('span');
+    warn.className = 'warn';
+    warn.textContent = '\u26a0 ' + step.note;
+    box.appendChild(warn);
+  }
+  document.querySelectorAll('#steps li').forEach((li) => {
+    li.classList.toggle('active', Number(li.dataset.step) === i);
+  });
 }
 
 function draw() {
@@ -79,6 +133,13 @@ function draw() {
       if (b.direction === 'ascend') dash = '4 3';
     }
     svg.appendChild(el('path', { d, fill: 'none', stroke, 'stroke-width': 1 + b.height * 2.5, 'stroke-dasharray': dash, opacity: .85 }));
+    // A drawn barrier is a couple of pixels wide; this invisible one is what a
+    // pointer can actually hit.
+    const hit = el('path', { d, fill: 'none', stroke: 'transparent', 'stroke-width': 18 });
+    hit.style.cursor = 'help';
+    const bStep = stepFor('transition', b.to);
+    hit.onmouseenter = () => showStep(bStep);
+    svg.appendChild(hit);
     const label = fmtNs(b.cost_ns) + (b.kind !== 'compute' ? ' · ' + b.kind : '') +
       (b.frames > 1 ? ' · ' + b.frames + ' frames' : '');
     svg.appendChild(el('text', { x: mid, y: Math.min(y1, y2) - lift - 4, 'text-anchor': 'middle', class: 'blabel' }, label));
@@ -109,6 +170,8 @@ function draw() {
     g.appendChild(el('text', { x: cx(i), y: y + 38, 'text-anchor': 'middle', class: 'blabel' },
       'd' + w.depth + (w.phase === 'resume' ? ' · resumed' : w.phase === 'escape' ? ' · escaped' : '')));
     g.onclick = () => select(w.symbol, w);
+    const wStep = stepFor('frame', i);
+    g.onmouseenter = () => showStep(wStep);
     svg.appendChild(g);
   });
 }
