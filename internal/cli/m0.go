@@ -43,7 +43,7 @@ func cmdInit(ctx context.Context, env *Env, args []string) error {
 	// Traces are large and machine-specific, the journal is live rationale, and a
 	// question is a moment rather than a fact about the code. Bundles, synthesis,
 	// claims and landscapes are committed on purpose.
-	ignore := "sessions/*/traces/\ncurrent-session.json\njournal/\nask/\npatches/\n"
+	ignore := "sessions/*/traces/\ncurrent-session.json\nauto-state.json\njournal/\nask/\npatches/\n"
 	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(ignore), 0o644); err != nil {
 		return err
 	}
@@ -216,7 +216,7 @@ func cmdReport(ctx context.Context, env *Env, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	id, err := env.Store.Resolve(first(fs.Args()))
+	id, err := env.Store.ResolveRef(ctx, env.Repo, first(fs.Args()))
 	if err != nil {
 		return err
 	}
@@ -290,7 +290,7 @@ func cmdLs(ctx context.Context, env *Env, args []string) error {
 }
 
 func cmdShow(ctx context.Context, env *Env, args []string) error {
-	id, err := env.Store.Resolve(first(args))
+	id, err := env.Store.ResolveRef(ctx, env.Repo, first(args))
 	if err != nil {
 		return err
 	}
@@ -311,7 +311,7 @@ func cmdShow(ctx context.Context, env *Env, args []string) error {
 // cmdGate is the hook surface: exit 1 when this session deserves attention, so
 // a git hook or a tmux popup can decide whether to interrupt (P6).
 func cmdGate(ctx context.Context, env *Env, args []string) error {
-	id, err := env.Store.Resolve(first(args))
+	id, err := env.Store.ResolveRef(ctx, env.Repo, first(args))
 	if err != nil {
 		return err
 	}

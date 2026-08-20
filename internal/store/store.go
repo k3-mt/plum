@@ -3,6 +3,7 @@
 package store
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/kelalaike/plum/internal/bundle"
 	"github.com/kelalaike/plum/internal/config"
+	"github.com/kelalaike/plum/internal/vcs"
 )
 
 type Store struct {
@@ -73,6 +75,40 @@ func (s *Store) Latest() (string, error) {
 		return "", fmt.Errorf("no sessions recorded yet — run `plum run -- <command>` first")
 	}
 	return ids[len(ids)-1], nil
+}
+
+// ResolveRef accepts everything Resolve does, plus anything git can resolve to a
+// commit — a SHA, a tag, HEAD~3. A commit resolves through the note plum
+// attached to it, which is how you pick a commit to explore later without
+// remembering which session it was.
+func (s *Store) ResolveRef(ctx context.Context, repo *vcs.Repo, ref string) (string, error) {
+	if id, err := s.Resolve(ref); err == nil {
+		return id, nil
+	}
+	if repo == nil || !repo.IsRevision(ctx, ref) {
+		return s.Resolve(ref) // report the original, more useful error
+	}
+	sha, err := repo.RevParse(ctx, ref)
+	if err != nil {
+		return "", err
+	}
+	note, err := repo.NoteShow(ctx, sha)
+	if err != nil || note == "" {
+		return "", fmt.Errorf("commit %s has no plum session attached (nothing captured it — `plum range %s~1..%s` will)", short(sha), short(sha), short(sha))
+	}
+	for _, line := range strings.Split(note, "\n") {
+		if id, ok := strings.CutPrefix(strings.TrimSpace(line), "plum session "); ok {
+			return s.Resolve(strings.TrimSpace(id))
+		}
+	}
+	return "", fmt.Errorf("the note on %s does not name a session", short(sha))
+}
+
+func short(sha string) string {
+	if len(sha) > 8 {
+		return sha[:8]
+	}
+	return sha
 }
 
 // Resolve accepts "", "latest", a full ID or a unique prefix.

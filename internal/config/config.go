@@ -51,6 +51,16 @@ type Config struct {
 		//   dir   everything declared beside them, same directory
 		Context string
 	}
+	Auto struct {
+		// Enabled gates automatic capture entirely.
+		Enabled bool
+		// OnGate names what runs when a session deserves attention. Capture is
+		// always cheap; tracing and synthesis are not, and running them after
+		// every prompt is how a tool stops being read (P6).
+		OnGate []string
+		// Notify surfaces a one-line message in the agent's UI when the gate fires.
+		Notify bool
+	}
 	Ask struct {
 		// Route is how a question from the explore UI gets answered:
 		// "tmux" hands it to an agent session already running in a pane,
@@ -84,6 +94,9 @@ func Default(root string) *Config {
 	c.Trace.Enabled = true
 	c.Trace.MaxEvents = 200000
 	c.Trace.Context = "file"
+	c.Auto.Enabled = true
+	c.Auto.OnGate = []string{}
+	c.Auto.Notify = true
 	c.Ask.Route = "tmux"
 	c.Ask.TimeoutSec = 300
 	return c
@@ -163,6 +176,9 @@ func (c *Config) apply(d Doc) {
 	inum("trace.max_events", &c.Trace.MaxEvents)
 	str("trace.test_command", &c.Trace.TestCommand)
 	str("trace.context", &c.Trace.Context)
+	bl("auto.enabled", &c.Auto.Enabled)
+	list("auto.on_gate", &c.Auto.OnGate)
+	bl("auto.notify", &c.Auto.Notify)
 	str("ask.route", &c.Ask.Route)
 	str("ask.tmux_target", &c.Ask.TmuxTarget)
 	inum("ask.timeout_seconds", &c.Ask.TimeoutSec)
@@ -267,6 +283,15 @@ max_events = 200000
 # it perturbs, but recording that system as deeply as the change costs more and
 # says less.
 context    = "file"
+
+[auto]
+# Automatic capture, for the Claude Code Stop hook and the git post-commit hook.
+# Capture is milliseconds, so it always runs. Tracing and synthesis are not, and
+# running them after every prompt is how a tool stops being read: name them here
+# only if you want them on a session that fires the gate.
+enabled  = true
+on_gate  = []          # e.g. ["trace"] or ["trace", "synth"]
+notify   = true
 
 [ask]
 # How a question asked in plum explore gets answered.

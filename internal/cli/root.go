@@ -57,6 +57,8 @@ func commands() []command {
 		{"ask", "ask a grounded question; the answer can be kept as rationale, a claim or a patch", cmdAsk},
 		{"quiz", "interrogate yourself, graded against recorded execution", cmdQuiz},
 		{"claims", "list|verify — executable claims", cmdClaims},
+		{"auto", "capture a session if anything changed — what the hooks call", cmdAuto},
+		{"hooks", "install|uninstall|status — wire capture into Claude Code and git", cmdHooks},
 		{"gate", "exit non-zero when the session needs attention (for hooks)", cmdGate},
 		{"version", "print the version", cmdVersion},
 	}

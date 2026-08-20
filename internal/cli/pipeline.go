@@ -31,7 +31,7 @@ func cmdSynth(ctx context.Context, env *Env, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	id, err := env.Store.Resolve(first(fs.Args()))
+	id, err := env.Store.ResolveRef(ctx, env.Repo, first(fs.Args()))
 	if err != nil {
 		return err
 	}
@@ -86,7 +86,7 @@ func providerFor(name string, env *Env, b *bundle.Bundle) (synth.Provider, error
 }
 
 func cmdStale(ctx context.Context, env *Env, args []string) error {
-	id, err := env.Store.Resolve(first(args))
+	id, err := env.Store.ResolveRef(ctx, env.Repo, first(args))
 	if err != nil {
 		return err
 	}
@@ -117,7 +117,7 @@ func cmdTrace(ctx context.Context, env *Env, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	id, err := env.Store.Resolve(first(fs.Args()))
+	id, err := env.Store.ResolveRef(ctx, env.Repo, first(fs.Args()))
 	if err != nil {
 		return err
 	}
@@ -221,7 +221,7 @@ func cmdTests(ctx context.Context, env *Env, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	id, err := env.Store.Resolve(first(fs.Args()))
+	id, err := env.Store.ResolveRef(ctx, env.Repo, first(fs.Args()))
 	if err != nil {
 		return err
 	}
@@ -332,7 +332,7 @@ func cmdLandscape(ctx context.Context, env *Env, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	id, err := env.Store.Resolve(first(fs.Args()))
+	id, err := env.Store.ResolveRef(ctx, env.Repo, first(fs.Args()))
 	if err != nil {
 		return err
 	}
@@ -477,7 +477,7 @@ func cmdExplore(ctx context.Context, env *Env, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	id, err := env.Store.Resolve(first(fs.Args()))
+	id, err := env.Store.ResolveRef(ctx, env.Repo, first(fs.Args()))
 	if err != nil {
 		return err
 	}
@@ -547,7 +547,7 @@ func cmdQuiz(ctx context.Context, env *Env, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	id, err := env.Store.Resolve(first(fs.Args()))
+	id, err := env.Store.ResolveRef(ctx, env.Repo, first(fs.Args()))
 	if err != nil {
 		return err
 	}
@@ -624,7 +624,7 @@ func cmdClaims(ctx context.Context, env *Env, args []string) error {
 		sub = args[0]
 		args = args[1:]
 	}
-	id, err := env.Store.Resolve(first(args))
+	id, err := env.Store.ResolveRef(ctx, env.Repo, first(args))
 	if err != nil {
 		return err
 	}

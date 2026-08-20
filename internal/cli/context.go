@@ -33,7 +33,7 @@ func cmdContext(ctx context.Context, env *Env, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	id, err := env.Store.Resolve(*session)
+	id, err := env.Store.ResolveRef(ctx, env.Repo, *session)
 	if err != nil {
 		return err
 	}

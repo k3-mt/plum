@@ -160,6 +160,71 @@ way — Go, where a probe has to go *inside* a function — implements
 the engine never learns the language. There is a test that instruments a
 made-up Ruby adapter end to end to keep that honest.
 
+## Letting it happen on its own
+
+```sh
+plum hooks install     # Claude Code Stop hook + git post-commit
+plum hooks status
+```
+
+Two attachment points, because a session ends in two different ways:
+
+| Hook | Fires | Catches |
+|---|---|---|
+| Claude Code `Stop` | the agent finishes a turn | agent work, still uncommitted |
+| git `post-commit` | a commit lands | anything, whoever made it |
+
+Both call `plum auto`, which captures **only if something actually changed**.
+The fingerprint is the id of the tree git would write right now — not `git
+status`, which reports only *which* paths changed and so cannot see a second
+edit to a file already listed as modified.
+
+Consecutive captures tile rather than overlap: each turn's session covers that
+turn's work, not everything since the last commit.
+
+```
+turn 1  → session 2026-08-20-3b91  [Validate]
+turn 2  → (nothing changed, silent)
+turn 3  → session 2026-08-20-d4cb  [Normalise]
+```
+
+The Stop hook is installed `async`, so a capture never delays the end of a turn,
+and `plum auto` exits 0 whatever happens — a hook that breaks a commit or an
+agent session is a hook that gets uninstalled within the hour.
+
+### Capture always, analyse only when it matters
+
+Capture is milliseconds: a commit range and an AST pass. Tracing and synthesis
+are not, and running them after every prompt is exactly how a tool stops being
+read (P6). So they are opt-in, per session, and only for one that fired the gate:
+
+```toml
+[auto]
+enabled  = true
+on_gate  = []          # e.g. ["trace"] or ["trace", "synth"]
+notify   = true        # one line in the agent's own UI when the gate fires
+```
+
+### Choosing a commit to analyse later
+
+Each capture attaches its analysis to the commit as a **git note** — bound after
+the fact, without rewriting history and without touching the commit message:
+
+```sh
+git notes --ref=refs/notes/plum show HEAD
+  plum session 2026-08-20-9e61
+  gate FIRED — new public surface: 1 item
+  1 symbols, 1 files
+```
+
+So every read-only command takes a commit wherever it takes a session id:
+
+```sh
+plum report HEAD
+plum report HEAD~3
+plum explore 9e61
+```
+
 ## The test is the unit
 
 A test is the only artifact that is simultaneously named, executable, committed,
