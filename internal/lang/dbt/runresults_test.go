@@ -1,0 +1,196 @@
+package dbt
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/kelalaike/plum/internal/bundle"
+	"github.com/kelalaike/plum/internal/trace"
+)
+
+func writeRun(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	manifest := map[string]any{
+		"nodes": map[string]any{
+			"model.shop.stg_orders": map[string]any{
+				"unique_id": "model.shop.stg_orders", "name": "stg_orders", "resource_type": "model",
+				"original_file_path": "models/staging/stg_orders.sql",
+				"depends_on":         map[string]any{"nodes": []string{}},
+				"config":             map[string]any{"materialized": "view"},
+			},
+			"model.shop.fct_orders": map[string]any{
+				"unique_id": "model.shop.fct_orders", "name": "fct_orders", "resource_type": "model",
+				"original_file_path": "models/marts/fct_orders.sql",
+				"depends_on":         map[string]any{"nodes": []string{"model.shop.stg_orders"}},
+				"config":             map[string]any{"materialized": "incremental", "unique_key": "order_id"},
+			},
+			"test.shop.unique_fct_orders_order_id": map[string]any{
+				"unique_id": "test.shop.unique_fct_orders_order_id", "name": "unique_fct_orders_order_id",
+				"resource_type": "test", "original_file_path": "models/marts/schema.yml",
+				"depends_on": map[string]any{"nodes": []string{"model.shop.fct_orders"}},
+			},
+		},
+	}
+	failures := 1204
+	results := map[string]any{
+		"metadata": map[string]any{"invocation_id": "inv-1"},
+		"results": []any{
+			map[string]any{"unique_id": "model.shop.stg_orders", "status": "success", "execution_time": 4.0,
+				"adapter_response": map[string]any{"rows_affected": 2481003, "bytes_processed": 1181116006}},
+			map[string]any{"unique_id": "model.shop.fct_orders", "status": "success", "execution_time": 40.0,
+				"adapter_response": map[string]any{"rows_affected": 2481003, "bytes_processed": 19756742246, "slot_ms": 93200}},
+			map[string]any{"unique_id": "test.shop.unique_fct_orders_order_id", "status": "fail",
+				"execution_time": 6.0, "failures": failures,
+				"adapter_response": map[string]any{"bytes_processed": 2362232012}},
+		},
+		"elapsed_time": 50.0,
+	}
+	for name, doc := range map[string]any{"manifest.json": manifest, "run_results.json": results} {
+		data, err := json.MarshalIndent(doc, "", "  ")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+// A dbt unique_id has to become the same SymbolID the adapter produces from the
+// file, or the run and the code describe two different projects.
+func TestRunResolvesToTheSameSymbolIDsAsTheSource(t *testing.T) {
+	m, r, err := LoadRun(writeRun(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := m.symbolID("model.shop.fct_orders"); got != "models/marts/fct_orders.sql::fct_orders" {
+		t.Errorf("symbol id = %q", got)
+	}
+	if got := m.symbolID("model.shop.unknown"); !strings.HasPrefix(string(got), "::") {
+		t.Errorf("an unknown node should stay unresolved, got %q", got)
+	}
+	if len(r.Results) != 3 {
+		t.Fatalf("results = %d", len(r.Results))
+	}
+}
+
+// A model cannot be built before what it selects from, so the lineage is walked
+// upstream-first and the landscape reads as a descent.
+func TestEventsWalkLineageUpstreamFirst(t *testing.T) {
+	m, r, err := LoadRun(writeRun(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	events := Events(m, r)
+	if len(events) == 0 {
+		t.Fatal("no events")
+	}
+	if events[0].Kind != "call" || events[0].Symbol != "models/marts/fct_orders.sql::fct_orders" {
+		t.Fatalf("first event = %+v, want the root of the lineage", events[0])
+	}
+	if events[0].Depth != 0 {
+		t.Errorf("root depth = %d", events[0].Depth)
+	}
+
+	var sawUpstream bool
+	for _, e := range events {
+		if e.Kind == "call" && e.Symbol == "models/staging/stg_orders.sql::stg_orders" {
+			sawUpstream = true
+			if e.Depth != 1 {
+				t.Errorf("upstream depth = %d, want 1 — it is one step up the lineage", e.Depth)
+			}
+		}
+	}
+	if !sawUpstream {
+		t.Error("the upstream model never appeared")
+	}
+
+	// Every build carries what it actually cost, because in a warehouse that is
+	// the number people are asked about.
+	for _, e := range events {
+		if e.Kind == "return" && e.Symbol == "models/marts/fct_orders.sql::fct_orders" {
+			for _, want := range []string{"2,481,003 rows", "GB scanned", "slot-ms"} {
+				if !strings.Contains(e.Result, want) {
+					t.Errorf("result %q is missing %q", e.Result, want)
+				}
+			}
+		}
+	}
+}
+
+// dbt builds a node and then tests it, so a test belongs inside that node's
+// frame — and a failing test has to unwind, or the landscape shows a clean
+// build of a table nobody should trust.
+func TestAFailingTestUnwindsIntoTheModelItChecks(t *testing.T) {
+	m, r, err := LoadRun(writeRun(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	events := Events(m, r)
+
+	var testCall, testRaise, modelReturn int
+	for i, e := range events {
+		switch {
+		case e.Kind == "call" && strings.Contains(string(e.Symbol), "unique_fct_orders"):
+			testCall = i
+		case e.Kind == "raise" && strings.Contains(string(e.Symbol), "unique_fct_orders"):
+			testRaise = i
+			if !strings.Contains(e.Exception, "1204 rows") {
+				t.Errorf("failure text = %q, want the row count dbt reported", e.Exception)
+			}
+		case e.Kind == "return" && e.Symbol == "models/marts/fct_orders.sql::fct_orders":
+			modelReturn = i
+		}
+	}
+	if testCall == 0 || testRaise == 0 {
+		t.Fatal("the failing test produced no frame")
+	}
+	if !(testCall < testRaise && testRaise < modelReturn) {
+		t.Errorf("ordering call=%d raise=%d modelReturn=%d — the test must run inside the model's frame",
+			testCall, testRaise, modelReturn)
+	}
+
+	// And it has to survive derivation into a visible cliff.
+	b := &bundle.Bundle{Session: bundle.Session{ID: "s"}, Symbols: []bundle.Symbol{
+		{ID: "models/marts/fct_orders.sql::fct_orders", Name: "fct_orders", Kind: "model"},
+	}}
+	l := trace.Derive(events, b)
+	var unwinds int
+	for _, bar := range l.Barriers {
+		if bar.Direction == "unwind" {
+			unwinds++
+		}
+	}
+	if unwinds != 1 {
+		t.Errorf("got %d unwinds, want the failing test to draw as one cliff", unwinds)
+	}
+}
+
+// In a warehouse "tested" is declared, not inferred: dbt says which tests cover
+// which model, and a failing one is named as failing.
+func TestCoverageNamesTheTestsThatCoverEachModel(t *testing.T) {
+	m, r, err := LoadRun(writeRun(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cov := Coverage(m, r)
+	tests := cov["models/marts/fct_orders.sql::fct_orders"]
+	if len(tests) != 1 {
+		t.Fatalf("coverage = %v", cov)
+	}
+	if !strings.Contains(tests[0], "unique_fct_orders_order_id") || !strings.Contains(tests[0], "failing") {
+		t.Errorf("test label = %q, want it named and marked as failing", tests[0])
+	}
+}
+
+func TestMissingArtifactsSayWhatToDo(t *testing.T) {
+	_, _, err := LoadRun(t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "dbt compile") {
+		t.Errorf("error = %v, want it to say how to produce the manifest", err)
+	}
+}

@@ -486,7 +486,10 @@ func (l Landscape) Notes() []string {
 func (l Landscape) UnannotatedExpensive() []string {
 	var out []string
 	for _, bar := range l.Barriers {
-		if bar.Rationale != "" || bar.Height < 0.6 || bar.Direction == "ascend" {
+		// Only a descent has a call site. A return has nothing to explain, and
+		// an unwind was not a decision anybody wrote down — it is what happened
+		// when something failed.
+		if bar.Rationale != "" || bar.Height < 0.6 || bar.Direction != "descend" {
 			continue
 		}
 		out = append(out, fmt.Sprintf("`%s` → `%s` cost %s (%s) with no call-site comment",

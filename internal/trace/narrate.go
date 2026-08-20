@@ -190,7 +190,9 @@ func transitionStep(l Landscape, b *bundle.Bundle, bar Barrier) Step {
 		s.text(", ")
 		s.cost(humanDuration(bar.CostNanos))
 		s.text(" later.")
-		step.Note = "an exception skips past every frame in between — none of them get to finish"
+		if bar.Frames > 1 {
+			step.Note = "an exception skips past every frame in between — none of them get to finish"
+		}
 	}
 	if bar.Kind == "network" || bar.Kind == "io" {
 		s.text(" That step looks like ")
@@ -229,18 +231,49 @@ func Summary(l Landscape, b *bundle.Bundle) string {
 	} else {
 		s.WriteString("On the busiest path recorded, ")
 	}
-	fmt.Fprintf(&s, "the run went through %s: %s.", plural(len(entered), "function"), strings.Join(entered, " → "))
+	fmt.Fprintf(&s, "the run went through %s: %s.", plural(len(entered), unitOf(l, b)), strings.Join(entered, " → "))
 	if context > 0 {
 		fmt.Fprintf(&s, " %d of those this session changed; %d it merely passed through.", changed, context)
 	}
-	if l.Escaped != "" {
+	var failures []string
+	for _, bar := range l.Barriers {
+		if bar.Direction == "unwind" && bar.FromIdx < len(l.Wells) {
+			failures = append(failures, label(l.Wells[bar.FromIdx]))
+		}
+	}
+	switch {
+	case l.Escaped != "":
 		fmt.Fprintf(&s, " It ended in a failure that nothing caught: %s.", oneLine(l.Escaped))
-	} else if !l.Closed {
+	case !l.Closed:
 		fmt.Fprintf(&s, " One frame never returned: %s.", l.OpenFrame)
-	} else {
+	case len(failures) > 0:
+		// Everything came back, but something in it failed — saying only the
+		// former would read as an all-clear.
+		fmt.Fprintf(&s, " Everything entered came back, but %s failed: %s.",
+			plural(len(failures), "step"), strings.Join(failures, ", "))
+	default:
 		s.WriteString(" Every frame that was entered came back.")
 	}
 	return s.String()
+}
+
+// unitOf names what was entered in the vocabulary of what is being read. A dbt
+// build goes through models, not functions, and calling them functions is the
+// kind of small wrongness that makes a reader stop trusting the rest.
+func unitOf(l Landscape, b *bundle.Bundle) string {
+	counts := map[string]int{}
+	for _, w := range l.Wells {
+		if w.Phase == "enter" {
+			counts[b.Lookup(w.Symbol).Kind]++
+		}
+	}
+	switch {
+	case counts["model"] > 0:
+		return "node"
+	case counts["column"] > 0 || counts["config_key"] > 0:
+		return "declaration"
+	}
+	return "function"
 }
 
 // ---------------------------------------------------------------- helpers

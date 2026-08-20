@@ -51,6 +51,7 @@ func commands() []command {
 		{"synth", "synthesise the seams doc in a fresh context, extract claims", cmdSynth},
 		{"stale", "re-fingerprint claims against the working tree", cmdStale},
 		{"trace", "run the test suite under instrumentation, ingest events", cmdTrace},
+		{"ingest", "read a dbt run that already happened — never triggers one", cmdIngest},
 		{"tests", "list the tests that ran, and what each one reached", cmdTests},
 		{"landscape", "derive the energy landscape from recorded traces", cmdLandscape},
 		{"explain", "say what the recording actually did, in plain language", cmdExplain},

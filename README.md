@@ -489,14 +489,58 @@ reads the clock, so a backfill cannot reproduce · `cross_join` · `untested_key
 · `no_grain_test` · `float_money` — decimal amounts do not round-trip through
 binary floating point.
 
-### What is not built yet
+### Reading a run
 
-Tracing. `run_results.json` already records per-node status, timing and
-BigQuery's `bytes_processed` and `slot_ms`, which maps onto the landscape
-directly — descent is a model waiting on its upstream, barrier height is bytes
-scanned, and a cliff is a failed node skipping everything downstream. Nothing
-needs instrumenting because dbt reports it natively. That is a separate slice,
-and it is the one that turns this from a linter into PLUM.
+```sh
+plum ingest            # reads target/manifest.json and target/run_results.json
+```
+
+`plum trace` runs a suite under instrumentation. That is the wrong shape here:
+dbt records its own execution in detail, so there is nothing to instrument, and
+every run scans billed bytes — a tool that re-runs your project in order to look
+at it shows up on the invoice. `plum ingest` reads what a run already wrote and
+**never triggers one**.
+
+A build is not a call stack, but the lineage of a model is a tree, and that is
+what gets walked. Entering a node means its upstream had to be built first;
+returning means it finished, carrying what it cost:
+
+```
+ingested 6 nodes from target
+  59.5s elapsed, 26.3 GB scanned, 6,864,121 rows written
+  1 failed, 0 skipped because something upstream did
+
+[fct_orders] ·risk
+  ↓ 1ms
+  (stg_orders) ·context
+↑ 4.1s io
+[fct_orders] (resumed) ·risk
+  ↓ 1ms
+  (unique_fct_orders_order_id) ·context
+⇊ 6.4s raise
+[fct_orders] (resumed) ·risk
+```
+
+dbt builds a node and then tests it, so tests are drawn **inside** the node's
+frame — whether a model came out right is part of building it. A failing test
+unwinds as a cliff, because a table whose grain test just failed is not a clean
+build.
+
+`plum explain` reads the same run in sentences, with what it cost as recorded
+data rather than as prose:
+
+> Running "build fct_orders", the run went through 6 nodes: fct_orders →
+> stg_orders → stg_payments → unique_fct_orders_order_id → … 1 of those this
+> session changed; 5 it merely passed through. Everything entered came back, but
+> 1 step failed: unique_fct_orders_order_id.
+>
+> `fct_orders` was called with `materialized = "incremental"`. It returned
+> `"2,481,003 rows, 18.4 GB scanned, 93,200 slot-ms"`. Flagged: materialized as
+> incremental but nothing calls is_incremental() — every run rebuilds the whole
+> table at full cost.
+
+Coverage is declared rather than inferred: dbt says which tests cover which
+model, and a failing one is named as failing.
 
 ## Configuration files are part of the code
 
