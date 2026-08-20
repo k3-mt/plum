@@ -69,9 +69,9 @@ func cmdContext(ctx context.Context, env *Env, args []string) error {
 		}
 	}
 	if *asJSON {
-		return writeIndentedJSON(server.AssembleContextJSON(env.Cfg, b, events, cs, sym))
+		return writeIndentedJSON(server.AssembleContextJSON(contextInput(env, b, events, cs, id), sym))
 	}
-	fmt.Print(server.AssembleContext(env.Cfg, b, events, cs, sym))
+	fmt.Print(server.AssembleContext(contextInput(env, b, events, cs, id), sym))
 	return nil
 }
 
@@ -93,6 +93,18 @@ func joinIDs(ids []bundle.SymbolID) string {
 		parts = append(parts, string(id))
 	}
 	return strings.Join(parts, ", ")
+}
+
+// contextInput gathers what a brief is built from, so the CLI and the explore
+// UI assemble the identical thing.
+func contextInput(env *Env, b *bundle.Bundle, events []trace.Event, cs []claims.Claim, id string) server.ContextInput {
+	in := server.ContextInput{
+		Cfg: env.Cfg, Bundle: b, Events: events, Claims: cs, Adapters: env.Reg,
+	}
+	if l, err := loadLandscape(env, id); err == nil {
+		in.Landscape = *l
+	}
+	return in
 }
 
 func writeIndentedJSON(v any) error {

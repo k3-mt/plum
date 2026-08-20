@@ -266,19 +266,25 @@ func callSites(p *parsed, rel string, fn *ast.FuncDecl, comments map[int]*ast.Co
 		// Bind to a local declaration only when the call's shape says it is one:
 		// a bare `helper()`, or `c.decorate()` on this method's own receiver.
 		// Binding on the bare name alone turns `http.Get` into `Cache.Get`.
-		callee := name
+		//
+		// A call that does not resolve keeps its written form behind a bare
+		// "::", which is how the rest of the tool tells a call into this
+		// repository from a call into a library — nobody writes a comment above
+		// fmt.Sprintf, and counting one against them buries the calls that do
+		// deserve an explanation.
+		callee := bundle.SymbolID("::" + name)
 		switch {
 		case !strings.Contains(name, "."):
 			if qual, ok := local[name]; ok {
-				callee = qual
+				callee = bundle.MakeID(rel, qual)
 			}
 		case recv != "" && strings.HasPrefix(name, recv+".") && strings.Count(name, ".") == 1:
 			if qual, ok := local[strings.TrimPrefix(name, recv+".")]; ok {
-				callee = qual // c.decorate -> Cache.decorate
+				callee = bundle.MakeID(rel, qual) // c.decorate -> Cache.decorate
 			}
 		}
 		cs := bundle.CallSite{
-			Callee:    bundle.MakeID(rel, callee),
+			Callee:    callee,
 			CalleeRaw: name,
 			Line:      line,
 		}

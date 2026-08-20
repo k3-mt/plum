@@ -58,7 +58,7 @@
       "comments": null,
       "call_sites": [
         {
-          "callee": "internal/auth/cache.go::fmt.Errorf",
+          "callee": "::fmt.Errorf",
           "callee_raw": "fmt.Errorf",
           "line": 31,
           "rationale": ""
@@ -89,7 +89,7 @@
       "comments": null,
       "call_sites": [
         {
-          "callee": "internal/auth/cache.go::os.Getenv",
+          "callee": "::os.Getenv",
           "callee_raw": "os.Getenv",
           "line": 37,
           "rationale": ""
@@ -120,7 +120,7 @@
       ],
       "call_sites": [
         {
-          "callee": "internal/auth/cache.go::http.Get",
+          "callee": "::http.Get",
           "callee_raw": "http.Get",
           "line": 43,
           "rationale": "the identity provider is authoritative once the local map misses"

@@ -180,6 +180,14 @@ type PromptContext struct {
 	// question like "is this intentional?" often turns on what the caller does
 	// before it calls — an edge alone cannot answer that.
 	Related []RelatedSymbol `json:"related"`
+	// Symbol_ is the resolved declaration, which may have come from the working
+	// tree rather than from the bundle.
+	Symbol_ bundle.Symbol `json:"declaration"`
+	// Changed says whether this session touched it, or the run merely passed
+	// through it.
+	Changed bool `json:"changed"`
+	// Narration is what this frame did, in the sentences the landscape uses.
+	Narration []trace.Step `json:"narration"`
 	// Markdown is this same context rendered as a brief — what `plum context`
 	// prints. It travels with the JSON so the page can put it on the clipboard
 	// without assembling anything itself.
@@ -197,9 +205,45 @@ type RelatedSymbol struct {
 
 const maxSamples = 8
 
+// symbolFor resolves a symbol to its declaration.
+//
+// The bundle only holds what the session changed. Since tracing began recording
+// the surrounding code a run passes through, a reader can click a frame the
+// bundle has never heard of — and a brief with no source, no signature and no
+// doc is worse than useless, because it looks like the evidence is missing
+// rather than merely unlooked-for. So an unknown symbol is parsed out of the
+// working tree on demand.
+func (s *Server) symbolFor(id bundle.SymbolID) (bundle.Symbol, bool) {
+	if s.Bundle.Has(id) {
+		return s.Bundle.Lookup(id), true
+	}
+	file := id.File()
+	if file == "" || s.Adapters == nil {
+		return s.Bundle.Lookup(id), false
+	}
+	a := s.Adapters.For(file)
+	if a == nil {
+		return s.Bundle.Lookup(id), false
+	}
+	src, err := os.ReadFile(filepath.Join(s.Cfg.Root, file))
+	if err != nil {
+		return s.Bundle.Lookup(id), false
+	}
+	syms, err := a.ParseSymbols(file, src)
+	if err != nil {
+		return s.Bundle.Lookup(id), false
+	}
+	for _, sym := range syms {
+		if sym.ID == id {
+			return sym, false
+		}
+	}
+	return s.Bundle.Lookup(id), false
+}
+
 func (s *Server) buildContext(sym bundle.SymbolID) PromptContext {
 	b := s.Bundle
-	symbol := b.Lookup(sym)
+	symbol, changed := s.symbolFor(sym)
 	var seams []claims.Claim
 	for _, c := range s.Claims {
 		if c.Symbol == sym {
@@ -208,6 +252,9 @@ func (s *Server) buildContext(sym bundle.SymbolID) PromptContext {
 	}
 	return PromptContext{
 		Symbol:      sym,
+		Symbol_:     symbol,
+		Changed:     changed,
+		Narration:   trace.StepsFor(s.Landscape, b, sym),
 		Related:     s.related(sym),
 		Source:      s.source(symbol),
 		Signature:   symbol.Signature,
@@ -567,64 +614,142 @@ func (s *Server) providerName() string {
 	return s.Provider.Name()
 }
 
-// AssembleContext builds the same mechanically-assembled brief the UI sends,
-// for callers outside the server (the `plum ask` command).
-func AssembleContext(cfg *config.Config, b *bundle.Bundle, events []trace.Event, cs []claims.Claim, sym bundle.SymbolID) string {
-	s := &Server{Cfg: cfg, Bundle: b, Events: events, Claims: cs}
-	return renderContext(s.buildContext(sym))
+// AssembleContext builds the same brief the UI copies to the clipboard.
+func AssembleContext(in ContextInput, sym bundle.SymbolID) string {
+	return renderContext(in.server().buildContext(sym))
+}
+
+// ContextInput is everything a brief is assembled from. It is a struct rather
+// than a parameter list because the server and `plum context` must build the
+// identical thing — a brief that differs depending on which door you came
+// through is a brief nobody can rely on — and a missing argument is easier to
+// notice as a missing field.
+type ContextInput struct {
+	Cfg       *config.Config
+	Bundle    *bundle.Bundle
+	Events    []trace.Event
+	Claims    []claims.Claim
+	Adapters  *lang.Registry
+	Landscape trace.Landscape
+}
+
+func (in ContextInput) server() *Server {
+	return &Server{
+		Cfg: in.Cfg, Bundle: in.Bundle, Events: in.Events,
+		Claims: in.Claims, Adapters: in.Adapters, Landscape: in.Landscape,
+	}
 }
 
 // AssembleContextJSON is AssembleContext as structured data, for callers that
 // want to build their own prompt or index it.
-func AssembleContextJSON(cfg *config.Config, b *bundle.Bundle, events []trace.Event, cs []claims.Claim, sym bundle.SymbolID) PromptContext {
-	s := &Server{Cfg: cfg, Bundle: b, Events: events, Claims: cs}
-	return s.buildContext(sym)
+func AssembleContextJSON(in ContextInput, sym bundle.SymbolID) PromptContext {
+	return in.server().buildContext(sym)
 }
 
+// renderContext writes the brief a reader copies to the clipboard, or an agent
+// receives as a question's context.
+//
+// It is written to be pasted somewhere else and understood cold, so it leads
+// with what the thing is and closes with what is missing about it. A brief that
+// silently omits the gaps reads as though the evidence were complete.
 func renderContext(pc PromptContext) string {
 	var w strings.Builder
 	p := func(f string, a ...any) { fmt.Fprintf(&w, f+"\n", a...) }
-	p("## Symbol")
-	p("%s", pc.Symbol)
+	sym := pc.Symbol_
+
+	kind := sym.Kind
+	if kind == "" {
+		kind = "symbol"
+	}
+	p("# %s", pc.Symbol)
 	p("")
-	if pc.Doc != "" {
-		p("## Declaration doc")
-		p("%s", pc.Doc)
+	where := sym.File
+	if sym.LineStart > 0 {
+		where = fmt.Sprintf("%s:%d-%d", sym.File, sym.LineStart, sym.LineEnd)
+	}
+	p("%s in `%s`.", strings.ToUpper(kind[:1])+kind[1:], where)
+	if pc.Changed {
+		p("This session changed it.")
+	} else {
+		p("This session did **not** change it; the traced run passed through it.")
+	}
+	if isTestPath(sym.File) {
+		p("It lives in a test file, so it is the thing exercising the change rather than part of it.")
+	}
+	p("")
+
+	if pc.Signature != "" {
+		p("## Signature")
+		p("```%s", fenceLanguage(sym.File))
+		p("%s", pc.Signature)
+		p("```")
 		p("")
 	}
-	p("## Source")
-	p("```%s", fenceLanguage(pc.Symbol.File()))
-	p("%s", pc.Source)
-	p("```")
+
+	p("## Declaration doc")
+	if pc.Doc != "" {
+		p("%s", pc.Doc)
+	} else {
+		p("_None. Nothing records what this is for._")
+	}
 	p("")
-	if len(pc.Invocations) > 0 {
-		p("## Recorded invocations (real execution, not a summary)")
-		for _, e := range pc.Invocations {
-			switch e.Kind {
-			case "call":
-				p("- call args=%v", e.Args)
-			case "return":
-				p("- return %s", e.Result)
-			case "raise":
-				p("- raised %s", e.Exception)
+
+	p("## Source")
+	if pc.Source != "" {
+		p("```%s", fenceLanguage(sym.File))
+		p("%s", pc.Source)
+		p("```")
+	} else {
+		p("_Not available: the declaration could not be located in the working tree, so it has probably moved or been deleted since this session was captured._")
+	}
+	p("")
+
+	if len(pc.Narration) > 0 {
+		p("## What it did in the recording")
+		for _, step := range pc.Narration {
+			p("- %s", step.Text)
+			if step.Note != "" {
+				p("    - %s", step.Note)
 			}
 		}
 		p("")
-	} else {
-		p("## Recorded invocations")
-		p("None. This frame was never executed by the traced test run.")
-		p("")
 	}
+
+	p("## Recorded invocations")
+	if len(pc.Invocations) == 0 {
+		p("_None. No traced test entered this._")
+	}
+	for _, e := range pc.Invocations {
+		test := ""
+		if e.TestID != "" {
+			test = fmt.Sprintf(" (during %s)", e.TestID)
+		}
+		switch e.Kind {
+		case "call":
+			if args := trace.HumanArgs(e.Args); args != "" {
+				p("- called with %s%s", args, test)
+			} else {
+				p("- called with no arguments%s", test)
+			}
+		case "return":
+			p("- returned %s%s", trace.HumanValue(e.Result), test)
+		case "raise":
+			p("- raised %s%s", trace.HumanValue(e.Exception), test)
+		}
+	}
+	p("")
+
 	if len(pc.Callers) > 0 || len(pc.Callees) > 0 {
 		p("## Edges")
 		for _, e := range pc.Callers {
-			p("- called by %s", e.From)
+			p("- called by `%s`", e.From)
 		}
 		for _, e := range pc.Callees {
-			p("- calls %s", e.To)
+			p("- calls `%s`", e.To)
 		}
 		p("")
 	}
+
 	if len(pc.Related) > 0 {
 		p("## Neighbouring code")
 		p("")
@@ -643,40 +768,59 @@ func renderContext(pc PromptContext) string {
 			p("")
 		}
 	}
-	if len(pc.CallSites) > 0 {
-		p("## Call sites and their rationale comments")
-		for _, cs := range pc.CallSites {
-			r := cs.Rationale
-			if r == "" {
-				r = "(unannotated)"
+
+	local, external := splitCallSites(pc.CallSites)
+	if len(local) > 0 || len(external) > 0 {
+		p("## Calls it makes, and whether anything explains them")
+		for _, cs := range local {
+			if cs.Rationale != "" {
+				p("- line %d → `%s` — %q", cs.Line, cs.CalleeRaw, oneLineOf(cs.Rationale))
+				continue
 			}
-			p("- line %d → %s: %s", cs.Line, cs.CalleeRaw, r)
+			p("- line %d → `%s` — **unannotated**", cs.Line, cs.CalleeRaw)
+		}
+		if len(external) > 0 {
+			// Unresolved calls are listed but not counted against anyone. Some
+			// are library calls nobody would comment; others are interface
+			// dispatch this pass cannot follow. Saying which it is would be a
+			// guess, so it says neither.
+			names := make([]string, 0, len(external))
+			seen := map[string]bool{}
+			for _, cs := range external {
+				if !seen[cs.CalleeRaw] {
+					seen[cs.CalleeRaw] = true
+					names = append(names, "`"+cs.CalleeRaw+"`")
+				}
+			}
+			p("- and %s this pass could not resolve to a declaration in the repository — a library, or dispatch through an interface: %s",
+				plural(len(external), "call"), strings.Join(names, ", "))
 		}
 		p("")
 	}
+
 	if len(pc.Risks) > 0 {
 		p("## Risk markers")
 		for _, r := range pc.Risks {
-			p("- %s at line %d: %s", r.Kind, r.Line, r.Note)
+			p("- **%s** at line %d — %s", r.Kind, r.Line, r.Note)
 		}
 		p("")
 	}
+
+	p("## Rationale recorded live")
 	if len(pc.Rationale) > 0 {
-		p("## Rationale recorded live")
 		for _, j := range pc.Rationale {
 			p("- %s", j.Rationale)
-			for _, a := range j.Alternatives {
-				p("  - rejected: %s", a)
+			for _, alt := range j.Alternatives {
+				p("    - considered and rejected: %s", alt)
 			}
 		}
-		p("")
 	} else {
-		p("## Rationale recorded live")
-		p("None recorded for this symbol.")
-		p("")
+		p("_None for this file. Why it was built this way was not written down._")
 	}
+	p("")
+
 	if len(pc.Seams) > 0 {
-		p("## Claims about this symbol")
+		p("## Claims about it")
 		for _, c := range pc.Seams {
 			kind := "assertion"
 			if c.Executable {
@@ -684,9 +828,93 @@ func renderContext(pc PromptContext) string {
 			}
 			p("- [%s] %s", kind, c.Claim)
 		}
+		p("")
+	}
+
+	if gaps := missingFrom(pc); len(gaps) > 0 {
+		p("## What is missing")
+		p("")
+		p("Recorded gaps, not opinions — each is something nobody wrote down:")
+		for _, g := range gaps {
+			p("- %s", g)
+		}
+		p("")
 	}
 	return w.String()
 }
+
+// missingFrom names the gaps in the evidence, so a reader pasting this
+// somewhere knows what the brief could not tell them.
+func missingFrom(pc PromptContext) []string {
+	// A test is the thing exercising the change, not part of it. Its name is its
+	// documentation, its calls are assertions, and holding it to the same
+	// standard buries the gaps that matter under ones that do not.
+	if isTestPath(pc.Symbol_.File) {
+		if len(pc.Invocations) == 0 {
+			return []string{"no recorded execution: this test did not run in the traced session"}
+		}
+		return nil
+	}
+
+	var out []string
+	if pc.Doc == "" && pc.Symbol_.Kind != "config_key" {
+		out = append(out, "no declaration doc: what this is for is not recorded")
+	}
+	if len(pc.Invocations) == 0 {
+		out = append(out, "no recorded execution: no traced test entered it, so its real behaviour is unobserved")
+	}
+	if len(pc.Rationale) == 0 {
+		out = append(out, "no journalled rationale for this file: why it was built this way is unrecoverable from the diff")
+	}
+	local, _ := splitCallSites(pc.CallSites)
+	var unannotated int
+	for _, cs := range local {
+		if cs.Rationale == "" {
+			unannotated++
+		}
+	}
+	switch {
+	case unannotated == 1 && len(local) == 1:
+		out = append(out, "its one call into this repository's own code carries no comment saying why it is made")
+	case unannotated == 1:
+		out = append(out, fmt.Sprintf("1 of its %d calls into this repository's own code carries no comment saying why", len(local)))
+	case unannotated > 1:
+		out = append(out, fmt.Sprintf("%d of its %d calls into this repository's own code carry no comment saying why", unannotated, len(local)))
+	}
+	if len(pc.Seams) == 0 && pc.Changed {
+		out = append(out, "no claims: nothing has been asserted about it that could be checked or go stale")
+	}
+	return out
+}
+
+// splitCallSites separates calls into this repository's own code from calls into
+// libraries. Only the first kind can meaningfully lack an explanation.
+func splitCallSites(sites []bundle.CallSite) (local, external []bundle.CallSite) {
+	for _, cs := range sites {
+		if strings.HasPrefix(string(cs.Callee), "::") {
+			external = append(external, cs)
+			continue
+		}
+		local = append(local, cs)
+	}
+	return local, external
+}
+
+func plural(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+func isTestPath(path string) bool {
+	base := filepath.Base(path)
+	return strings.HasSuffix(base, "_test.go") || strings.HasPrefix(base, "test_") ||
+		strings.HasSuffix(base, "_test.py") || strings.HasSuffix(base, ".test.ts") ||
+		strings.HasSuffix(base, ".test.js") || strings.HasSuffix(base, ".spec.ts")
+}
+
+func oneLineOf(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 func (s *Server) handleTelemetry(w http.ResponseWriter, r *http.Request) {
 	var e explore.Event

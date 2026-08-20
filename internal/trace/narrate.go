@@ -2,6 +2,7 @@ package trace
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -176,6 +177,48 @@ func calledWith(w Well) string {
 		return humanArgs(inv)
 	}
 	return ""
+}
+
+// HumanArgs renders a recorded argument map the way a person reads it.
+func HumanArgs(args map[string]string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(args))
+	for k := range args {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s = %s", k, HumanValue(args[k])))
+	}
+	return joinWithAnd(parts)
+}
+
+// HumanValue names the empty cases rather than printing a token nobody outside
+// the language reads as "absent".
+func HumanValue(v string) string { return humanValue(v) }
+
+// StepsFor returns the narration sentences that mention one symbol, so a brief
+// about that symbol can say what it actually did.
+func StepsFor(l Landscape, b *bundle.Bundle, sym bundle.SymbolID) []Step {
+	var out []Step
+	steps := Narrate(l, b)
+	for i, s := range steps {
+		if s.Kind != "frame" || s.Index < 0 || s.Index >= len(l.Wells) {
+			continue
+		}
+		if l.Wells[s.Index].Symbol != sym {
+			continue
+		}
+		// The transition that led here explains why it was entered.
+		if i > 0 && steps[i-1].Kind == "transition" {
+			out = append(out, steps[i-1])
+		}
+		out = append(out, s)
+	}
+	return out
 }
 
 // humanArgs turns `key=user:42, opts=<nil>` into `key = "user:42" and opts = nothing`.

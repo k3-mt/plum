@@ -64,7 +64,7 @@ func cmdAsk(ctx context.Context, env *Env, args []string) error {
 	// invocations, edges, risks, rationale, claims. Never a search result.
 	events, _ := trace.ReadFile(env.Store.TracePath(id))
 	cs, _ := claims.Load(env.Store.ClaimsPath(id))
-	contextMD := server.AssembleContext(env.Cfg, b, events, cs, sym.ID)
+	contextMD := server.AssembleContext(contextInput(env, b, events, cs, id), sym.ID)
 
 	req := ask.Request{
 		ID: ask.NextID(time.Now()), SessionID: id, Symbol: sym.ID,

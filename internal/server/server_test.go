@@ -17,6 +17,8 @@ import (
 	"github.com/kelalaike/plum/internal/claims"
 	"github.com/kelalaike/plum/internal/config"
 	"github.com/kelalaike/plum/internal/explore"
+	"github.com/kelalaike/plum/internal/lang"
+	"github.com/kelalaike/plum/internal/lang/gopkg"
 	"github.com/kelalaike/plum/internal/trace"
 )
 
@@ -26,12 +28,30 @@ const source = `package auth
 func Get(key string) string {
 	return key + "!"
 }
+
+func Helper(v string) string {
+	return v
+}
+`
+
+const testSource = `package auth
+
+import "testing"
+
+func TestHelper(t *testing.T) {
+	if Helper("x") != "x" {
+		t.Fatal("no")
+	}
+}
 `
 
 func testServer(t *testing.T) (*Server, *explore.Store) {
 	t.Helper()
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "cache.go"), []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "cache_test.go"), []byte(testSource), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg := config.Default(root)
@@ -54,6 +74,7 @@ func testServer(t *testing.T) (*Server, *explore.Store) {
 	tel := explore.NewStore(filepath.Join(root, "state"))
 	cs := []claims.Claim{{ID: "c-001", Claim: "Get appends a bang", Symbol: "cache.go::Get", Executable: true}}
 	return New(cfg, b, l, events, cs, "# seams", tel, Config{
+		Adapters:   lang.NewRegistry(gopkg.New()),
 		Ask:        ask.NewStore(root),
 		JournalDir: ".plum/journal",
 		ClaimsPath: filepath.Join(root, "claims.yaml"),
@@ -88,7 +109,7 @@ func TestSymbolContextIsAssembledMechanically(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&pc); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(pc.Source, "return key + \"!\"") {
+	if !strings.Contains(pc.Source, `return key + "!"`) {
 		t.Errorf("source = %q — it must be the exact declaration text", pc.Source)
 	}
 	if len(pc.Invocations) != 2 {
@@ -187,7 +208,7 @@ func TestSymbolResponseCarriesTheRenderedBrief(t *testing.T) {
 		t.Fatal("no brief to copy")
 	}
 	for _, want := range []string{
-		"## Symbol", "cache.go::Get",
+		"# cache.go::Get",
 		"## Source", `return key + "!"`,
 		"## Recorded invocations",
 		"## Risk markers",
@@ -197,7 +218,11 @@ func TestSymbolResponseCarriesTheRenderedBrief(t *testing.T) {
 		}
 	}
 	// The brief is what `plum context` prints, so the two cannot drift.
-	if pc.Markdown != AssembleContext(s.Cfg, s.Bundle, s.Events, s.Claims, "cache.go::Get") {
+	same := AssembleContext(ContextInput{
+		Cfg: s.Cfg, Bundle: s.Bundle, Events: s.Events,
+		Claims: s.Claims, Adapters: s.Adapters, Landscape: s.Landscape,
+	}, "cache.go::Get")
+	if pc.Markdown != same {
 		t.Error("the copied brief differs from what plum context prints")
 	}
 }
@@ -345,13 +370,18 @@ func TestWatcherNoticesSessionAndSourceChanges(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(s.Cfg.Root, "cache.go"), []byte(source+"\n// edited\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case what := <-client:
-		if what != "source" {
-			t.Errorf("event = %q, want source", what)
+	deadline := time.After(8 * watchInterval)
+	for {
+		select {
+		case what := <-client:
+			if what == "source" {
+				return
+			}
+			// A session write can land in more than one tick; keep waiting for
+			// the event this case is about rather than failing on a neighbour.
+		case <-deadline:
+			t.Fatal("an edit to the source did not reach the page")
 		}
-	case <-time.After(6 * watchInterval):
-		t.Fatal("an edit to the source did not reach the page")
 	}
 }
 
@@ -381,5 +411,83 @@ func TestReloadKeepsTheTestFilter(t *testing.T) {
 		if w.Symbol == "cache.go::Other" {
 			t.Error("reloading widened a narrowed view back to the whole recording")
 		}
+	}
+}
+
+// The bundle only holds what the session changed, but the landscape now draws
+// the surrounding code a run passes through. Clicking one of those frames must
+// not produce an empty brief — that reads as "the evidence is missing" rather
+// than "nobody looked it up".
+func TestBriefForAFrameTheBundleNeverCaptured(t *testing.T) {
+	s, _ := testServer(t)
+	// A symbol that exists in the working tree but not in the bundle.
+	pc := s.buildContext("cache.go::Helper")
+	if pc.Changed {
+		t.Error("an unchanged symbol must not be reported as changed")
+	}
+	if pc.Source == "" {
+		t.Fatal("no source: the declaration was not resolved from the working tree")
+	}
+	if !strings.Contains(pc.Source, "func Helper") {
+		t.Errorf("source = %q", pc.Source)
+	}
+	brief := renderContext(pc)
+	for _, want := range []string{
+		"This session did **not** change it",
+		"func Helper",
+		"## What is missing",
+	} {
+		if !strings.Contains(brief, want) {
+			t.Errorf("brief is missing %q:\n%s", want, brief)
+		}
+	}
+}
+
+// A test is the thing exercising the change, not part of it: holding it to the
+// same standard buries the gaps that matter under ones that do not.
+func TestBriefDoesNotScoldTestFiles(t *testing.T) {
+	s, _ := testServer(t)
+	pc := s.buildContext("cache_test.go::TestHelper")
+	brief := renderContext(pc)
+
+	if !strings.Contains(brief, "It lives in a test file") {
+		t.Error("the brief should say a test file is the exercising code")
+	}
+	for _, unwanted := range []string{
+		"no declaration doc",
+		"no journalled rationale",
+		"no claims",
+	} {
+		if strings.Contains(brief, unwanted) {
+			t.Errorf("a test file was scolded for %q:\n%s", unwanted, brief)
+		}
+	}
+}
+
+// Nobody writes a comment above fmt.Sprintf. Counting library calls as
+// unexplained buries the calls that genuinely are.
+func TestOnlyCallsIntoTheRepositoryCountAsUnexplained(t *testing.T) {
+	pc := PromptContext{
+		Symbol_: bundle.Symbol{ID: "a.go::F", File: "a.go", Doc: "F does a thing."},
+		Doc:     "F does a thing.",
+		CallSites: []bundle.CallSite{
+			{Callee: "a.go::helper", CalleeRaw: "helper", Line: 3},
+			{Callee: "::fmt.Sprintf", CalleeRaw: "fmt.Sprintf", Line: 4},
+			{Callee: "::errors.New", CalleeRaw: "errors.New", Line: 5},
+		},
+		Invocations: []trace.Event{{Kind: "call"}},
+		Rationale:   []bundle.JournalEntry{{Rationale: "because"}},
+		Seams:       []claims.Claim{{Claim: "x"}},
+	}
+	gaps := missingFrom(pc)
+	if len(gaps) != 1 {
+		t.Fatalf("gaps = %v, want only the unannotated local call", gaps)
+	}
+	if !strings.Contains(gaps[0], "its one call into this repository's own code") {
+		t.Errorf("gap = %q", gaps[0])
+	}
+	brief := renderContext(pc)
+	if !strings.Contains(brief, "could not resolve to a declaration in the repository") {
+		t.Errorf("library calls should be listed but not blamed:\n%s", brief)
 	}
 }

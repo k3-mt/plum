@@ -153,7 +153,7 @@ func buildBrief(ctx context.Context, env *Env, b *bundle.Bundle, id string, scop
 			fmt.Fprintf(&evidence, "\n(%d further frames omitted for length)\n", len(ids)-i)
 			break
 		}
-		evidence.WriteString(server.AssembleContext(env.Cfg, b, events, cs, sym))
+		evidence.WriteString(server.AssembleContext(contextInput(env, b, events, cs, id), sym))
 		evidence.WriteString("\n---\n\n")
 	}
 	if scope == interpret.ScopeSymbol && len(steps) == 0 {
