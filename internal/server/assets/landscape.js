@@ -14,15 +14,7 @@ async function boot() {
   DATA = await (await fetch('/api/landscape')).json();
   const g = document.getElementById('gate');
   g.textContent = DATA.gate.fired ? 'GATE FIRED — ' + DATA.gate.reasons.join(' · ') : 'gate clear';
-  const notes = document.getElementById('notes');
-  notes.innerHTML = (DATA.notes || []).map(n =>
-    n.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`(.+?)`/g, '<code>$1</code>')).join(' · ');
-  if ((DATA.unannotated || []).length) {
-    notes.innerHTML += '<br>expensive and unexplained: ' +
-      DATA.unannotated.map(u => u.replace(/`(.+?)`/g, '<code>$1</code>')).join('; ');
-  }
   document.getElementById('summary').textContent = DATA.summary || '';
-  drawNarration();
   drawReading();
   draw();
   document.getElementById('done').onclick = async () => {
@@ -36,62 +28,6 @@ async function boot() {
     document.getElementById('keep-' + kind).onclick = () => keep(kind);
   }
   document.getElementById('q').addEventListener('keydown', e => { if (e.key === 'Enter') ask(); });
-}
-
-// The narration is the same evidence the landscape draws, said in sentences.
-// Hovering a shape shows its line; the list below shows all of them in order.
-function drawNarration() {
-  const list = document.getElementById('steps');
-  list.innerHTML = '';
-  (DATA.narration || []).forEach((step, i) => {
-    const li = document.createElement('li');
-    li.className = step.kind;
-    li.dataset.step = i;
-    li.textContent = step.text;
-    if (step.note) {
-      const warn = document.createElement('span');
-      warn.className = 'warn';
-      warn.textContent = '\u26a0 ' + step.note;
-      li.appendChild(warn);
-    }
-    if (step.kind === 'frame' && step.index >= 0) {
-      li.onclick = () => select(DATA.landscape.wells[step.index].symbol);
-      li.onmouseenter = () => showStep(i);
-    }
-    list.appendChild(li);
-  });
-}
-
-// The reading is the only part of this page a model wrote. It is kept visually
-// apart from everything else, and labelled, because prose that reads like a
-// record but was inferred is worse than no prose at all.
-function drawReading() {
-  const box = document.getElementById('reading-body');
-  const r = DATA.interpretation;
-  if (!r) return;
-  box.className = '';
-  box.innerHTML = '';
-
-  const meta = document.createElement('div');
-  meta.className = 'meta';
-  meta.textContent = r.provider + ' · ' + r.generated_at;
-  box.appendChild(meta);
-
-  if (r.stale) {
-    const stale = document.createElement('div');
-    stale.className = 'stale';
-    stale.textContent = '\u26a0 stale — ' + r.stale_reason;
-    box.appendChild(stale);
-  }
-
-  const body = document.createElement('div');
-  body.className = 'body';
-  // Headings and emphasis only; the text is displayed as written otherwise.
-  body.innerHTML = escape(r.markdown)
-    .replace(/^#+\s*(.+)$/gm, '<b>$1</b>')
-    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>');
-  box.appendChild(body);
 }
 
 // stepFor maps a shape back to its sentence: frames by well index, transitions
@@ -117,9 +53,6 @@ function showStep(i) {
     warn.textContent = '\u26a0 ' + step.note;
     box.appendChild(warn);
   }
-  document.querySelectorAll('#steps li').forEach((li) => {
-    li.classList.toggle('active', Number(li.dataset.step) === i);
-  });
 }
 
 function draw() {
@@ -172,6 +105,7 @@ function draw() {
     hit.style.cursor = 'help';
     const bStep = stepFor('transition', b.to);
     hit.onmouseenter = () => showStep(bStep);
+    hit.onclick = () => copyCallSite(b);
     svg.appendChild(hit);
     const label = fmtNs(b.cost_ns) + (b.kind !== 'compute' ? ' · ' + b.kind : '') +
       (b.frames > 1 ? ' · ' + b.frames + ' frames' : '');
@@ -202,14 +136,66 @@ function draw() {
     if (w.context) g.appendChild(el('title', {}, w.symbol + ' — surrounding code, recorded for structure only'));
     g.appendChild(el('text', { x: cx(i), y: y + 38, 'text-anchor': 'middle', class: 'blabel' },
       'd' + w.depth + (w.phase === 'resume' ? ' · resumed' : w.phase === 'escape' ? ' · escaped' : '')));
-    g.onclick = () => select(w.symbol, w);
+    g.onclick = () => select(w.symbol, w, { copy: true });
     const wStep = stepFor('frame', i);
     g.onmouseenter = () => showStep(wStep);
     svg.appendChild(g);
   });
 }
 
-async function select(symbol, well) {
+// copyCallSite hands over one transition: who called whom, what it cost, and
+// whether anything explains it. An unannotated expensive call is the case this
+// exists for — copy it, paste it, get the comment written.
+async function copyCallSite(bar) {
+  const from = DATA.landscape.wells[bar.from];
+  const to = DATA.landscape.wells[bar.to];
+  const pc = await (await fetch('/api/symbol/' + encodeURIComponent(from.symbol))).json();
+
+  const head = [
+    '# Call site: ' + from.symbol + ' → ' + to.symbol,
+    '',
+    'Recorded cost: ' + fmtNs(bar.cost_ns) + ' (' + bar.kind + ', ' + bar.direction + ').',
+    bar.rationale
+      ? 'The call site says why: "' + bar.rationale + '"'
+      : 'Nothing at this call site explains why the call is made. That is what is missing.',
+    '',
+    '---',
+    '',
+  ].join('\n');
+
+  await copy(head + (pc.markdown || ''), bar.rationale
+    ? 'call site copied'
+    : 'unexplained call copied — paste it and ask for the comment');
+  select(from.symbol, from, { copy: false });
+}
+
+// copy puts text on the clipboard, falling back for browsers that refuse the
+// async API outside a user gesture.
+async function copy(text, message) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const el = document.createElement('textarea');
+    el.value = text;
+    el.style.position = 'fixed';
+    el.style.opacity = '0';
+    document.body.appendChild(el);
+    el.select();
+    try { document.execCommand('copy'); } catch { /* nothing else to try */ }
+    document.body.removeChild(el);
+  }
+  toast(message + ' · ' + text.length.toLocaleString() + ' chars');
+}
+
+function toast(text) {
+  const el = document.getElementById('toast');
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => el.classList.remove('show'), 2600);
+}
+
+async function select(symbol, well, opts) {
   if (SELECTED && DWELL) {
     send({ symbol: SELECTED, action: 'click', dwell_ms: Date.now() - DWELL });
   }
@@ -217,6 +203,16 @@ async function select(symbol, well) {
   const pc = await (await fetch('/api/symbol/' + encodeURIComponent(symbol))).json();
   document.getElementById('src').textContent = pc.source || '(source not available in the working tree)';
   send({ symbol, action: 'expand_source' });
+
+  // Clicking a frame hands its whole assembled brief to the clipboard: source,
+  // recorded arguments and returns, neighbours with their code, risks,
+  // rationale, claims. Paste it into an agent and the question answers itself.
+  if (!opts || opts.copy !== false) {
+    const undocumented = !pc.doc;
+    await copy(pc.markdown || '', undocumented
+      ? 'evidence copied — undocumented, paste it and ask for the doc'
+      : 'evidence copied');
+  }
 
   const body = document.getElementById('rail-body');
   const invs = (pc.invocations || []).map(e => {

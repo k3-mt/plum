@@ -169,3 +169,33 @@ func TestTelemetryEndpointStampsTheSession(t *testing.T) {
 		t.Errorf("events = %+v", events)
 	}
 }
+
+// Clicking a frame in the UI puts its whole brief on the clipboard, so the
+// rendered markdown has to travel with the JSON rather than being reassembled
+// in the browser.
+func TestSymbolResponseCarriesTheRenderedBrief(t *testing.T) {
+	s, _ := testServer(t)
+	rec := httptest.NewRecorder()
+	s.mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/symbol/cache.go::Get", nil))
+	var pc PromptContext
+	if err := json.NewDecoder(rec.Body).Decode(&pc); err != nil {
+		t.Fatal(err)
+	}
+	if pc.Markdown == "" {
+		t.Fatal("no brief to copy")
+	}
+	for _, want := range []string{
+		"## Symbol", "cache.go::Get",
+		"## Source", `return key + "!"`,
+		"## Recorded invocations",
+		"## Risk markers",
+	} {
+		if !strings.Contains(pc.Markdown, want) {
+			t.Errorf("brief is missing %q", want)
+		}
+	}
+	// The brief is what `plum context` prints, so the two cannot drift.
+	if pc.Markdown != AssembleContext(s.Cfg, s.Bundle, s.Events, s.Claims, "cache.go::Get") {
+		t.Error("the copied brief differs from what plum context prints")
+	}
+}

@@ -162,6 +162,10 @@ type PromptContext struct {
 	// question like "is this intentional?" often turns on what the caller does
 	// before it calls — an edge alone cannot answer that.
 	Related []RelatedSymbol `json:"related"`
+	// Markdown is this same context rendered as a brief — what `plum context`
+	// prints. It travels with the JSON so the page can put it on the clipboard
+	// without assembling anything itself.
+	Markdown string `json:"markdown"`
 }
 
 // RelatedSymbol is a caller or callee, with enough source to be useful.
@@ -295,7 +299,9 @@ func (s *Server) handleSymbol(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "symbol id required", http.StatusBadRequest)
 		return
 	}
-	writeJSON(w, s.buildContext(id))
+	pc := s.buildContext(id)
+	pc.Markdown = renderContext(pc)
+	writeJSON(w, pc)
 }
 
 type askRequest struct {

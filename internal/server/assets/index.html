@@ -8,33 +8,26 @@
   <button id="done" title="Unlocks plum quiz for this session">I have met this code</button>
 </header>
 
-<section id="notes" class="notes"></section>
+<details id="reading" open>
+  <summary>what this is for — <span class="qualifier">a reading, not a record</span></summary>
+  <div id="reading-body" class="muted small">No reading stored. Run <code>plum interpret</code>.</div>
+</details>
+
 <section id="summary" class="summary"></section>
 
 <section class="landscape">
   <div class="legend">
-    <span><i class="k-enter"></i> entered frame</span>
-    <span><i class="k-resume"></i> resumed (returned into)</span>
+    <span><i class="k-enter"></i> changed in this session</span>
+    <span><i class="k-context"></i> passed through, unchanged</span>
+    <span><i class="k-resume"></i> returned into</span>
     <span><i class="k-dashed"></i> no declaration doc</span>
     <span><i class="k-risk"></i> risk marker</span>
-    <span><i class="k-context"></i> surrounding code (structure only)</span>
-    <span><i class="k-unwind"></i> unwind — a cliff, not a staircase</span>
+    <span><i class="k-unwind"></i> unwind</span>
   </div>
   <div id="svgwrap"><svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
-  <div id="hover" class="hover">Hover a frame or a step to read what happened there.</div>
+  <div id="hover" class="hover">Hover to read what happened. Click to copy that frame's evidence.</div>
   <div id="closed" class="closed"></div>
 </section>
-
-<main>
-  <section id="reading" class="pane">
-    <h2>what this is for — a reading, not a record</h2>
-    <div id="reading-body" class="muted small">No reading stored. Run <code>plum interpret</code>.</div>
-  </section>
-  <section id="story" class="pane">
-    <h2>what happened, step by step</h2>
-    <ol id="steps"></ol>
-  </section>
-</main>
 
 <main>
   <section id="source" class="pane">
@@ -44,8 +37,8 @@
   <aside id="rail" class="pane">
     <h2>frame</h2>
     <div id="rail-body">
-      <p class="muted">Nothing selected. The landscape is a round trip: descent is
-      entering a call, ascent is returning, and hump height is what the transition cost.</p>
+      <p class="muted">Nothing selected. Descent is entering a call, ascent is
+      returning, and hump height is what the transition cost.</p>
     </div>
     <div id="ask">
       <input id="q" placeholder="ask about this frame…" autocomplete="off">
@@ -62,4 +55,6 @@
     </div>
   </aside>
 </main>
+
+<div id="toast" class="toast"></div>
 <script src="/landscape.js"></script>
