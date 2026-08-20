@@ -119,9 +119,18 @@ def _args_of(code) -> dict:
 
 def _on_call(code, _offset):
     symbol = _symbol_id(code)
-    if _symbols and symbol not in _symbols and symbol not in _context:
-        if _is_test(code):
-            _tests().append(getattr(code, "co_qualname", code.co_name))
+    recorded = (not _symbols) or symbol in _symbols or symbol in _context
+
+    # A test is registered as the current test whether or not it is itself
+    # recorded as a frame. Registering only the unrecorded ones left every test
+    # that happened to live in a changed file — which is most of them, since
+    # surrounding code in changed files is context — labelling nothing, so its
+    # calls came back anonymous. It also unbalanced the stack, because the
+    # return side pops for any test.
+    if _is_test(code):
+        _tests().append(getattr(code, "co_qualname", code.co_name))
+
+    if not recorded:
         return
     stack = _stack()
     invocation = f"{threading.get_ident()}-{next(_counter)}"

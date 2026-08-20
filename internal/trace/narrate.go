@@ -142,7 +142,9 @@ func frameStep(l Landscape, b *bundle.Bundle, i int, w Well) Step {
 		step.Note = "no description was written for this function, so what it is for is not recorded anywhere"
 	}
 	if w.Context {
-		step.Note = "this session did not change this function; it is here because the run passed through it"
+		step.Note = "this session did not change this function; it is here because " +
+			"the run passed through it. Surrounding code is recorded for structure " +
+			"only, so its arguments and return value were not captured"
 	}
 	if risks := b.RisksFor(w.Symbol); len(risks) > 0 {
 		s.text(" Flagged: ")
@@ -360,7 +362,16 @@ func returnedValue(w Well) string {
 	for _, inv := range w.Invocations {
 		switch {
 		case strings.HasPrefix(inv, "→ "):
-			return humanValue(strings.TrimPrefix(inv, "→ "))
+			// An empty result is a value that was never captured, not a function
+			// that returned nothing. Surrounding code is recorded for structure
+			// only — entering and leaving, nothing else — so saying "it returned
+			// nothing" about a function that returned 7 is the narration
+			// inventing a fact the recording does not hold (P1).
+			raw := strings.TrimSpace(strings.TrimPrefix(inv, "→ "))
+			if raw == "" {
+				return ""
+			}
+			return humanValue(raw)
 		case strings.HasPrefix(inv, "← "):
 			// A resumed frame records which frame handed back, and what.
 			rest := strings.TrimPrefix(inv, "← ")
@@ -389,7 +400,35 @@ func humanValue(v string) string {
 	if strings.HasPrefix(v, `"`) || strings.HasPrefix(v, "'") {
 		return v
 	}
+	// Quoting is for prose that would otherwise run into the sentence around it.
+	// Applied to everything, it turned the integer 3 into "3" — which reads as a
+	// string, and is the sort of type confusion a reviewer would chase.
+	if isLiteral(v) {
+		return v
+	}
 	return fmt.Sprintf("%q", v)
+}
+
+// isLiteral reports whether a recorded value already reads as a value: a number,
+// a boolean, or a composite the language printed with its own brackets. Shims
+// record whatever the language's own repr produced, so this is about how the
+// text reads in an English sentence, not about parsing the language.
+func isLiteral(v string) bool {
+	switch v {
+	case "true", "false", "True", "False":
+		return true
+	}
+	if _, err := strconv.ParseFloat(v, 64); err == nil {
+		return true
+	}
+	// Composites bring their own delimiters: [1, 2], {"a": 1}, map[k:v], (1, 2),
+	// &Thing{...}, <object at 0x...>.
+	for _, prefix := range []string{"[", "{", "(", "map[", "&", "<", "0x"} {
+		if strings.HasPrefix(v, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func firstSentence(doc string) string {

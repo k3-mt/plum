@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"strings"
 	"syscall"
 
 	"github.com/k3-mt/plum/internal/cli"
@@ -33,7 +34,10 @@ func resolveVersion() string {
 	if !ok {
 		return version
 	}
-	if v := info.Main.Version; v != "" && v != "(devel)" {
+	// A pseudo-version like v0.1.1-0.20260820105027-ff0b4b00d542 already encodes
+	// the commit, and reads as a release that does not exist. Prefer the commit
+	// itself, which is what a local build actually is.
+	if v := info.Main.Version; v != "" && v != "(devel)" && !isPseudoVersion(v) {
 		return v
 	}
 	// Built from a checkout rather than installed: the commit is the version.
@@ -55,6 +59,30 @@ func resolveVersion() string {
 		return rev + dirty
 	}
 	return version
+}
+
+// isPseudoVersion reports the form the module proxy synthesises for a commit
+// that carries no tag of its own: <base>-<timestamp>-<12 hex>.
+func isPseudoVersion(v string) bool {
+	// Go appends build metadata of its own — "+dirty", "+incompatible" — to the
+	// module version, which would otherwise hide the commit hash this looks for.
+	if i := strings.IndexByte(v, '+'); i >= 0 {
+		v = v[:i]
+	}
+	parts := strings.Split(v, "-")
+	if len(parts) < 3 {
+		return false
+	}
+	rev := parts[len(parts)-1]
+	if len(rev) != 12 {
+		return false
+	}
+	for _, c := range rev {
+		if !strings.ContainsRune("0123456789abcdef", c) {
+			return false
+		}
+	}
+	return true
 }
 
 func main() {

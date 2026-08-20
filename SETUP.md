@@ -104,6 +104,10 @@ How to determine `languages` — the file that exists decides it:
 | `pyproject.toml`, `setup.py`, `requirements.txt` | `["python"]` |
 | `package.json` | `["javascript"]` or `["typescript"]` if `tsconfig.json` |
 | `dbt_project.yml` | `["dbt"]` |
+| none of the above | the source extensions decide it — `.py` → python, `.go` → go, `.ts`/`.js` → typescript |
+
+A repository with no manifest at all is common; reading the extensions is not a
+guess, it is the same evidence one step further down.
 
 List several if several apply: `languages = ["go", "typescript"]`. Aliases are
 accepted — `golang`, `py`, `js`, `ts`, `node`, `sql`.
@@ -185,13 +189,30 @@ To undo the whole step:
 plum hooks uninstall
 ```
 
+### When capture does nothing
+
+Capture is deduplicated on tree content, so a commit that changes nothing plum
+had not already recorded produces no new session. That is correct, not broken.
+Run by hand it says which of those it was:
+
+```
+plum: nothing captured — the tree is byte-for-byte what the last capture
+already recorded (-force overrides)
+```
+
+From a hook it stays silent, because a message after every agent turn is how a
+hook gets uninstalled. **So do not conclude the hook is broken from the absence
+of a session** — run `plum auto` yourself and read the reason.
+
 ### The post-commit hook and manual boundaries
 
-Once the hook is installed, committing captures a session on its own. If you are
-also using `plum mark start` / `end`, expect two sessions when you commit inside
-a marked window — the marked one, and the post-commit one. That is not a fault;
-sessions tile by SHA. Use one mechanism or the other for a given change unless
-you want both.
+Once the hook is installed, committing captures a session **if the commit
+contains something the last capture had not already seen.** If you ran `plum
+mark end` first, it usually has — so committing right afterwards produces no
+second session, and that is the deduplication above rather than a failure.
+
+Use one mechanism or the other for a given change. Sessions tile by SHA, so
+mixing them is safe, it is just harder to read.
 
 Capture is milliseconds, so it always runs. Tracing and synthesis are not, and
 running them after every prompt is how a tool stops being read. Nothing heavier
@@ -233,17 +254,21 @@ plum trace         # runs the suite with the changed symbols instrumented
 plum explain       # what the run actually did, in plain language
 ```
 
-Then commit the session — this is the step that makes it reviewable:
+Then commit the change **and** the session together — a session bundle
+describing source that is still uncommitted is a record of nothing anyone else
+can see:
 
 ```sh
-git add .plum/sessions
-git commit -m "plum: session for <what changed>"
+git add <the files you changed> .plum/sessions
+git commit -m "<what changed>"
 ```
 
 `traces/` inside the session is gitignored already; the bundle and landscape are
 small and are the artifact a reviewer reads.
 
-`plum trace` writes to a scratch copy. **It never writes to the repository.**
+`plum trace` instruments a **scratch copy**. **It never modifies your source.**
+It does write into `.plum/sessions/<id>/` — the trace, the landscape — and says
+so in its own output.
 
 **Order matters here, and getting it wrong is quiet.** `plum trace` instruments
 the symbol set recorded in the *session bundle*, which `plum mark end` fixed at
@@ -275,6 +300,10 @@ Three outcomes, and only one is success:
   not one plum can label, so "which test reaches this change" cannot be
   answered. The landscape is still valid. Report this too — the evidence is
   thinner than it looks.
+- **A mix: some named tests and a `(no test)` bucket.** Partial attribution.
+  Judge it by size — if most frames sit under `(no test)`, treat it as the case
+  above and report it. A small remainder is usually setup or teardown running
+  outside any test, and is not worth raising.
 
 Then check that `plum explain` names a symbol `plum report` said you changed:
 
@@ -293,24 +322,29 @@ Report it to the user in exactly those terms.
 ## Step 6 — hand it over
 
 ```sh
-plum export -o plum-review.html
+plum export -o /tmp/plum-review.html
 ```
 
 One file, opens with nothing running, safe to attach to a pull request or send
 to somebody who does not have plum installed.
 
-Written to the working tree, it will show as untracked. It is a rendering of the
-session, not a source of truth — attach it and delete it, or write it outside
-the repository (`plum export -o /tmp/review.html`). With no `-o` it goes inside
-the session directory, which is gitignored for traces but not for this. Do not
-commit it without asking.
+**Write it outside the repository**, as above. It is a rendering of the session,
+not a source of truth, and inside the tree it becomes an untracked file somebody
+has to decide about. With no `-o` at all it lands in the session directory,
+which is *not* gitignored for this file. Do not commit it without asking.
 
 For an interactive read:
 
 ```sh
-plum explore                       # serves on localhost, opens a browser
+plum explore                       # serves on localhost and OPENS A BROWSER
+plum explore -no-open              # serve only, and print the URL
 plum explore -test "TestName"      # narrow to one test's path
 ```
+
+`plum explore` opens a browser window on the user's machine and then **blocks
+until interrupted**. If you are working unattended, use `-no-open` and hand them
+the URL, or skip it — `plum export` gives the same content without taking over
+their screen.
 
 Drag the canvas to move, scroll to zoom, double-click to fit. Clicking a frame
 copies its assembled evidence to the clipboard — source, recorded arguments and
@@ -400,6 +434,7 @@ costs money.
 | `plum note "why" -rejected "..."` | record rationale while it is still in your head |
 | `plum report` | the evidence, ordered by what a reader needs first |
 | `plum trace` | run the suite with the changed set instrumented |
+| `plum tests` | the tests that ran, and what each one reached |
 | `plum ingest` | read a dbt run that already happened |
 | `plum explain` | what the run did, in sentences |
 | `plum explore` | the interactive picture |

@@ -66,11 +66,22 @@ func cmdAuto(ctx context.Context, env *Env, args []string) error {
 	// not read: stdin may be an inherited pipe that never closes, and a hook
 	// that blocks forever is worse than one that never runs.
 
-	if !env.Cfg.Auto.Enabled {
+	// Run from a hook this says nothing — after every agent turn, most of these
+	// are the normal answer and noise is how a hook gets uninstalled. Run by
+	// hand it has to explain itself: exiting 0 with no output and no session is
+	// indistinguishable from being broken.
+	why := func(reason string) error {
+		if !*quiet && !*asJSON {
+			fmt.Println("plum: nothing captured —", reason)
+		}
 		return nil
 	}
+
+	if !env.Cfg.Auto.Enabled {
+		return why("automatic capture is off ([auto] enabled in .plum/config.toml)")
+	}
 	if !env.Repo.HasCommits(ctx) {
-		return nil // nothing to diff against yet
+		return why("this repository has no commits yet, so there is nothing to diff against")
 	}
 
 	head, err := env.Repo.RevParse(ctx, "HEAD")
@@ -83,11 +94,11 @@ func cmdAuto(ctx context.Context, env *Env, args []string) error {
 	// Debounce on content, not on time. The Stop hook fires after every turn,
 	// and most turns change nothing worth capturing.
 	if !*force && st.LastTree == tree && st.LastTree != "" {
-		return nil
+		return why("the tree is byte-for-byte what the last capture already recorded (-force overrides)")
 	}
 	from := startPoint(ctx, env, st)
 	if from == "" {
-		return nil
+		return why("no starting point: nothing recorded where the last session ended")
 	}
 
 	started := time.Now().UTC()
@@ -97,7 +108,7 @@ func cmdAuto(ctx context.Context, env *Env, args []string) error {
 	}
 	if sess.StartSHA == sess.EndSHA {
 		saveAutoState(env, autoState{LastEndSHA: sess.EndSHA, LastTree: tree, LastID: st.LastID, At: started})
-		return nil
+		return why("the range is empty: nothing has changed since the last capture")
 	}
 	j, _ := journal.Harvest(filepath.Join(env.Cfg.Root, env.Cfg.Repo.JournalDir), time.Time{})
 	sess.JournalPresent = len(j) > 0
@@ -108,7 +119,8 @@ func cmdAuto(ctx context.Context, env *Env, args []string) error {
 	}
 	if len(b.Symbols) == 0 && len(b.Files) == 0 {
 		saveAutoState(env, autoState{LastEndSHA: sess.EndSHA, LastTree: tree, LastID: st.LastID, At: started})
-		return nil
+		return why("the change touched nothing this repository is configured to analyse " +
+			"(see [repo] languages and exclude)")
 	}
 	if err := env.Store.Save(b); err != nil {
 		return nil

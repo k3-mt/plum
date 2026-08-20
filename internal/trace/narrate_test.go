@@ -227,3 +227,62 @@ func TestTransitionSpansSeparateCostFromProse(t *testing.T) {
 	}
 	t.Fatal("no descend transition was narrated")
 }
+
+// Quoting every recorded value turned the integer 3 into "3", which reads as a
+// string — the sort of type confusion a reviewer chases into the code.
+func TestNumbersAndBooleansAreNotQuotedIntoStrings(t *testing.T) {
+	for in, want := range map[string]string{
+		"3":         "3",
+		"-2.5":      "-2.5",
+		"true":      "true",
+		"False":     "False",
+		"[1, 2]":    "[1, 2]",
+		`{"a": 1}`:  `{"a": 1}`,
+		"map[k:v]":  "map[k:v]",
+		"'SKU-1'":   "'SKU-1'", // already a repr; do not double-quote it
+		"some text": `"some text"`,
+		"":          "nothing",
+		"None":      "nothing",
+	} {
+		if got := HumanValue(in); got != want {
+			t.Errorf("HumanValue(%q) = %s, want %s", in, got, want)
+		}
+	}
+}
+
+// Surrounding code is recorded for structure only — entering and leaving,
+// nothing captured. Reading that absence as "it returned nothing" states a fact
+// about the code that the recording does not hold.
+func TestAnUncapturedReturnIsNotReportedAsNothing(t *testing.T) {
+	b := testBundle()
+	b.Symbols = []bundle.Symbol{{ID: "a.go::Verify", Name: "Verify"}}
+	ev := []Event{
+		call("a.go::Verify", "1", "", 0, 0),
+		call("a.go::lookup", "2", "1", 1, 100),
+		// A context frame's probe records the exit but captures no value.
+		ret("a.go::lookup", "2", 1, 200, ""),
+		ret("a.go::Verify", "1", 0, 300, "ok"),
+	}
+	steps := Narrate(DeriveChain(ev, b, ChainHottest), b)
+	var seen bool
+	for _, s := range steps {
+		if !strings.Contains(s.Text, "lookup") || s.Kind != "frame" {
+			continue
+		}
+		seen = true
+		if strings.Contains(s.Text, "returned nothing") {
+			t.Errorf("narration invents a return value: %q", s.Text)
+		}
+		if !strings.Contains(s.Note, "not captured") {
+			t.Errorf("note should say the value was not captured, got %q", s.Note)
+		}
+	}
+	if !seen {
+		t.Fatal("the context frame was never narrated")
+	}
+
+	// A function that genuinely returned a nil/None still says so.
+	if got := HumanValue("None"); got != "nothing" {
+		t.Errorf("an actual None = %q", got)
+	}
+}
