@@ -1,0 +1,2074 @@
+{
+  "session_id": "2026-08-20-9dfd",
+  "wells": [
+    {
+      "symbol": "internal/server/server_test.go::TestSymbolResponseCarriesTheRenderedBrief",
+      "label": "TestSymbolResponseCarriesTheRenderedBrief",
+      "depth": 0,
+      "self_ns": 8000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ]
+    },
+    {
+      "symbol": "internal/met/met.go::Load",
+      "label": "Load",
+      "depth": 1,
+      "self_ns": 15000,
+      "phase": "enter",
+      "doc": "Load never fails. A missing file means nothing has been met, which is the\ntruthful reading of a fresh checkout; an unreadable one means the same, and\nmust not be the reason a window refuses to open.",
+      "risk": false,
+      "context": false,
+      "invocations": [
+        "stateDir=/var/folders/5d/btwkgrdn17j8d4ky4skx3vt40000gn/T/TestSymbolResponseCarriesTheRenderedBrief3231582105/001/state",
+        "→ \u0026{{{} {0 0}} /var/folders/5d/btwkgrdn17j8d4ky4skx3vt40000gn/T/TestSymbolResponseCarriesTheRenderedBrief3231582105/001/state/met.json map[]}"
+      ],
+      "joins": [
+        {
+          "symbol": "internal/met/met_test.go::TestAMissedQuestionPutsTheDebtBackOn",
+          "dir": "in",
+          "label": "TestAMissedQuestionPutsTheDebtBackOn"
+        },
+        {
+          "symbol": "internal/met/met_test.go::TestFramesNamesOnlyWhatTheLandscapeDraws",
+          "dir": "in",
+          "label": "TestFramesNamesOnlyWhatTheLandscapeDraws"
+        },
+        {
+          "symbol": "internal/met/met_test.go::TestLoadOnAnUnreadableFileMeansNothingMet",
+          "dir": "in",
+          "label": "TestLoadOnAnUnreadableFileMeansNothingMet"
+        },
+        {
+          "symbol": "internal/met/met_test.go::TestMeetAllClearsTheChangedSetAndSurvivesAReload",
+          "dir": "in",
+          "label": "TestMeetAllClearsTheChangedSetAndSurvivesAReload"
+        },
+        {
+          "symbol": "internal/met/met_test.go::TestMeetInIgnoresASymbolTheBundleDoesNotHold",
+          "dir": "in",
+          "label": "TestMeetInIgnoresASymbolTheBundleDoesNotHold"
+        },
+        {
+          "symbol": "internal/met/met_test.go::TestMeetInTakesTheFingerprintFromTheBundle",
+          "dir": "in",
+          "label": "TestMeetInTakesTheFingerprintFromTheBundle"
+        },
+        {
+          "symbol": "internal/met/met_test.go::TestMeetingASymbolDoesNotCoverALaterVersionOfIt",
+          "dir": "in",
+          "label": "TestMeetingASymbolDoesNotCoverALaterVersionOfIt"
+        },
+        {
+          "symbol": "internal/met/met_test.go::TestSymbolsWithoutAFingerprintAreNotCounted",
+          "dir": "in",
+          "label": "TestSymbolsWithoutAFingerprintAreNotCounted"
+        }
+      ],
+      "joins_more": 9
+    },
+    {
+      "symbol": "internal/server/server_test.go::TestSymbolResponseCarriesTheRenderedBrief",
+      "label": "TestSymbolResponseCarriesTheRenderedBrief",
+      "depth": 0,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← Load \u0026{{{} {0 0}} /var/folders/5d/btwkgrdn17j8d4ky4skx3vt40000gn/T/TestSymbolResponseCarriesTheRenderedBrief3231582105/001/st…"
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::New",
+      "label": "New",
+      "depth": 1,
+      "self_ns": 34000,
+      "phase": "enter",
+      "doc": "",
+      "risk": true,
+      "context": false,
+      "invocations": [
+        "b=\u0026{ {s1   0001-01-01 00:00:00 +0000 UTC 0001-01-01 00:00:00 +0000 UTC   false } [] [{cache.go::Get func Get cache.go 3 6 0 0  func Get(key string) string fp1 Get returns the token. false [] [{cache.go:…, cfg=\u0026{/var/folders/5d/btwkgrdn17j8d4ky4skx3vt40000gn/T/TestSymbolResponseCarriesTheRenderedBrief3231582105/001 {[go] go test ./... .plum/journal [.claude/ testdata/ vendor/ node_modules/ dist/ .git/]} {5 …, cs=[{c-001 Get appends a bang cache.go::Get true  }], ev=[{ call cache.go::Get 1  0 0 map[key:user:42]    []} { return cache.go::Get 1  0 0 map[] user:42!   []}], l={s1 [{cache.go::Get Get 0 0 enter Get returns the token. true false [key=user:42 → user:42!] [] 0}] [] true   hottest  0 1 [cache.go::Get]}, opts={0x662c2602c8a0 \u003cnil\u003e \u003cnil\u003e .plum/journal /var/folders/5d/btwkgrdn17j8d4ky4skx3vt40000gn/T/TestSymbolResponseCarriesTheRenderedBrief3231582105/001/claims.yaml  0x662c25fdd5c0  \u003cnil\u003e false \u003cnil\u003e false …, synthesis=# seams, tel=\u0026{/var/folders/5d/btwkgrdn17j8d4ky4skx3vt40000gn/T/TestSymbolResponseCarriesTheRenderedBrief3231582105/001/state {{} {0 0}}}",
+        "→ \u0026{0x662c25e55200 0x662c2603a008 {s1 [{cache.go::Get Get 0 0 enter Get returns the token. true false [key=user:42 → user:42!] [] 0}] [] true   hottest  0 1 [cache.go::Get]} \u003cnil\u003e [{ call cache.go::Ge…"
+      ],
+      "joins": [
+        {
+          "symbol": "internal/server/server_test.go::TestAssetsAreEmbeddedAndSmall",
+          "dir": "in",
+          "label": "TestAssetsAreEmbeddedAndSmall"
+        },
+        {
+          "symbol": "internal/server/server_test.go::TestBriefDoesNotScoldTestFiles",
+          "dir": "in",
+          "label": "TestBriefDoesNotScoldTestFiles"
+        },
+        {
+          "symbol": "internal/server/server_test.go::TestBriefForAFrameTheBundleNeverCaptured",
+          "dir": "in",
+          "label": "TestBriefForAFrameTheBundleNeverCaptured"
+        },
+        {
+          "symbol": "internal/server/server_test.go::TestDoneUnlocksInterrogation",
+          "dir": "in",
+          "label": "TestDoneUnlocksInterrogation"
+        },
+        {
+          "symbol": "internal/server/server_test.go::TestReloadKeepsTheTestFilter",
+          "dir": "in",
+          "label": "TestReloadKeepsTheTestFilter"
+        },
+        {
+          "symbol": "internal/server/server_test.go::TestSymbolContextIsAssembledMechanically",
+          "dir": "in",
+          "label": "TestSymbolContextIsAssembledMechanically"
+        },
+        {
+          "symbol": "internal/server/server_test.go::TestTelemetryEndpointStampsTheSession",
+          "dir": "in",
+          "label": "TestTelemetryEndpointStampsTheSession"
+        },
+        {
+          "symbol": "internal/server/server_test.go::TestUnansweredQuestionsAreLogged",
+          "dir": "in",
+          "label": "TestUnansweredQuestionsAreLogged"
+        }
+      ],
+      "joins_more": 2
+    },
+    {
+      "symbol": "internal/server/live.go::newHub",
+      "label": "newHub",
+      "depth": 2,
+      "self_ns": 9000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::New",
+      "label": "New",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": true,
+      "context": false,
+      "invocations": [
+        "← newHub "
+      ]
+    },
+    {
+      "symbol": "internal/server/server_test.go::TestSymbolResponseCarriesTheRenderedBrief",
+      "label": "TestSymbolResponseCarriesTheRenderedBrief",
+      "depth": 0,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← New \u0026{0x662c25e55200 0x662c2603a008 {s1 [{cache.go::Get Get 0 0 enter Get returns the token. true false [key=user:42 → use…"
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::Server.handleSymbol",
+      "label": "Server.handleSymbol",
+      "depth": 1,
+      "self_ns": 11000,
+      "phase": "enter",
+      "doc": "",
+      "risk": true,
+      "context": false,
+      "invocations": [
+        "r=\u0026{GET /api/symbol/cache.go::Get HTTP/1.1 1 1 map[] {} \u003cnil\u003e 0 [] false example.com map[] map[] \u003cnil\u003e map[] 192.0.2.1:1234 /api/symbol/cache.go::Get \u003cnil\u003e \u003cnil\u003e \u003cnil\u003e /api/symbol/ {{}} 0x662c26030d20 […, w=\u0026{200 map[]  false \u003cnil\u003e map[] false}",
+        "→ "
+      ],
+      "joins": [
+        {
+          "symbol": "internal/server/server_test.go::TestSymbolContextIsAssembledMechanically",
+          "dir": "in",
+          "label": "TestSymbolContextIsAssembledMechanically"
+        }
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::Server.buildContext",
+      "label": "Server.buildContext",
+      "depth": 2,
+      "self_ns": 12000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ],
+      "joins": [
+        {
+          "symbol": "internal/server/export.go::Server.Export",
+          "dir": "in",
+          "label": "Server.Export"
+        },
+        {
+          "symbol": "internal/server/server.go::AssembleContext",
+          "dir": "in",
+          "label": "AssembleContext",
+          "on_path": true
+        },
+        {
+          "symbol": "internal/server/server.go::Server.handleAsk",
+          "dir": "in",
+          "label": "Server.handleAsk"
+        },
+        {
+          "symbol": "internal/server/server_test.go::TestBriefDoesNotScoldTestFiles",
+          "dir": "in",
+          "label": "TestBriefDoesNotScoldTestFiles"
+        },
+        {
+          "symbol": "internal/server/server_test.go::TestBriefForAFrameTheBundleNeverCaptured",
+          "dir": "in",
+          "label": "TestBriefForAFrameTheBundleNeverCaptured"
+        }
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::Server.symbolFor",
+      "label": "Server.symbolFor",
+      "depth": 3,
+      "self_ns": 11000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::Server.buildContext",
+      "label": "Server.buildContext",
+      "depth": 2,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← Server.symbolFor "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::Server.related",
+      "label": "Server.related",
+      "depth": 3,
+      "self_ns": 11000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::Server.buildContext",
+      "label": "Server.buildContext",
+      "depth": 2,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← Server.related "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::Server.source",
+      "label": "Server.source",
+      "depth": 3,
+      "self_ns": 36000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::Server.buildContext",
+      "label": "Server.buildContext",
+      "depth": 2,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← Server.source "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::Server.handleSymbol",
+      "label": "Server.handleSymbol",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": true,
+      "context": false,
+      "invocations": [
+        "← Server.buildContext "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::renderContext",
+      "label": "renderContext",
+      "depth": 2,
+      "self_ns": 15000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ],
+      "joins": [
+        {
+          "symbol": "internal/server/export.go::Server.Export",
+          "dir": "in",
+          "label": "Server.Export"
+        },
+        {
+          "symbol": "internal/server/server.go::AssembleContext",
+          "dir": "in",
+          "label": "AssembleContext",
+          "on_path": true
+        },
+        {
+          "symbol": "internal/server/server.go::Server.handleAsk",
+          "dir": "in",
+          "label": "Server.handleAsk"
+        },
+        {
+          "symbol": "internal/server/server_test.go::TestBriefDoesNotScoldTestFiles",
+          "dir": "in",
+          "label": "TestBriefDoesNotScoldTestFiles"
+        },
+        {
+          "symbol": "internal/server/server_test.go::TestBriefForAFrameTheBundleNeverCaptured",
+          "dir": "in",
+          "label": "TestBriefForAFrameTheBundleNeverCaptured"
+        },
+        {
+          "symbol": "internal/server/server_test.go::TestOnlyCallsIntoTheRepositoryCountAsUnexplained",
+          "dir": "in",
+          "label": "TestOnlyCallsIntoTheRepositoryCountAsUnexplained"
+        },
+        {
+          "symbol": "internal/server/server.go::plural",
+          "dir": "out",
+          "label": "plural"
+        }
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::isTestPath",
+      "label": "isTestPath",
+      "depth": 3,
+      "self_ns": 11000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ],
+      "joins": [
+        {
+          "symbol": "internal/server/server.go::missingFrom",
+          "dir": "in",
+          "label": "missingFrom",
+          "on_path": true
+        }
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::renderContext",
+      "label": "renderContext",
+      "depth": 2,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← isTestPath "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::fenceLanguage",
+      "label": "fenceLanguage",
+      "depth": 3,
+      "self_ns": 11000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::renderContext",
+      "label": "renderContext",
+      "depth": 2,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← fenceLanguage "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::fenceLanguage",
+      "label": "fenceLanguage",
+      "depth": 3,
+      "self_ns": 11000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::renderContext",
+      "label": "renderContext",
+      "depth": 2,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← fenceLanguage "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::splitCallSites",
+      "label": "splitCallSites",
+      "depth": 3,
+      "self_ns": 13000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ],
+      "joins": [
+        {
+          "symbol": "internal/server/server.go::missingFrom",
+          "dir": "in",
+          "label": "missingFrom",
+          "on_path": true
+        }
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::renderContext",
+      "label": "renderContext",
+      "depth": 2,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← splitCallSites "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::oneLineOf",
+      "label": "oneLineOf",
+      "depth": 3,
+      "self_ns": 13000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::renderContext",
+      "label": "renderContext",
+      "depth": 2,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← oneLineOf "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::missingFrom",
+      "label": "missingFrom",
+      "depth": 3,
+      "self_ns": 13000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ],
+      "joins": [
+        {
+          "symbol": "internal/server/server_test.go::TestOnlyCallsIntoTheRepositoryCountAsUnexplained",
+          "dir": "in",
+          "label": "TestOnlyCallsIntoTheRepositoryCountAsUnexplained"
+        }
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::isTestPath",
+      "label": "isTestPath",
+      "depth": 4,
+      "self_ns": 14000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ],
+      "joins": [
+        {
+          "symbol": "internal/server/server.go::renderContext",
+          "dir": "in",
+          "label": "renderContext",
+          "on_path": true
+        }
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::missingFrom",
+      "label": "missingFrom",
+      "depth": 3,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← isTestPath "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::splitCallSites",
+      "label": "splitCallSites",
+      "depth": 4,
+      "self_ns": 14000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ],
+      "joins": [
+        {
+          "symbol": "internal/server/server.go::renderContext",
+          "dir": "in",
+          "label": "renderContext",
+          "on_path": true
+        }
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::missingFrom",
+      "label": "missingFrom",
+      "depth": 3,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← splitCallSites "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::renderContext",
+      "label": "renderContext",
+      "depth": 2,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← missingFrom "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::Server.handleSymbol",
+      "label": "Server.handleSymbol",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": true,
+      "context": false,
+      "invocations": [
+        "← renderContext "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::Server.fingerprint",
+      "label": "Server.fingerprint",
+      "depth": 2,
+      "self_ns": 10000,
+      "phase": "enter",
+      "doc": "fingerprint is the bundle's version of a symbol, not the working tree's. The\ndebt is measured against the bundle, so meeting a symbol has to be recorded\nagainst the same thing or the number never moves.",
+      "risk": false,
+      "context": false,
+      "invocations": [
+        "id=cache.go::Get",
+        "→ fp1"
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::Server.handleSymbol",
+      "label": "Server.handleSymbol",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": true,
+      "context": false,
+      "invocations": [
+        "← Server.fingerprint fp1"
+      ]
+    },
+    {
+      "symbol": "internal/met/met.go::Set.Meet",
+      "label": "Set.Meet",
+      "depth": 2,
+      "self_ns": 13000,
+      "phase": "enter",
+      "doc": "Meet records one symbol at the version actually put in front of you. Called\nwhen the page fetches a brief: that is the moment the code is on the screen,\nas opposed to merely being drawn as a shape with a name on it.",
+      "risk": false,
+      "context": false,
+      "invocations": [
+        "fingerprint=fp1, id=cache.go::Get",
+        "→ \u003cnil\u003e"
+      ],
+      "joins": [
+        {
+          "symbol": "internal/met/met.go::Set.MeetIn",
+          "dir": "in",
+          "label": "Set.MeetIn"
+        }
+      ]
+    },
+    {
+      "symbol": "internal/met/met.go::Set.saveLocked",
+      "label": "Set.saveLocked",
+      "depth": 3,
+      "self_ns": 244000,
+      "phase": "enter",
+      "doc": "saveLocked writes through a temporary file and renames. The window rewrites\nthis while the page is reading it, and a half-written met.json would report a\ndebt of everything — which is the one wrong answer that looks plausible.",
+      "risk": false,
+      "context": false,
+      "invocations": [
+        "→ \u003cnil\u003e"
+      ],
+      "joins": [
+        {
+          "symbol": "internal/met/met.go::Set.Forget",
+          "dir": "in",
+          "label": "Set.Forget"
+        },
+        {
+          "symbol": "internal/met/met.go::Set.MeetAll",
+          "dir": "in",
+          "label": "Set.MeetAll"
+        }
+      ]
+    },
+    {
+      "symbol": "internal/met/met.go::Set.Meet",
+      "label": "Set.Meet",
+      "depth": 2,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "Meet records one symbol at the version actually put in front of you. Called\nwhen the page fetches a brief: that is the moment the code is on the screen,\nas opposed to merely being drawn as a shape with a name on it.",
+      "risk": false,
+      "context": false,
+      "invocations": [
+        "← Set.saveLocked \u003cnil\u003e"
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::Server.handleSymbol",
+      "label": "Server.handleSymbol",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": true,
+      "context": false,
+      "invocations": [
+        "← Set.Meet \u003cnil\u003e"
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::writeJSON",
+      "label": "writeJSON",
+      "depth": 2,
+      "self_ns": 19000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ],
+      "joins": [
+        {
+          "symbol": "internal/server/server.go::Server.handleAsk",
+          "dir": "in",
+          "label": "Server.handleAsk"
+        },
+        {
+          "symbol": "internal/server/server.go::Server.handleDebt",
+          "dir": "in",
+          "label": "Server.handleDebt"
+        },
+        {
+          "symbol": "internal/server/server.go::Server.handleDone",
+          "dir": "in",
+          "label": "Server.handleDone"
+        },
+        {
+          "symbol": "internal/server/server.go::Server.handleHealth",
+          "dir": "in",
+          "label": "Server.handleHealth"
+        },
+        {
+          "symbol": "internal/server/server.go::Server.handleLandscape",
+          "dir": "in",
+          "label": "Server.handleLandscape"
+        }
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::Server.handleSymbol",
+      "label": "Server.handleSymbol",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": true,
+      "context": false,
+      "invocations": [
+        "← writeJSON "
+      ]
+    },
+    {
+      "symbol": "internal/server/server_test.go::TestSymbolResponseCarriesTheRenderedBrief",
+      "label": "TestSymbolResponseCarriesTheRenderedBrief",
+      "depth": 0,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← Server.handleSymbol "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::AssembleContext",
+      "label": "AssembleContext",
+      "depth": 1,
+      "self_ns": 10000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::ContextInput.server",
+      "label": "ContextInput.server",
+      "depth": 2,
+      "self_ns": 10000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::AssembleContext",
+      "label": "AssembleContext",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← ContextInput.server "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::Server.buildContext",
+      "label": "Server.buildContext",
+      "depth": 2,
+      "self_ns": 11000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ],
+      "joins": [
+        {
+          "symbol": "internal/server/export.go::Server.Export",
+          "dir": "in",
+          "label": "Server.Export"
+        },
+        {
+          "symbol": "internal/server/server.go::Server.handleAsk",
+          "dir": "in",
+          "label": "Server.handleAsk"
+        },
+        {
+          "symbol": "internal/server/server.go::Server.handleSymbol",
+          "dir": "in",
+          "label": "Server.handleSymbol",
+          "on_path": true
+        },
+        {
+          "symbol": "internal/server/server_test.go::TestBriefDoesNotScoldTestFiles",
+          "dir": "in",
+          "label": "TestBriefDoesNotScoldTestFiles"
+        },
+        {
+          "symbol": "internal/server/server_test.go::TestBriefForAFrameTheBundleNeverCaptured",
+          "dir": "in",
+          "label": "TestBriefForAFrameTheBundleNeverCaptured"
+        }
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::Server.symbolFor",
+      "label": "Server.symbolFor",
+      "depth": 3,
+      "self_ns": 10000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::Server.buildContext",
+      "label": "Server.buildContext",
+      "depth": 2,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← Server.symbolFor "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::Server.related",
+      "label": "Server.related",
+      "depth": 3,
+      "self_ns": 9000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::Server.buildContext",
+      "label": "Server.buildContext",
+      "depth": 2,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← Server.related "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::Server.source",
+      "label": "Server.source",
+      "depth": 3,
+      "self_ns": 31000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::Server.buildContext",
+      "label": "Server.buildContext",
+      "depth": 2,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← Server.source "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::AssembleContext",
+      "label": "AssembleContext",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← Server.buildContext "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::renderContext",
+      "label": "renderContext",
+      "depth": 2,
+      "self_ns": 16000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ],
+      "joins": [
+        {
+          "symbol": "internal/server/export.go::Server.Export",
+          "dir": "in",
+          "label": "Server.Export"
+        },
+        {
+          "symbol": "internal/server/server.go::Server.handleAsk",
+          "dir": "in",
+          "label": "Server.handleAsk"
+        },
+        {
+          "symbol": "internal/server/server.go::Server.handleSymbol",
+          "dir": "in",
+          "label": "Server.handleSymbol",
+          "on_path": true
+        },
+        {
+          "symbol": "internal/server/server_test.go::TestBriefDoesNotScoldTestFiles",
+          "dir": "in",
+          "label": "TestBriefDoesNotScoldTestFiles"
+        },
+        {
+          "symbol": "internal/server/server_test.go::TestBriefForAFrameTheBundleNeverCaptured",
+          "dir": "in",
+          "label": "TestBriefForAFrameTheBundleNeverCaptured"
+        },
+        {
+          "symbol": "internal/server/server_test.go::TestOnlyCallsIntoTheRepositoryCountAsUnexplained",
+          "dir": "in",
+          "label": "TestOnlyCallsIntoTheRepositoryCountAsUnexplained"
+        },
+        {
+          "symbol": "internal/server/server.go::plural",
+          "dir": "out",
+          "label": "plural"
+        }
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::isTestPath",
+      "label": "isTestPath",
+      "depth": 3,
+      "self_ns": 11000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ],
+      "joins": [
+        {
+          "symbol": "internal/server/server.go::missingFrom",
+          "dir": "in",
+          "label": "missingFrom",
+          "on_path": true
+        }
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::renderContext",
+      "label": "renderContext",
+      "depth": 2,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← isTestPath "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::fenceLanguage",
+      "label": "fenceLanguage",
+      "depth": 3,
+      "self_ns": 29000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::renderContext",
+      "label": "renderContext",
+      "depth": 2,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← fenceLanguage "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::fenceLanguage",
+      "label": "fenceLanguage",
+      "depth": 3,
+      "self_ns": 11000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::renderContext",
+      "label": "renderContext",
+      "depth": 2,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← fenceLanguage "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::splitCallSites",
+      "label": "splitCallSites",
+      "depth": 3,
+      "self_ns": 12000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ],
+      "joins": [
+        {
+          "symbol": "internal/server/server.go::missingFrom",
+          "dir": "in",
+          "label": "missingFrom",
+          "on_path": true
+        }
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::renderContext",
+      "label": "renderContext",
+      "depth": 2,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← splitCallSites "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::oneLineOf",
+      "label": "oneLineOf",
+      "depth": 3,
+      "self_ns": 12000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::renderContext",
+      "label": "renderContext",
+      "depth": 2,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← oneLineOf "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::missingFrom",
+      "label": "missingFrom",
+      "depth": 3,
+      "self_ns": 12000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ],
+      "joins": [
+        {
+          "symbol": "internal/server/server_test.go::TestOnlyCallsIntoTheRepositoryCountAsUnexplained",
+          "dir": "in",
+          "label": "TestOnlyCallsIntoTheRepositoryCountAsUnexplained"
+        }
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::isTestPath",
+      "label": "isTestPath",
+      "depth": 4,
+      "self_ns": 13000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ],
+      "joins": [
+        {
+          "symbol": "internal/server/server.go::renderContext",
+          "dir": "in",
+          "label": "renderContext",
+          "on_path": true
+        }
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::missingFrom",
+      "label": "missingFrom",
+      "depth": 3,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← isTestPath "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::splitCallSites",
+      "label": "splitCallSites",
+      "depth": 4,
+      "self_ns": 13000,
+      "phase": "enter",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "→ "
+      ],
+      "joins": [
+        {
+          "symbol": "internal/server/server.go::renderContext",
+          "dir": "in",
+          "label": "renderContext",
+          "on_path": true
+        }
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::missingFrom",
+      "label": "missingFrom",
+      "depth": 3,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← splitCallSites "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::renderContext",
+      "label": "renderContext",
+      "depth": 2,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← missingFrom "
+      ]
+    },
+    {
+      "symbol": "internal/server/server.go::AssembleContext",
+      "label": "AssembleContext",
+      "depth": 1,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← renderContext "
+      ]
+    },
+    {
+      "symbol": "internal/server/server_test.go::TestSymbolResponseCarriesTheRenderedBrief",
+      "label": "TestSymbolResponseCarriesTheRenderedBrief",
+      "depth": 0,
+      "self_ns": 0,
+      "phase": "resume",
+      "doc": "",
+      "risk": false,
+      "context": true,
+      "invocations": [
+        "← AssembleContext "
+      ]
+    }
+  ],
+  "barriers": [
+    {
+      "from": 0,
+      "to": 1,
+      "direction": "descend",
+      "cost_ns": 347000,
+      "height": 1,
+      "kind": "io",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 1,
+      "to": 2,
+      "direction": "ascend",
+      "cost_ns": 15000,
+      "height": 0.167,
+      "kind": "io",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 2,
+      "to": 3,
+      "direction": "descend",
+      "cost_ns": 33000,
+      "height": 0.376,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 3,
+      "to": 4,
+      "direction": "descend",
+      "cost_ns": 17000,
+      "height": 0.2,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 4,
+      "to": 5,
+      "direction": "ascend",
+      "cost_ns": 9000,
+      "height": 0.05,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 5,
+      "to": 6,
+      "direction": "ascend",
+      "cost_ns": 34000,
+      "height": 0.384,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 6,
+      "to": 7,
+      "direction": "descend",
+      "cost_ns": 25000,
+      "height": 0.302,
+      "kind": "network",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 7,
+      "to": 8,
+      "direction": "descend",
+      "cost_ns": 18000,
+      "height": 0.215,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 8,
+      "to": 9,
+      "direction": "descend",
+      "cost_ns": 18000,
+      "height": 0.215,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 9,
+      "to": 10,
+      "direction": "ascend",
+      "cost_ns": 11000,
+      "height": 0.084,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 10,
+      "to": 11,
+      "direction": "descend",
+      "cost_ns": 20000,
+      "height": 0.243,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 11,
+      "to": 12,
+      "direction": "ascend",
+      "cost_ns": 11000,
+      "height": 0.084,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 12,
+      "to": 13,
+      "direction": "descend",
+      "cost_ns": 17000,
+      "height": 0.2,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 13,
+      "to": 14,
+      "direction": "ascend",
+      "cost_ns": 36000,
+      "height": 0.399,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 14,
+      "to": 15,
+      "direction": "ascend",
+      "cost_ns": 12000,
+      "height": 0.108,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 15,
+      "to": 16,
+      "direction": "descend",
+      "cost_ns": 18000,
+      "height": 0.215,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 16,
+      "to": 17,
+      "direction": "descend",
+      "cost_ns": 19000,
+      "height": 0.229,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 17,
+      "to": 18,
+      "direction": "ascend",
+      "cost_ns": 11000,
+      "height": 0.084,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 18,
+      "to": 19,
+      "direction": "descend",
+      "cost_ns": 24000,
+      "height": 0.291,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 19,
+      "to": 20,
+      "direction": "ascend",
+      "cost_ns": 11000,
+      "height": 0.084,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 20,
+      "to": 21,
+      "direction": "descend",
+      "cost_ns": 20000,
+      "height": 0.243,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 21,
+      "to": 22,
+      "direction": "ascend",
+      "cost_ns": 11000,
+      "height": 0.084,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 22,
+      "to": 23,
+      "direction": "descend",
+      "cost_ns": 22000,
+      "height": 0.268,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 23,
+      "to": 24,
+      "direction": "ascend",
+      "cost_ns": 13000,
+      "height": 0.129,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 24,
+      "to": 25,
+      "direction": "descend",
+      "cost_ns": 24000,
+      "height": 0.291,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 25,
+      "to": 26,
+      "direction": "ascend",
+      "cost_ns": 13000,
+      "height": 0.129,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 26,
+      "to": 27,
+      "direction": "descend",
+      "cost_ns": 23000,
+      "height": 0.28,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 27,
+      "to": 28,
+      "direction": "descend",
+      "cost_ns": 23000,
+      "height": 0.28,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 28,
+      "to": 29,
+      "direction": "ascend",
+      "cost_ns": 14000,
+      "height": 0.148,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 29,
+      "to": 30,
+      "direction": "descend",
+      "cost_ns": 24000,
+      "height": 0.291,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 30,
+      "to": 31,
+      "direction": "ascend",
+      "cost_ns": 14000,
+      "height": 0.148,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 31,
+      "to": 32,
+      "direction": "ascend",
+      "cost_ns": 13000,
+      "height": 0.129,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 32,
+      "to": 33,
+      "direction": "ascend",
+      "cost_ns": 15000,
+      "height": 0.167,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 33,
+      "to": 34,
+      "direction": "descend",
+      "cost_ns": 21000,
+      "height": 0.256,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 34,
+      "to": 35,
+      "direction": "ascend",
+      "cost_ns": 10000,
+      "height": 0.059,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 35,
+      "to": 36,
+      "direction": "descend",
+      "cost_ns": 17000,
+      "height": 0.2,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 36,
+      "to": 37,
+      "direction": "descend",
+      "cost_ns": 18000,
+      "height": 0.215,
+      "kind": "lock",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 37,
+      "to": 38,
+      "direction": "ascend",
+      "cost_ns": 244000,
+      "height": 0.907,
+      "kind": "lock",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 38,
+      "to": 39,
+      "direction": "ascend",
+      "cost_ns": 13000,
+      "height": 0.129,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 39,
+      "to": 40,
+      "direction": "descend",
+      "cost_ns": 17000,
+      "height": 0.2,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 40,
+      "to": 41,
+      "direction": "ascend",
+      "cost_ns": 19000,
+      "height": 0.229,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 41,
+      "to": 42,
+      "direction": "ascend",
+      "cost_ns": 11000,
+      "height": 0.084,
+      "kind": "network",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 42,
+      "to": 43,
+      "direction": "descend",
+      "cost_ns": 55000,
+      "height": 0.511,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 43,
+      "to": 44,
+      "direction": "descend",
+      "cost_ns": 15000,
+      "height": 0.167,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 44,
+      "to": 45,
+      "direction": "ascend",
+      "cost_ns": 10000,
+      "height": 0.059,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 45,
+      "to": 46,
+      "direction": "descend",
+      "cost_ns": 14000,
+      "height": 0.148,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 46,
+      "to": 47,
+      "direction": "descend",
+      "cost_ns": 16000,
+      "height": 0.184,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 47,
+      "to": 48,
+      "direction": "ascend",
+      "cost_ns": 10000,
+      "height": 0.059,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 48,
+      "to": 49,
+      "direction": "descend",
+      "cost_ns": 18000,
+      "height": 0.215,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 49,
+      "to": 50,
+      "direction": "ascend",
+      "cost_ns": 9000,
+      "height": 0.05,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 50,
+      "to": 51,
+      "direction": "descend",
+      "cost_ns": 16000,
+      "height": 0.184,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 51,
+      "to": 52,
+      "direction": "ascend",
+      "cost_ns": 31000,
+      "height": 0.359,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 52,
+      "to": 53,
+      "direction": "ascend",
+      "cost_ns": 11000,
+      "height": 0.084,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 53,
+      "to": 54,
+      "direction": "descend",
+      "cost_ns": 15000,
+      "height": 0.167,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 54,
+      "to": 55,
+      "direction": "descend",
+      "cost_ns": 17000,
+      "height": 0.2,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 55,
+      "to": 56,
+      "direction": "ascend",
+      "cost_ns": 11000,
+      "height": 0.084,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 56,
+      "to": 57,
+      "direction": "descend",
+      "cost_ns": 16000,
+      "height": 0.184,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 57,
+      "to": 58,
+      "direction": "ascend",
+      "cost_ns": 29000,
+      "height": 0.342,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 58,
+      "to": 59,
+      "direction": "descend",
+      "cost_ns": 21000,
+      "height": 0.256,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 59,
+      "to": 60,
+      "direction": "ascend",
+      "cost_ns": 11000,
+      "height": 0.084,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 60,
+      "to": 61,
+      "direction": "descend",
+      "cost_ns": 22000,
+      "height": 0.268,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 61,
+      "to": 62,
+      "direction": "ascend",
+      "cost_ns": 12000,
+      "height": 0.108,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 62,
+      "to": 63,
+      "direction": "descend",
+      "cost_ns": 21000,
+      "height": 0.256,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 63,
+      "to": 64,
+      "direction": "ascend",
+      "cost_ns": 12000,
+      "height": 0.108,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 64,
+      "to": 65,
+      "direction": "descend",
+      "cost_ns": 22000,
+      "height": 0.268,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 65,
+      "to": 66,
+      "direction": "descend",
+      "cost_ns": 21000,
+      "height": 0.256,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 66,
+      "to": 67,
+      "direction": "ascend",
+      "cost_ns": 13000,
+      "height": 0.129,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 67,
+      "to": 68,
+      "direction": "descend",
+      "cost_ns": 21000,
+      "height": 0.256,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 68,
+      "to": 69,
+      "direction": "ascend",
+      "cost_ns": 13000,
+      "height": 0.129,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 69,
+      "to": 70,
+      "direction": "ascend",
+      "cost_ns": 12000,
+      "height": 0.108,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 70,
+      "to": 71,
+      "direction": "ascend",
+      "cost_ns": 16000,
+      "height": 0.184,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    },
+    {
+      "from": 71,
+      "to": 72,
+      "direction": "ascend",
+      "cost_ns": 10000,
+      "height": 0.059,
+      "kind": "compute",
+      "rationale": "",
+      "frames": 1
+    }
+  ],
+  "closed": true,
+  "open_frame": "",
+  "test_id": "TestSymbolResponseCarriesTheRenderedBrief",
+  "chain": "hottest",
+  "chains": 6646,
+  "hot_path": [
+    "internal/server/server_test.go::TestSymbolResponseCarriesTheRenderedBrief",
+    "internal/met/met.go::Load",
+    "internal/server/server.go::New",
+    "internal/server/live.go::newHub",
+    "internal/server/server.go::Server.handleSymbol",
+    "internal/server/server.go::Server.buildContext",
+    "internal/server/server.go::Server.symbolFor",
+    "internal/server/server.go::Server.related",
+    "internal/server/server.go::Server.source",
+    "internal/server/server.go::renderContext",
+    "internal/server/server.go::isTestPath",
+    "internal/server/server.go::fenceLanguage",
+    "internal/server/server.go::fenceLanguage",
+    "internal/server/server.go::splitCallSites",
+    "internal/server/server.go::oneLineOf",
+    "internal/server/server.go::missingFrom",
+    "internal/server/server.go::isTestPath",
+    "internal/server/server.go::splitCallSites",
+    "internal/server/server.go::Server.fingerprint",
+    "internal/met/met.go::Set.Meet",
+    "internal/met/met.go::Set.saveLocked",
+    "internal/server/server.go::writeJSON",
+    "internal/server/server.go::AssembleContext",
+    "internal/server/server.go::ContextInput.server",
+    "internal/server/server.go::Server.buildContext",
+    "internal/server/server.go::Server.symbolFor",
+    "internal/server/server.go::Server.related",
+    "internal/server/server.go::Server.source",
+    "internal/server/server.go::renderContext",
+    "internal/server/server.go::isTestPath",
+    "internal/server/server.go::fenceLanguage",
+    "internal/server/server.go::fenceLanguage",
+    "internal/server/server.go::splitCallSites",
+    "internal/server/server.go::oneLineOf",
+    "internal/server/server.go::missingFrom",
+    "internal/server/server.go::isTestPath",
+    "internal/server/server.go::splitCallSites"
+  ]
+}

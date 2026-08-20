@@ -144,3 +144,20 @@ func TestMeetInIgnoresASymbolTheBundleDoesNotHold(t *testing.T) {
 		t.Errorf("%+v", d)
 	}
 }
+
+// A landscape draws one symbol as several wells: descending into it, and again
+// on each resume. Six of the thirteen frames on a real chain here were the same
+// function. The page wants a set of symbols to render hollow, not a list of the
+// frames they were drawn as.
+func TestASymbolDrawnAsSeveralFramesIsNamedOnce(t *testing.T) {
+	s := Load(t.TempDir())
+	bun := b(sym("a.go::Get", "fp1"), sym("a.go::Put", "fp1"))
+	drawn := []bundle.SymbolID{"a.go::Get", "a.go::Put", "a.go::Get", "a.go::Get"}
+	d := s.Of(bun, drawn)
+	if len(d.Frames) != 2 {
+		t.Errorf("frames = %v, want each unmet symbol once", d.Frames)
+	}
+	if d.Unmet != 2 {
+		t.Errorf("unmet = %d — deduping the drawing must not touch the count", d.Unmet)
+	}
+}

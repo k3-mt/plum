@@ -177,8 +177,12 @@ func (s *Set) Of(b *bundle.Bundle, drawn []bundle.SymbolID) Debt {
 		}
 		unmet[sym.ID] = true
 	}
+	// A landscape draws one symbol as several wells — descending into it, and
+	// again on each resume — so the drawn list repeats. The page wants to know
+	// which symbols to render hollow, which is a set, not a list of frames.
 	for _, id := range drawn {
 		if unmet[id] {
+			unmet[id] = false // named once; the rest of its wells are the same symbol
 			d.Frames = append(d.Frames, id)
 		}
 	}
