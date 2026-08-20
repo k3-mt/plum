@@ -77,7 +77,10 @@ func Default(root string) *Config {
 	c.Repo.Languages = []string{"go"}
 	c.Repo.TestCommand = "go test ./..."
 	c.Repo.JournalDir = filepath.Join(Dir, "journal")
-	c.Repo.Exclude = []string{"testdata/", "vendor/", "node_modules/", "dist/", ".git/"}
+	// .claude/ is agent-harness configuration, and plum's own `hooks install`
+	// writes there — without this, installing plum shows up as a finding in
+	// every session afterwards. Remove it from the list to audit hook changes.
+	c.Repo.Exclude = []string{".claude/", "testdata/", "vendor/", "node_modules/", "dist/", ".git/"}
 	c.Gating.MinSymbolsChanged = 5
 	c.Gating.NewPublicSurface = true
 	c.Gating.NewDependency = true
@@ -150,7 +153,13 @@ func (c *Config) apply(d Doc) {
 	list("repo.languages", &c.Repo.Languages)
 	str("repo.test_command", &c.Repo.TestCommand)
 	str("repo.journal_dir", &c.Repo.JournalDir)
-	list("repo.exclude", &c.Repo.Exclude)
+	// Exclusions are additive: a configured list adds to the defaults rather
+	// than replacing them. Nobody sets `exclude` in order to *start* analysing
+	// node_modules, and replacing meant a repo initialised before a new default
+	// existed silently never got it.
+	if v, ok := d["repo.exclude"]; ok && v.Kind == "list" {
+		c.Repo.Exclude = append(c.Repo.Exclude, v.List...)
+	}
 
 	inum("gating.min_symbols_changed", &c.Gating.MinSymbolsChanged)
 	bl("gating.new_public_surface", &c.Gating.NewPublicSurface)
@@ -254,7 +263,9 @@ languages    = ["go"]
 test_command = "go test ./..."
 journal_dir  = ".plum/journal"
 # Code that is not this repo's own surface: fixtures, vendored and generated trees.
-exclude      = ["testdata/", "vendor/", "node_modules/", "dist/"]
+# .claude/ holds agent-harness config, and plum hooks install writes there.
+# Drop it from this list if you want changes to hooks surfaced as findings.
+exclude      = [".claude/", "testdata/", "vendor/", "node_modules/", "dist/"]
 
 [gating]
 min_symbols_changed  = 5

@@ -63,11 +63,25 @@ func (a *Adapter) ParseSymbols(path string, src []byte) ([]bundle.Symbol, error)
 	rel := filepath.ToSlash(path)
 	comments := commentIndex(p)
 
+	// Method calls are written `c.decorate` but declared as `Cache.decorate`, so
+	// a call site can only be bound to its declaration through this index.
+	// Without it the rationale comment above a method call never attaches.
+	local := map[string]string{}
+	for _, d := range p.file.Decls {
+		if fn, ok := d.(*ast.FuncDecl); ok {
+			qual := fn.Name.Name
+			if fn.Recv != nil && len(fn.Recv.List) > 0 {
+				qual = receiverName(p, fn.Recv.List[0].Type) + "." + fn.Name.Name
+			}
+			local[fn.Name.Name] = qual
+		}
+	}
+
 	var out []bundle.Symbol
 	for _, d := range p.file.Decls {
 		switch decl := d.(type) {
 		case *ast.FuncDecl:
-			out = append(out, a.funcSymbol(p, rel, decl, comments))
+			out = append(out, a.funcSymbol(p, rel, decl, comments, local))
 		case *ast.GenDecl:
 			out = append(out, a.genSymbols(p, rel, decl)...)
 		}
@@ -75,7 +89,7 @@ func (a *Adapter) ParseSymbols(path string, src []byte) ([]bundle.Symbol, error)
 	return out, nil
 }
 
-func (a *Adapter) funcSymbol(p *parsed, rel string, fn *ast.FuncDecl, comments map[int]*ast.CommentGroup) bundle.Symbol {
+func (a *Adapter) funcSymbol(p *parsed, rel string, fn *ast.FuncDecl, comments map[int]*ast.CommentGroup, local map[string]string) bundle.Symbol {
 	qual := fn.Name.Name
 	kind := "func"
 	if fn.Recv != nil && len(fn.Recv.List) > 0 {
@@ -98,7 +112,7 @@ func (a *Adapter) funcSymbol(p *parsed, rel string, fn *ast.FuncDecl, comments m
 	}
 	if fn.Body != nil {
 		sym.Comments = bodyComments(p, fn.Body.Pos(), fn.Body.End())
-		sym.CallSites = callSites(p, rel, fn, comments)
+		sym.CallSites = callSites(p, rel, fn, comments, local)
 	}
 	sym.Fingerprint = fingerprint(p.src, sym.ByteStart, sym.ByteEnd)
 	return sym
@@ -222,7 +236,7 @@ func bodyComments(p *parsed, from, to token.Pos) []bundle.Comment {
 // callSites walks a function body binding each outbound call to the comment
 // block immediately above it. "" rationale means the call was never explained —
 // on an expensive barrier that is itself a finding.
-func callSites(p *parsed, rel string, fn *ast.FuncDecl, comments map[int]*ast.CommentGroup) []bundle.CallSite {
+func callSites(p *parsed, rel string, fn *ast.FuncDecl, comments map[int]*ast.CommentGroup, local map[string]string) []bundle.CallSite {
 	var out []bundle.CallSite
 	seen := map[string]bool{}
 	ast.Inspect(fn.Body, func(n ast.Node) bool {
@@ -240,8 +254,12 @@ func callSites(p *parsed, rel string, fn *ast.FuncDecl, comments map[int]*ast.Co
 			return true
 		}
 		seen[key] = true
+		callee := lastSegment(name)
+		if qual, ok := local[callee]; ok {
+			callee = qual // c.decorate -> Cache.decorate
+		}
 		cs := bundle.CallSite{
-			Callee:    bundle.MakeID(rel, lastSegment(name)),
+			Callee:    bundle.MakeID(rel, callee),
 			CalleeRaw: name,
 			Line:      line,
 		}

@@ -80,6 +80,10 @@ func (o *Offline) Complete(ctx context.Context, system, user string) (string, er
 	}
 	for _, m := range b.Surface.Modified {
 		inv = true
+		if m.Kind == "config_key" {
+			p("- every reader of `%s` now sees `%s` where it saw `%s`", m.Name, oneline(m.After), oneline(m.Before))
+			continue
+		}
 		p("- callers of `%s` must be updated together: the signature moved from `%s` to `%s`", m.Name, oneline(m.Before), oneline(m.After))
 	}
 	if !inv {
@@ -281,6 +285,13 @@ func offlineClaims(b *bundle.Bundle) []string {
 	var out []string
 	for _, m := range b.Surface.Modified {
 		if m.Symbol == "" {
+			continue
+		}
+		if m.Kind == "config_key" {
+			// A setting has no callers to update; what is being asserted is that
+			// the new value is right everywhere the old one was read.
+			out = append(out, fmt.Sprintf("assertion :: %s :: %s is correct for every environment that reads it, not just this one",
+				m.Symbol, oneline(m.After)))
 			continue
 		}
 		out = append(out, fmt.Sprintf("assertion :: %s :: every existing caller has been updated for the new signature", m.Symbol))

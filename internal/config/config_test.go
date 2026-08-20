@@ -90,11 +90,31 @@ func TestPlumsOwnDirectoryIsExcludedWhateverTheConfigSays(t *testing.T) {
 	}
 }
 
+// A configured exclude list adds to the defaults. Replacing them meant every
+// repo initialised before a new default existed silently never got it.
+func TestConfiguredExclusionsAddToTheDefaults(t *testing.T) {
+	doc, err := ParseTOML("[repo]\nexclude = [\"generated/\"]\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := Default("/repo")
+	c.apply(doc)
+	if !c.Excluded("generated/thing.yaml") {
+		t.Error("the configured exclusion was not applied")
+	}
+	for _, path := range []string{"node_modules/pkg/package.json", ".claude/settings.json", "vendor/x/config.yaml"} {
+		if !c.Excluded(path) {
+			t.Errorf("configuring an exclusion dropped the default for %s", path)
+		}
+	}
+}
+
 func TestDefaultExclusions(t *testing.T) {
 	c := Default("/repo")
 	for _, path := range []string{
 		"testdata/fixtures/authcache/golden.json",
 		"vendor/thing/config.yaml",
+		".claude/settings.json",
 		"node_modules/pkg/package.json",
 	} {
 		if !c.Excluded(path) {

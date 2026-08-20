@@ -92,11 +92,12 @@ func (b *Bundle) CallSiteComment(caller, callee SymbolID) string {
 			return cs.Rationale
 		}
 	}
-	// Fall back to matching on the bare name: cross-file resolution is best effort,
-	// so a call recorded as "Get" may trace back as "internal/x.go::Cache.Get".
-	want := shortName(callee)
+	// Fall back to the bare name at both ends: cross-file resolution is best
+	// effort, and the same call is written `c.decorate`, declared
+	// `Cache.decorate`, and traced as `internal/x.go::Cache.decorate`.
+	want := lastSegment(shortName(callee))
 	for _, cs := range s.CallSites {
-		if cs.CalleeRaw == want || shortName(cs.Callee) == want {
+		if lastSegment(cs.CalleeRaw) == want || lastSegment(shortName(cs.Callee)) == want {
 			return cs.Rationale
 		}
 	}
@@ -144,6 +145,15 @@ func fileOf(id SymbolID) string {
 		return string(id)[:i]
 	}
 	return ""
+}
+
+// lastSegment is the final dotted component: `c.decorate` and `Cache.decorate`
+// both reduce to `decorate`.
+func lastSegment(name string) string {
+	if i := strings.LastIndex(name, "."); i >= 0 {
+		return name[i+1:]
+	}
+	return name
 }
 
 func shortName(id SymbolID) string {

@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -113,14 +114,26 @@ func importsFor(body string) string {
 	if strings.Contains(body, "testing.") || strings.Contains(body, "*testing.T") {
 		imps = append(imps, `"testing"`)
 	}
-	for pkg, path := range map[string]string{"fmt.": `"fmt"`, "errors.": `"errors"`, "context.": `"context"`, "time.": `"time"`, "strings.": `"strings"`, "reflect.": `"reflect"`} {
-		if strings.Contains(body, pkg) {
-			imps = append(imps, path)
+	// The stdlib packages a claim test plausibly reaches for. A missing import
+	// fails the build, and a build failure reads as a failed claim — which
+	// blames the code for a gap in this list.
+	for _, pkg := range []string{
+		"bytes", "context", "encoding/json", "errors", "fmt", "io", "math", "os",
+		"path/filepath", "reflect", "regexp", "sort", "strconv", "strings",
+		"sync", "time",
+	} {
+		name := pkg
+		if i := strings.LastIndex(pkg, "/"); i >= 0 {
+			name = pkg[i+1:]
+		}
+		if strings.Contains(body, name+".") {
+			imps = append(imps, `"`+pkg+`"`)
 		}
 	}
 	if len(imps) == 0 {
 		return ""
 	}
+	sort.Strings(imps)
 	return "import (\n\t" + strings.Join(imps, "\n\t") + "\n)\n\n"
 }
 
