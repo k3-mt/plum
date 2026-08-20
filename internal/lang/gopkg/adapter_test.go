@@ -286,3 +286,53 @@ func TestPackageLevelStateOnlyFlagsWhatCanBeWritten(t *testing.T) {
 		t.Error("an exported var can be written by any importing package")
 	}
 }
+
+// Binding a call to a local declaration on its bare name alone turns the stdlib
+// call `http.Get` into this package's own `Cache.Get` — an invented edge, and a
+// rationale comment attached to the wrong thing.
+func TestCallSitesBindOnlyWhatTheShapeSupports(t *testing.T) {
+	src := `package auth
+
+import "net/http"
+
+type Cache struct{}
+
+func (c *Cache) Get(key string) string {
+	// explains the local call
+	v := c.decorate(key)
+	resp, _ := http.Get("https://example.com/" + key)
+	_ = resp
+	return helper(v)
+}
+
+func (c *Cache) decorate(v string) string { return v }
+
+func helper(v string) string { return v }
+`
+	syms, err := New().ParseSymbols("cache.go", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var get bundle.Symbol
+	for _, s := range syms {
+		if s.Name == "Cache.Get" {
+			get = s
+		}
+	}
+	byRaw := map[string]bundle.CallSite{}
+	for _, cs := range get.CallSites {
+		byRaw[cs.CalleeRaw] = cs
+	}
+	if got := byRaw["c.decorate"].Callee; got != "cache.go::Cache.decorate" {
+		t.Errorf("c.decorate bound to %q, want the method on this receiver", got)
+	}
+	if !strings.Contains(byRaw["c.decorate"].Rationale, "explains the local call") {
+		t.Errorf("the rationale comment did not attach: %q", byRaw["c.decorate"].Rationale)
+	}
+	if got := byRaw["helper"].Callee; got != "cache.go::helper" {
+		t.Errorf("a bare call bound to %q", got)
+	}
+	if got := byRaw["http.Get"].Callee; got == "cache.go::Cache.Get" {
+		t.Error("http.Get was bound to this package's own Cache.Get")
+	}
+}

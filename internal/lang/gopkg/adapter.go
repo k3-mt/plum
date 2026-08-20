@@ -112,7 +112,7 @@ func (a *Adapter) funcSymbol(p *parsed, rel string, fn *ast.FuncDecl, comments m
 	}
 	if fn.Body != nil {
 		sym.Comments = bodyComments(p, fn.Body.Pos(), fn.Body.End())
-		sym.CallSites = callSites(p, rel, fn, comments, local)
+		sym.CallSites = callSites(p, rel, fn, comments, local, receiverIdent(fn))
 	}
 	sym.Fingerprint = fingerprint(p.src, sym.ByteStart, sym.ByteEnd)
 	return sym
@@ -236,7 +236,16 @@ func bodyComments(p *parsed, from, to token.Pos) []bundle.Comment {
 // callSites walks a function body binding each outbound call to the comment
 // block immediately above it. "" rationale means the call was never explained —
 // on an expensive barrier that is itself a finding.
-func callSites(p *parsed, rel string, fn *ast.FuncDecl, comments map[int]*ast.CommentGroup, local map[string]string) []bundle.CallSite {
+// receiverIdent is the method's receiver variable, so `c.decorate` can be told
+// apart from `http.Get`.
+func receiverIdent(fn *ast.FuncDecl) string {
+	if fn.Recv == nil || len(fn.Recv.List) == 0 || len(fn.Recv.List[0].Names) == 0 {
+		return ""
+	}
+	return fn.Recv.List[0].Names[0].Name
+}
+
+func callSites(p *parsed, rel string, fn *ast.FuncDecl, comments map[int]*ast.CommentGroup, local map[string]string, recv string) []bundle.CallSite {
 	var out []bundle.CallSite
 	seen := map[string]bool{}
 	ast.Inspect(fn.Body, func(n ast.Node) bool {
@@ -254,9 +263,19 @@ func callSites(p *parsed, rel string, fn *ast.FuncDecl, comments map[int]*ast.Co
 			return true
 		}
 		seen[key] = true
-		callee := lastSegment(name)
-		if qual, ok := local[callee]; ok {
-			callee = qual // c.decorate -> Cache.decorate
+		// Bind to a local declaration only when the call's shape says it is one:
+		// a bare `helper()`, or `c.decorate()` on this method's own receiver.
+		// Binding on the bare name alone turns `http.Get` into `Cache.Get`.
+		callee := name
+		switch {
+		case !strings.Contains(name, "."):
+			if qual, ok := local[name]; ok {
+				callee = qual
+			}
+		case recv != "" && strings.HasPrefix(name, recv+".") && strings.Count(name, ".") == 1:
+			if qual, ok := local[strings.TrimPrefix(name, recv+".")]; ok {
+				callee = qual // c.decorate -> Cache.decorate
+			}
 		}
 		cs := bundle.CallSite{
 			Callee:    bundle.MakeID(rel, callee),
