@@ -119,3 +119,30 @@ pre { margin: 0; white-space: pre; overflow-x: auto; font-size: 12px; color: #cd
 #keep { display: none; margin-top: .8rem; border-top: 1px solid var(--line); padding-top: .6rem; }
 #keep button { margin: .3rem .3rem 0 0; font-size: 11px; }
 #kept { margin-top: .5rem; color: var(--accent); white-space: pre-wrap; }
+
+/* The flow view. A warehouse build is a DAG, so it is drawn as one: tables in
+   build order, arrows carrying how the rows were matched. */
+.k-source  { background: #6f8f7a; }
+.k-outside { background: transparent; border: 1px dashed var(--unwind); }
+.flowlink { stroke-width: 1.2; }
+.link-from    { stroke: var(--enter); }
+.link-join    { stroke: #9d8ec9; stroke-dasharray: 4 3; }
+/* A table dbt does not know about must not look like part of the DAG. */
+.link-outside { stroke: var(--unwind); stroke-dasharray: 2 3; }
+.arrowhead { fill: #7b8790; }
+.rowlabel { font-size: 9px; fill: var(--enter); pointer-events: none; }
+.flownode { cursor: pointer; }
+.flownode:hover .fnbox { stroke: var(--accent); stroke-width: 1.6; }
+.fnbox { stroke-width: 1; }
+.fn-model   { fill: #171b1f; stroke: var(--context); }
+.fn-changed { fill: #1d262c; stroke: var(--enter); }
+.fn-source  { fill: #161d19; stroke: #6f8f7a; }
+.fn-outside { fill: #1f1618; stroke: var(--unwind); stroke-dasharray: 3 2; }
+.fn-failing { stroke: var(--unwind); stroke-width: 1.6; }
+/* Same vocabulary as the prose panes: identifiers, values, prose, cost, findings. */
+.sp-svg-code  { font-size: 9px; fill: #8fd0c0; pointer-events: none; }
+.sp-svg-cost  { font-size: 9px; fill: #b98cd0; pointer-events: none; }
+.sp-svg-quote { font-size: 9px; fill: #c9c2ae; pointer-events: none; }
+.sp-svg-risk  { font-size: 9px; fill: var(--risk); pointer-events: none; }
+.sp-svg-ok    { font-size: 9px; fill: #6f8f7a; pointer-events: none; }
+.closed { white-space: pre-line; }

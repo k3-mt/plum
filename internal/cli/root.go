@@ -54,6 +54,7 @@ func commands() []command {
 		{"ingest", "read a dbt run that already happened — never triggers one", cmdIngest},
 		{"tests", "list the tests that ran, and what each one reached", cmdTests},
 		{"landscape", "derive the energy landscape from recorded traces", cmdLandscape},
+		{"flow", "draw a warehouse build as a dataflow DAG, not a call stack", cmdFlow},
 		{"explain", "say what the recording actually did, in plain language", cmdExplain},
 		{"interpret", "ask what the change is for — a reading over the evidence, not a record", cmdInterpret},
 		{"explore", "serve the landscape UI — no scoring, no gate, no timer", cmdExplore},

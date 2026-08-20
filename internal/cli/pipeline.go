@@ -16,6 +16,7 @@ import (
 	"github.com/kelalaike/plum/internal/claims"
 	"github.com/kelalaike/plum/internal/explore"
 	"github.com/kelalaike/plum/internal/interpret"
+	"github.com/kelalaike/plum/internal/lang/dbt"
 	"github.com/kelalaike/plum/internal/quiz"
 	"github.com/kelalaike/plum/internal/server"
 	"github.com/kelalaike/plum/internal/stale"
@@ -581,6 +582,12 @@ func cmdExplore(ctx context.Context, env *Env, args []string) error {
 		Adapters:   env.Reg,
 		TestFilter: *testName,
 		Watch:      !*noWatch,
+	}
+	// A warehouse session carries a flow as well as a landscape. When it does,
+	// the page draws the flow: a build is a DAG and a call-stack picture of it
+	// is a lie about how it ran.
+	if flow, err := dbt.LoadFlow(env.Store.FlowPath(id)); err == nil {
+		opts.Flow = flow
 	}
 	switch env.Cfg.Ask.Route {
 	case "tmux":

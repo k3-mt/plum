@@ -84,7 +84,7 @@ func testServer(t *testing.T) (*Server, *explore.Store) {
 func TestAssetsAreEmbeddedAndSmall(t *testing.T) {
 	s, _ := testServer(t)
 	total := 0
-	for _, path := range []string{"/", "/app.css", "/landscape.js"} {
+	for _, path := range []string{"/", "/app.css", "/landscape.js", "/flow.js"} {
 		rec := httptest.NewRecorder()
 		s.mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 		if rec.Code != http.StatusOK {
@@ -231,11 +231,20 @@ func TestSymbolResponseCarriesTheRenderedBrief(t *testing.T) {
 // but never defined is a blank page — and nothing in Go's tests would notice.
 // This is the cheapest guard against that.
 func TestEveryFunctionTheScriptCallsIsDefined(t *testing.T) {
-	src, err := assets.ReadFile("assets/landscape.js")
-	if err != nil {
-		t.Fatal(err)
+	// Every script the page loads is scanned as one program, because that is how
+	// the browser sees them: the flow renderer calls helpers defined next door
+	// and vice versa, and scanning either alone would report false failures and
+	// miss real ones.
+	var all strings.Builder
+	for _, name := range []string{"assets/landscape.js", "assets/flow.js"} {
+		src, err := assets.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		all.WriteString(string(src))
+		all.WriteString("\n")
 	}
-	js := stripJSLiterals(stripJSComments(string(src)))
+	js := stripJSLiterals(stripJSComments(all.String()))
 
 	defined := map[string]bool{}
 	for _, m := range regexp.MustCompile(`(?m)^(?:async )?function ([A-Za-z_$][\w$]*)`).FindAllStringSubmatch(js, -1) {
@@ -273,7 +282,7 @@ func TestEveryFunctionTheScriptCallsIsDefined(t *testing.T) {
 		if regexp.MustCompile(`[(,]\s*` + regexp.QuoteMeta(name) + `\s*[,)]`).MatchString(js) {
 			continue
 		}
-		t.Errorf("landscape.js calls %s() but never defines it — the page would throw at boot", name)
+		t.Errorf("the page calls %s() but never defines it — it would throw at boot", name)
 	}
 }
 

@@ -25,6 +25,7 @@ import (
 	"github.com/kelalaike/plum/internal/explore"
 	"github.com/kelalaike/plum/internal/interpret"
 	"github.com/kelalaike/plum/internal/lang"
+	"github.com/kelalaike/plum/internal/lang/dbt"
 	"github.com/kelalaike/plum/internal/synth"
 	"github.com/kelalaike/plum/internal/trace"
 )
@@ -33,9 +34,13 @@ import (
 var assets embed.FS
 
 type Server struct {
-	Cfg        *config.Config
-	Bundle     *bundle.Bundle
-	Landscape  trace.Landscape
+	Cfg       *config.Config
+	Bundle    *bundle.Bundle
+	Landscape trace.Landscape
+	// Flow is the warehouse picture, when the session has one. A dbt build is a
+	// DAG, not a call stack, so it gets its own drawing rather than being bent
+	// into a path that invents returns nothing performed.
+	Flow       *dbt.Flow
 	Events     []trace.Event
 	Claims     []claims.Claim
 	Synthesis  string
@@ -70,13 +75,14 @@ type Config struct {
 	SessionDir string
 	Adapters   *lang.Registry
 	TestFilter string
+	Flow       *dbt.Flow
 	// Watch reloads the page when the session or the source changes on disk.
 	Watch bool
 }
 
 func New(cfg *config.Config, b *bundle.Bundle, l trace.Landscape, ev []trace.Event, cs []claims.Claim, synthesis string, tel *explore.Store, opts Config) *Server {
 	s := &Server{
-		Cfg: cfg, Bundle: b, Landscape: l, Events: ev, Claims: cs,
+		Cfg: cfg, Bundle: b, Landscape: l, Flow: opts.Flow, Events: ev, Claims: cs,
 		Synthesis: synthesis, Telemetry: tel, Provider: opts.Provider,
 		Ask: opts.Ask, Bridge: opts.Bridge,
 		SessionDir: opts.SessionDir, Adapters: opts.Adapters, TestFilter: opts.TestFilter,
@@ -139,6 +145,7 @@ type landscapePayload struct {
 	Interpretation *interpretationPayload `json:"interpretation,omitempty"`
 	Session        bundle.Session         `json:"session"`
 	Landscape      trace.Landscape        `json:"landscape"`
+	Flow           *dbt.Flow              `json:"flow,omitempty"`
 	Gate           bundle.Gate            `json:"gate"`
 	Synthesis      string                 `json:"synthesis"`
 	Claims         []claims.Claim         `json:"claims"`
@@ -155,7 +162,7 @@ func (s *Server) handleLandscape(w http.ResponseWriter, r *http.Request) {
 		Summary:        trace.Summary(s.Landscape, s.Bundle),
 		Narration:      trace.Narrate(s.Landscape, s.Bundle),
 		Interpretation: s.interpretation(),
-		Session:        s.Bundle.Session, Landscape: s.Landscape, Gate: s.Bundle.Gate,
+		Session:        s.Bundle.Session, Landscape: s.Landscape, Flow: s.Flow, Gate: s.Bundle.Gate,
 		Synthesis: s.Synthesis, Claims: s.Claims, Symbols: s.Bundle.Symbols,
 		Notes: s.Landscape.Notes(), Unannotated: s.Landscape.UnannotatedExpensive(),
 	})

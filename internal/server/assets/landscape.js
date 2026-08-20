@@ -15,7 +15,7 @@ async function boot() {
   setGate();
   document.getElementById('summary').textContent = DATA.summary || '';
   drawReading();
-  draw();
+  render();
   document.getElementById('done').onclick = async () => {
     await fetch('/api/done', { method: 'POST' });
     document.getElementById('done').textContent = 'quiz unlocked — run: plum quiz';
@@ -75,7 +75,7 @@ function listen() {
     drawReading();
     document.getElementById('summary').textContent = DATA.summary || '';
     setGate();
-    draw();
+    render();
     document.getElementById('svgwrap').scrollLeft = scroll;
     // Keep whatever the reader was looking at, if it still exists.
     if (before && (DATA.landscape.wells || []).some((w) => w.symbol === before)) {
@@ -141,6 +141,33 @@ function renderSpans(step) {
     frag.appendChild(el);
   }
   return frag;
+}
+
+// render picks the picture that fits what was recorded. A dbt build is a DAG
+// and a code trace is a path; drawing one as the other is not a styling choice,
+// it misstates how the thing ran.
+function render() {
+  const isFlow = !!(DATA.flow && (DATA.flow.nodes || []).length);
+  document.getElementById('legend-flow').hidden = !isFlow;
+  document.getElementById('legend-path').hidden = isFlow;
+  document.getElementById('hover').textContent = isFlow
+    ? 'Hover a table for its grain, tests and risks. Click to copy its evidence.'
+    : "Hover to read what happened. Click to copy that frame's evidence.";
+  if (isFlow) {
+    document.getElementById('summary').textContent = flowSummary(DATA.flow);
+    drawFlow();
+    drawFindings();
+    return;
+  }
+  draw();
+}
+
+// Findings are stated under the picture rather than drawn on it: they are
+// sentences about the whole DAG, not properties of one table.
+function drawFindings() {
+  const box = document.getElementById('closed');
+  const list = DATA.flow.findings || [];
+  box.textContent = list.length ? list.map(f => '· ' + f).join('\n') : '';
 }
 
 function draw() {

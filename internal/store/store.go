@@ -29,8 +29,13 @@ func (s *Store) BundlePath(id string) string    { return filepath.Join(s.Dir(id)
 func (s *Store) SynthesisPath(id string) string { return filepath.Join(s.Dir(id), "synthesis.md") }
 func (s *Store) ClaimsPath(id string) string    { return filepath.Join(s.Dir(id), "claims.yaml") }
 func (s *Store) LandscapePath(id string) string { return filepath.Join(s.Dir(id), "landscape.json") }
-func (s *Store) TracesDir(id string) string     { return filepath.Join(s.Dir(id), "traces") }
-func (s *Store) TracePath(id string) string     { return filepath.Join(s.TracesDir(id), "events.jsonl") }
+
+// FlowPath holds the dataflow picture for a warehouse session. A landscape and
+// a flow answer different questions and are drawn differently, so they are
+// stored side by side rather than one pretending to be the other.
+func (s *Store) FlowPath(id string) string  { return filepath.Join(s.Dir(id), "flow.json") }
+func (s *Store) TracesDir(id string) string { return filepath.Join(s.Dir(id), "traces") }
+func (s *Store) TracePath(id string) string { return filepath.Join(s.TracesDir(id), "events.jsonl") }
 
 // List returns session IDs oldest first, ordered by the start time recorded in
 // each bundle. The ID's date prefix is only day-granular, so lexical order is

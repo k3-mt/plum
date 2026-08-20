@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/kelalaike/plum/internal/bundle"
 	"github.com/kelalaike/plum/internal/lang/dbt"
 	"github.com/kelalaike/plum/internal/trace"
 )
@@ -70,6 +71,24 @@ func cmdIngest(ctx context.Context, env *Env, args []string) error {
 		return err
 	}
 
+	// The flow is the picture that actually fits a warehouse: the DAG, layered
+	// by build order, with what each statement does to the rows on every arrow.
+	// It is built from the same run plus the SQL, because the run says what a
+	// query cost and only the statement says what it did.
+	changed := map[bundle.SymbolID]bool{}
+	for _, sym := range b.Symbols {
+		changed[sym.ID] = true
+	}
+	risks := map[bundle.SymbolID][]string{}
+	for _, rm := range b.RiskMarkers {
+		risks[rm.Symbol] = append(risks[rm.Symbol], rm.Kind+" — "+rm.Note)
+	}
+	flow := dbt.BuildFlow(manifest, results, env.Cfg.Root, changed, risks)
+	flow.SessionID = id
+	if err := flow.Save(env.Store.FlowPath(id)); err != nil {
+		return err
+	}
+
 	// What the run actually cost is the thing a warehouse reader wants first.
 	var bytes, rows int64
 	failed, skipped := 0, 0
@@ -97,8 +116,8 @@ func cmdIngest(ctx context.Context, env *Env, args []string) error {
 	}
 	fmt.Println("traces →", rel(env, env.Store.TracePath(id)))
 	fmt.Println("landscape →", rel(env, env.Store.LandscapePath(id)))
-	printTests(trace.Tests(events))
-	printLandscape(l)
+	fmt.Println("flow →", rel(env, env.Store.FlowPath(id)))
+	printFlow(flow)
 	return nil
 }
 

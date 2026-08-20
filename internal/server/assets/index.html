@@ -24,7 +24,15 @@
 <section id="summary" class="summary"></section>
 
 <section class="landscape">
-  <div class="legend">
+  <div class="legend" id="legend-flow" hidden>
+    <span><i class="k-enter"></i> changed in this session</span>
+    <span><i class="k-context"></i> unchanged model</span>
+    <span><i class="k-source"></i> source table</span>
+    <span><i class="k-outside"></i> written into the SQL, outside the DAG</span>
+    <span><i class="k-unwind"></i> a test on it is failing</span>
+    <span>arrows carry the join and the rows that came through</span>
+  </div>
+  <div class="legend" id="legend-path">
     <span><i class="k-enter"></i> changed in this session</span>
     <span><i class="k-context"></i> passed through, unchanged</span>
       <span><i class="k-join"></i> joins in / out — edges the path walks past</span>
@@ -66,4 +74,5 @@
 </main>
 
 <div id="toast" class="toast"></div>
+<script src="/flow.js"></script>
 <script src="/landscape.js"></script>

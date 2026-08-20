@@ -14,6 +14,7 @@ import (
 
 	"github.com/kelalaike/plum/internal/bundle"
 	"github.com/kelalaike/plum/internal/claims"
+	"github.com/kelalaike/plum/internal/lang/dbt"
 	"github.com/kelalaike/plum/internal/trace"
 )
 
@@ -185,6 +186,11 @@ func (s *Server) reload() {
 	}
 	if md, err := os.ReadFile(filepath.Join(s.SessionDir, "synthesis.md")); err == nil {
 		s.Synthesis = string(md)
+	}
+	// The flow is the whole DAG regardless of which test is in view, so it is
+	// always reloaded: nothing about it is narrowed by a filter.
+	if f, err := dbt.LoadFlow(filepath.Join(s.SessionDir, "flow.json")); err == nil {
+		s.Flow = f
 	}
 	// The landscape is only replaced when the page is showing the whole
 	// recording. A view narrowed to one test was derived here and would be
