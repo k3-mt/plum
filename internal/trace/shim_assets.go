@@ -19,8 +19,15 @@ var PythonShimSource string
 //go:embed shim_assets/sitecustomize.py
 var PythonSiteCustomize string
 
-// NodeShimSource is the --require preload hook that wraps the exported symbols
-// named in PLUM_SYMBOLS.
+// NodeShimSource is the --require preload: it wraps CommonJS exports, publishes
+// the tracing runtime on globalThis, and registers the ESM loader.
 //
 //go:embed shim_assets/plum-shim.cjs
 var NodeShimSource string
+
+// NodeLoaderSource is the ESM module-customization hook. ES exports are live
+// bindings with no object to mutate, so instrumentation is appended to the
+// module source before it is evaluated.
+//
+//go:embed shim_assets/plum-loader.mjs
+var NodeLoaderSource string

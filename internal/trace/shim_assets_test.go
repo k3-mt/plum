@@ -18,6 +18,7 @@ func TestEmbeddedShimsMatchTheReadableOnes(t *testing.T) {
 		{"../../shims/python/plum_shim.py", PythonShimSource},
 		{"../../shims/python/sitecustomize.py", PythonSiteCustomize},
 		{"../../shims/node/plum-shim.cjs", NodeShimSource},
+		{"../../shims/node/plum-loader.mjs", NodeLoaderSource},
 	} {
 		want, err := os.ReadFile(tc.readable)
 		if err != nil {

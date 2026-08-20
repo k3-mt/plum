@@ -242,6 +242,13 @@ func (e *Extractor) edges(b *bundle.Bundle, states map[string]*fileState) {
 			}
 			if strings.HasPrefix(string(ed.To), "::") {
 				name := strings.TrimPrefix(string(ed.To), "::")
+				// A dotted callee is a call on some other object or package.
+				// Binding it by its last segment is how `this.entries.get(key)`
+				// becomes an edge to your own Cache.get — an invented edge, which
+				// is worse than a missing one.
+				if strings.Contains(name, ".") {
+					continue
+				}
 				cands := byName[name]
 				if len(cands) != 1 {
 					continue // ambiguous or external — do not invent an edge

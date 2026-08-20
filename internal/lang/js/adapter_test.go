@@ -280,3 +280,55 @@ func names(syms []bundle.Symbol) []string {
 	}
 	return out
 }
+
+// A call on some other object must not bind to a local declaration just because
+// the bare names match — that invents an edge, and an invented edge is worse
+// than a missing one.
+func TestCalleeResolutionDoesNotInventEdges(t *testing.T) {
+	src := `class Cache {
+  get(key) {
+    return this.entries.get(key);
+  }
+
+  lookup(key) {
+    return this.get(key);
+  }
+}
+
+function helper() {
+  return helper2();
+}
+
+function helper2() {
+  return 1;
+}
+`
+	edges, err := New().CallEdges("src/cache.js", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, e := range edges {
+		got[string(e.From)+" -> "+string(e.To)] = true
+	}
+	// this.entries.get is Map.get, not Cache.get.
+	if got["src/cache.js::Cache.get -> src/cache.js::Cache.get"] {
+		t.Error("this.entries.get(key) was bound to the enclosing Cache.get")
+	}
+	// this.get inside the same class is Cache.get.
+	if !got["src/cache.js::Cache.lookup -> src/cache.js::Cache.get"] {
+		t.Errorf("this.get() inside Cache should resolve to Cache.get: %v", keysOfEdges(got))
+	}
+	// A bare call resolves to the top-level function.
+	if !got["src/cache.js::helper -> src/cache.js::helper2"] {
+		t.Errorf("a bare call should resolve: %v", keysOfEdges(got))
+	}
+}
+
+func keysOfEdges(m map[string]bool) []string {
+	var out []string
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}

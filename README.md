@@ -56,6 +56,7 @@ plum range HEAD~3..HEAD             # any commit range, after the fact
 | `plum trace` | `traces/`, `landscape.json` | Only the changed symbols are instrumented, in a scratch copy. Your repo is never written to. |
 | `plum landscape` | terminal round trip | Descent is entering a call, ascent is returning, a panic is a cliff. |
 | `plum explore` | localhost UI | Click a frame, see its real recorded arguments, ask a question grounded in them. |
+| `plum context` | evidence on stdout | Deterministic given a commit range. Pipe it into any tool. |
 | `plum ask` | grounded answer | Context assembled from the bundle, routed to your agent session. A question the evidence cannot answer is itself a finding. |
 | `plum quiz` | terminal Q&A | Every question comes from a recorded invocation. Misses accumulate in your state dir. |
 | `plum claims verify` | exit 1 on failure | A failing claim means the doc is wrong or the code is. Both worth knowing. |
@@ -94,7 +95,7 @@ plum gate || tmux display-popup -E -w 80% -h 80% "plum report"
 | **Go** | native `go/ast` | source-rewritten scratch copy | exact everything |
 | **Python** | the interpreter's own `ast` + `tokenize` | `sys.monitoring` shim | needs python3 on PATH; falls back to a line-based adapter without it |
 | **Config** | YAML, TOML, JSON, `.env`, INI | n/a — config is read, not executed | see below |
-| **JavaScript / TypeScript** | structural scanner (brace depth, class bodies, comment state) | `--require` preload hook | CommonJS only; native ES modules are not traced |
+| **JavaScript / TypeScript** | structural scanner (brace depth, class bodies, comment state) | `--require` preload for CommonJS, `module.register()` load hook for ESM | `const`-bound arrow exports in ESM cannot be traced, and say so |
 
 JavaScript has no parser to borrow — Node exposes no AST to userland — so its
 adapter is a structural scanner that tracks brace depth, class bodies and
@@ -110,6 +111,29 @@ default arguments; `except: pass` however many lines it spans; and real recorded
 arguments and return values from `sys.monitoring`. The shim attaches through
 `sitecustomize.py` on `PYTHONPATH`, so pytest, unittest and plain scripts all
 work without knowing plum exists.
+
+### CommonJS and ESM
+
+The two module systems need different attachment points, and both are wired.
+CommonJS is hooked at load and its exports object wrapped afterwards. ES modules
+have no object to mutate — their exports are live bindings resolved at link time
+— so a `load` hook appends instrumentation to the module source before it is
+evaluated. Nothing already in the file moves, so line numbers stay honest.
+
+Both paths share one runtime, so a call that crosses from CJS into ESM is one
+stack at one set of depths, not two traces.
+
+One thing genuinely cannot be traced: `export const f = () => {}`. A `const`
+binding cannot be rebound, and there is no exports object to reach around it.
+Rather than quietly recording nothing, the shim reports it and plum subtracts it
+from the instrumented count:
+
+```
+instrumented 3 symbols (typescript), recorded 10 events
+  skipped: src/cache.js::shorten: Assignment to constant variable.
+```
+
+Declare it as `export function f() {}` and it traces.
 
 ### Adding a language
 
@@ -135,6 +159,40 @@ way — Go, where a probe has to go *inside* a function — implements
 `trace.Rewriter` instead and is handed the scratch copy to rewrite. Either way
 the engine never learns the language. There is a test that instruments a
 made-up Ruby adapter end to end to keep that honest.
+
+## Feeding the evidence to an LLM
+
+`plum context` prints the assembled evidence to stdout, so it pipes anywhere:
+
+```sh
+plum context                                   # the whole session brief
+plum context -symbol 'src/cache.js::Cache.get' # one frame, in full
+plum context -symbol Cache.get -json           # structured, for indexing
+plum context -diff                             # brief plus the diff
+```
+
+What comes out is the exact declaration source, the real recorded arguments and
+return values, callers and callees *with their code*, risk markers, journalled
+rationale and claims — assembled from the bundle rather than retrieved by a
+search, so it does not depend on a model guessing which files to open.
+
+### Is it deterministic?
+
+Mostly, and precisely where it matters. Measured over repeated runs of the same
+commit range:
+
+| Artifact | Deterministic | Notes |
+|---|---|---|
+| `bundle.json` | **yes** | byte-identical apart from `session.id`, `started_at`, `ended_at` |
+| `plum context` output | **yes** | same input, same bytes |
+| `synthesis.md`, `claims.yaml` (offline provider) | **yes** | composed mechanically from the bundle |
+| `synthesis.md` (API provider) | no | it is a model call |
+| landscape **structure** | **yes** | same frames, same depths, same order |
+| landscape **timings** | no | measured durations; one barrier moved 21µs → 1.9ms between runs on a warm vs cold JIT |
+
+So: cache it, diff it in a PR, feed it to a model and get a reproducible answer
+about structure. Do not treat a barrier height as a stable number — it is a
+measurement, and it is labelled as one.
 
 ## Configuration files are part of the code
 

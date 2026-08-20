@@ -249,7 +249,7 @@ func (a *Adapter) CallEdges(path string, src []byte) ([]bundle.Edge, error) {
 	var out []bundle.Edge
 	for _, e := range r.Edges {
 		from := bundle.MakeID(rel, e.From)
-		to := bundle.SymbolID("::" + lastSegment(e.To))
+		to := bundle.SymbolID("::" + e.To)
 		if qual, ok := local[lastSegment(e.To)]; ok {
 			to = bundle.MakeID(rel, qual)
 		}

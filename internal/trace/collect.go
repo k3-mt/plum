@@ -108,9 +108,32 @@ func (c *Collector) Run(ctx context.Context, b *bundle.Bundle) (*Result, error) 
 	if err != nil {
 		return res, fmt.Errorf("reading trace output: %w", err)
 	}
-	SortByTime(events)
-	res.Events = events
+	// A shim can only discover at runtime that a symbol cannot be instrumented —
+	// an ES const binding cannot be rebound, for instance. It reports that in the
+	// stream, and it is subtracted from the instrumented set rather than left as
+	// a claim the traces do not support.
+	var kept []Event
+	for _, e := range events {
+		if e.Kind == "uninstrumented" {
+			res.Skipped = append(res.Skipped, string(e.Symbol)+": "+e.Exception)
+			res.Instrumented = removeID(res.Instrumented, e.Symbol)
+			continue
+		}
+		kept = append(kept, e)
+	}
+	SortByTime(kept)
+	res.Events = kept
 	return res, nil
+}
+
+func removeID(ids []bundle.SymbolID, drop bundle.SymbolID) []bundle.SymbolID {
+	out := ids[:0]
+	for _, id := range ids {
+		if id != drop {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 // apply honours one adapter's ShimSpec against the scratch copy.

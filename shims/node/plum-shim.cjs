@@ -6,8 +6,17 @@
 // ingests all three identically, which is what keeps the tool polyglot without
 // the engine learning anything about any runtime.
 //
-// Limitation worth knowing: this hooks CommonJS module loading. Code loaded as
-// native ES modules (import, .mjs) does not pass through it and is not traced.
+// Both module systems are covered, by different means, because they need
+// different means:
+//
+//   CommonJS  hook Module._load and wrap the exports object afterwards.
+//   ESM       register plum-loader.mjs, which appends wrapping code to the
+//             module source before evaluation — ES exports are live bindings
+//             resolved at link time, so there is no object to mutate from
+//             outside.
+//
+// The tracing runtime itself is shared: it hangs off globalThis so the appended
+// ESM code and the CJS wrapper report into the same stack, counter and file.
 'use strict';
 
 const fs = require('fs');
@@ -19,7 +28,11 @@ const MAX = parseInt(process.env.PLUM_TRACE_MAX || '200000', 10);
 const ROOT = process.env.PLUM_REPO_ROOT || process.cwd();
 const WANTED = new Set((process.env.PLUM_SYMBOLS || '').split(',').filter(Boolean));
 
-if (OUT && process.env.PLUM_TRACE === '1') {
+// NODE_OPTIONS is inherited by worker threads, including the thread Node runs
+// module-customization hooks on, so this preload can be evaluated more than
+// once per process. Installing twice would wrap every function twice and report
+// each call at two depths.
+if (OUT && process.env.PLUM_TRACE === '1' && !globalThis.__PLUM__) {
   const fd = fs.openSync(OUT, 'a');
   const stack = [];
   let counter = 0;
@@ -50,7 +63,13 @@ if (OUT && process.env.PLUM_TRACE === '1') {
   // awaited so the return event lands when the promise settles, not when the
   // call hands back a pending promise — otherwise every async frame would
   // appear to cost nothing and return an object.
+  // WRAPPED marks a function this shim already instrumented. A module reachable
+  // through both CommonJS and ESM would otherwise be wrapped twice, and every
+  // call would be reported at two depths.
+  const WRAPPED = Symbol.for('plum.wrapped');
+
   const wrap = (symbol, fn) => {
+    if (typeof fn !== 'function' || fn[WRAPPED]) return fn;
     const traced = function (...args) {
       const invocation = `${process.pid}-${++counter}`;
       const parent = stack.length ? stack[stack.length - 1] : '';
@@ -82,6 +101,7 @@ if (OUT && process.env.PLUM_TRACE === '1') {
       }
     };
     Object.defineProperty(traced, 'name', { value: fn.name, configurable: true });
+    Object.defineProperty(traced, WRAPPED, { value: symbol, enumerable: false });
     traced.prototype = fn.prototype;
     return traced;
   };
@@ -136,6 +156,47 @@ if (OUT && process.env.PLUM_TRACE === '1') {
       }
     }
   };
+
+  // The runtime is published on globalThis so the code the ESM loader appends
+  // to a module can reach it without importing anything.
+  const uninstrumentable = [];
+  globalThis.__PLUM__ = {
+    wrap,
+    // wrapClass mutates the prototype in place, which needs no rebinding and so
+    // works for `class C {}` and `const C = class {}` alike.
+    wrapClass(rel, className, methods, cls) {
+      if (typeof cls !== 'function' || !cls.prototype) return;
+      for (const name of methods) {
+        const desc = Object.getOwnPropertyDescriptor(cls.prototype, name);
+        if (!desc || typeof desc.value !== 'function' || !desc.writable) continue;
+        if (desc.value[WRAPPED]) continue;
+        cls.prototype[name] = wrap(`${rel}::${className}.${name}`, desc.value);
+      }
+    },
+    // A symbol that cannot be rebound — a const-bound arrow export — is
+    // reported into the trace stream rather than silently dropped. Claiming to
+    // have instrumented something that was never traced is worse than saying so.
+    uninstrumentable(symbol, err) {
+      const reason = (err && err.message) || String(err);
+      uninstrumentable.push({ symbol, reason });
+      emit({ event: 'uninstrumented', symbol_id: symbol, exception: reason });
+    },
+    uninstrumented: () => uninstrumentable,
+  };
+
+  // ESM cannot be reached by hooking require, so register a module-customization
+  // hook. Available since Node 18.19 / 20.6; older runtimes keep CJS tracing.
+  try {
+    const { register } = require('node:module');
+    const { pathToFileURL } = require('node:url');
+    if (typeof register === 'function') {
+      register('./plum-loader.mjs', pathToFileURL(__filename));
+    }
+  } catch (e) {
+    if (process.env.PLUM_TRACE_DEBUG) {
+      process.stderr.write(`plum: ESM loader not registered: ${e && e.message}\n`);
+    }
+  }
 
   const originalLoad = Module._load;
   Module._load = function (request, parent, isMain) {

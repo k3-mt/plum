@@ -315,7 +315,16 @@ func (a *Adapter) ParseSymbols(path string, src []byte) ([]bundle.Symbol, error)
 
 // callSites binds each outbound call to the comment block directly above it —
 // the string that says why the call is being made here (spec §9.4).
+//
+// A callee only resolves to a local symbol when the shape of the call supports
+// it: a bare `f()`, or `this.m()` inside the class that declares m. Anything
+// deeper — `this.entries.get(key)` — is a call on some other object, and
+// binding it by bare name would invent an edge that does not exist.
 func callSites(rel string, lines []line, d decl, local map[string]string) []bundle.CallSite {
+	enclosing := ""
+	if i := strings.Index(d.name, "."); i >= 0 {
+		enclosing = d.name[:i]
+	}
 	var out []bundle.CallSite
 	seen := map[string]bool{}
 	for i, l := range lines {
@@ -329,8 +338,8 @@ func callSites(rel string, lines []line, d decl, local map[string]string) []bund
 				continue
 			}
 			seen[name] = true
-			callee := bundle.SymbolID("::" + short)
-			if qual, ok := local[short]; ok {
+			callee := bundle.SymbolID("::" + name)
+			if qual, ok := resolveCallee(name, enclosing, local); ok {
 				callee = bundle.MakeID(rel, qual)
 			}
 			out = append(out, bundle.CallSite{
@@ -341,6 +350,24 @@ func callSites(rel string, lines []line, d decl, local map[string]string) []bund
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Line < out[j].Line })
 	return out
+}
+
+// resolveCallee decides whether a call names something declared in this file.
+func resolveCallee(name, enclosingClass string, local map[string]string) (string, bool) {
+	switch {
+	case !strings.Contains(name, "."):
+		// A bare call: it can only mean a declaration in scope.
+		if qual, ok := local[name]; ok && !strings.Contains(qual, ".") {
+			return qual, true
+		}
+	case strings.HasPrefix(name, "this.") && strings.Count(name, ".") == 1 && enclosingClass != "":
+		// this.m() inside a class body means that class's own method.
+		method := strings.TrimPrefix(name, "this.")
+		if qual, ok := local[method]; ok && qual == enclosingClass+"."+method {
+			return qual, true
+		}
+	}
+	return "", false
 }
 
 func (a *Adapter) PublicSurface(path string, src []byte) ([]bundle.SurfaceItem, error) {
@@ -528,15 +555,19 @@ func (a *Adapter) Normalise(src []byte) ([]byte, error) {
 	return []byte(strings.Join(kept, "\n")), nil
 }
 
-// ShimSpec preloads the CommonJS hook into every node process the test command
-// spawns, including workers a test runner forks.
+// ShimSpec preloads the shim into every node process the test command spawns,
+// including workers a test runner forks. The preload is CommonJS because
+// --require is; it registers the ESM loader for itself.
 func (a *Adapter) ShimSpec(syms []bundle.SymbolID) (trace.ShimSpec, error) {
 	return trace.ShimSpec{
 		Language: "node",
 		Mode:     "env",
 		Symbols:  syms,
 		Dir:      ".plum-shim-node",
-		Files:    map[string]string{"plum-shim.cjs": trace.NodeShimSource},
+		Files: map[string]string{
+			"plum-shim.cjs":   trace.NodeShimSource,
+			"plum-loader.mjs": trace.NodeLoaderSource,
+		},
 		Env: map[string]string{
 			"PLUM_SYMBOLS": "${SYMBOLS}",
 			"NODE_OPTIONS": "--require ${SHIM_DIR}/plum-shim.cjs",

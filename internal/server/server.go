@@ -459,6 +459,13 @@ func AssembleContext(cfg *config.Config, b *bundle.Bundle, events []trace.Event,
 	return renderContext(s.buildContext(sym))
 }
 
+// AssembleContextJSON is AssembleContext as structured data, for callers that
+// want to build their own prompt or index it.
+func AssembleContextJSON(cfg *config.Config, b *bundle.Bundle, events []trace.Event, cs []claims.Claim, sym bundle.SymbolID) PromptContext {
+	s := &Server{Cfg: cfg, Bundle: b, Events: events, Claims: cs}
+	return s.buildContext(sym)
+}
+
 func renderContext(pc PromptContext) string {
 	var w strings.Builder
 	p := func(f string, a ...any) { fmt.Fprintf(&w, f+"\n", a...) }

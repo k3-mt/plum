@@ -313,7 +313,7 @@ func (a *Adapter) CallEdges(path string, src []byte) ([]bundle.Edge, error) {
 	seen := map[string]bool{}
 	for _, s := range syms {
 		for _, cs := range s.CallSites {
-			to := bundle.SymbolID("::" + lastSegment(cs.CalleeRaw))
+			to := bundle.SymbolID("::" + cs.CalleeRaw)
 			if id, ok := localNames[lastSegment(cs.CalleeRaw)]; ok {
 				to = id
 			}
@@ -376,7 +376,10 @@ func (a *Adapter) ShimSpec(syms []bundle.SymbolID) (trace.ShimSpec, error) {
 			Mode:     "env",
 			Symbols:  syms,
 			Dir:      ".plum-shim-node",
-			Files:    map[string]string{"plum-shim.cjs": trace.NodeShimSource},
+			Files: map[string]string{
+				"plum-shim.cjs":   trace.NodeShimSource,
+				"plum-loader.mjs": trace.NodeLoaderSource,
+			},
 			Env: map[string]string{
 				"PLUM_SYMBOLS": "${SYMBOLS}",
 				"NODE_OPTIONS": "--require ${SHIM_DIR}/plum-shim.cjs",

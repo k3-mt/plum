@@ -366,7 +366,9 @@ func (a *Adapter) CallEdges(path string, src []byte) ([]bundle.Edge, error) {
 			case len(cands) == 1:
 				to = bundle.MakeID(rel, cands[0])
 			default:
-				to = bundle.SymbolID("::" + lastSegment(name)) // unresolved; the extractor may bind it repo-wide
+				// Unresolved: keep the call as written, receiver and all, so the
+				// extractor can tell `helper()` from `c.entries.get()`.
+				to = bundle.SymbolID("::" + name)
 			}
 			key := string(fromID) + ">" + string(to)
 			if seen[key] {
