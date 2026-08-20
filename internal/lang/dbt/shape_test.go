@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kelalaike/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/bundle"
 )
 
 const fctSQL = `-- Order facts: one row per order, with what was actually paid against it.

@@ -12,10 +12,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kelalaike/plum/internal/bundle"
-	"github.com/kelalaike/plum/internal/claims"
-	"github.com/kelalaike/plum/internal/lang/dbt"
-	"github.com/kelalaike/plum/internal/trace"
+	"github.com/k3-mt/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/claims"
+	"github.com/k3-mt/plum/internal/lang/dbt"
+	"github.com/k3-mt/plum/internal/trace"
 )
 
 // The page is a view of files on disk, and those files change while you are

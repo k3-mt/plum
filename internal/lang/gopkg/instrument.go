@@ -18,8 +18,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/kelalaike/plum/internal/bundle"
-	"github.com/kelalaike/plum/internal/trace"
+	"github.com/k3-mt/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/trace"
 )
 
 // Instrument rewrites a scratch copy of the tree, adding a deferred probe to

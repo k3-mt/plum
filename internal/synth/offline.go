@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/kelalaike/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/bundle"
 )
 
 // Offline composes the seams doc mechanically from the bundle. It writes no

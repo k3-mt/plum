@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kelalaike/plum/internal/config"
-	"github.com/kelalaike/plum/internal/store"
+	"github.com/k3-mt/plum/internal/config"
+	"github.com/k3-mt/plum/internal/store"
 )
 
 func hookEnv(t *testing.T) *Env {

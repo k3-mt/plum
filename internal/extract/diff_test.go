@@ -3,7 +3,7 @@ package extract
 import (
 	"testing"
 
-	"github.com/kelalaike/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/bundle"
 )
 
 const zeroContextDiff = `diff --git a/internal/auth/cache.go b/internal/auth/cache.go

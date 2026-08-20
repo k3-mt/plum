@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kelalaike/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/bundle"
 )
 
 // Scope names what an interpretation is about.

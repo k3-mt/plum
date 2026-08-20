@@ -7,9 +7,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/kelalaike/plum/internal/bundle"
-	"github.com/kelalaike/plum/internal/lang/dbt"
-	"github.com/kelalaike/plum/internal/trace"
+	"github.com/k3-mt/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/lang/dbt"
+	"github.com/k3-mt/plum/internal/trace"
 )
 
 // cmdIngest reads a run that already happened.

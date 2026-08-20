@@ -8,13 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kelalaike/plum/internal/ask"
-	"github.com/kelalaike/plum/internal/bundle"
-	"github.com/kelalaike/plum/internal/claims"
-	"github.com/kelalaike/plum/internal/interpret"
-	"github.com/kelalaike/plum/internal/server"
-	"github.com/kelalaike/plum/internal/synth"
-	"github.com/kelalaike/plum/internal/trace"
+	"github.com/k3-mt/plum/internal/ask"
+	"github.com/k3-mt/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/claims"
+	"github.com/k3-mt/plum/internal/interpret"
+	"github.com/k3-mt/plum/internal/server"
+	"github.com/k3-mt/plum/internal/synth"
+	"github.com/k3-mt/plum/internal/trace"
 )
 
 // cmdInterpret asks what the change is FOR — the one thing the recording cannot

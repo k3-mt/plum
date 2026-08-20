@@ -9,8 +9,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/kelalaike/plum/internal/bundle"
-	"github.com/kelalaike/plum/internal/trace"
+	"github.com/k3-mt/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/trace"
 )
 
 // Adapter reads a dbt project.

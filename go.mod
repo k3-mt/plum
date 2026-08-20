@@ -1,3 +1,3 @@
-module github.com/kelalaike/plum
+module github.com/k3-mt/plum
 
 go 1.23

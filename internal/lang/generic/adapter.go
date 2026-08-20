@@ -13,8 +13,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/kelalaike/plum/internal/bundle"
-	"github.com/kelalaike/plum/internal/trace"
+	"github.com/k3-mt/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/trace"
 )
 
 type Adapter struct {

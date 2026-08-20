@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kelalaike/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/bundle"
 )
 
 const model = `-- Order facts: one row per order.

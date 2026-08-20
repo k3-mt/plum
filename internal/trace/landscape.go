@@ -8,7 +8,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/kelalaike/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/bundle"
 )
 
 // Well is one frame on the reaction coordinate. Vertical is stack depth.

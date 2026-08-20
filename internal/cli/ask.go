@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kelalaike/plum/internal/ask"
-	"github.com/kelalaike/plum/internal/bundle"
-	"github.com/kelalaike/plum/internal/claims"
-	"github.com/kelalaike/plum/internal/server"
-	"github.com/kelalaike/plum/internal/trace"
+	"github.com/k3-mt/plum/internal/ask"
+	"github.com/k3-mt/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/claims"
+	"github.com/k3-mt/plum/internal/server"
+	"github.com/k3-mt/plum/internal/trace"
 )
 
 // cmdAsk is the terminal door to the same bridge the explore UI uses, so a

@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/kelalaike/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/bundle"
 )
 
 // maxPerSection bounds how much of any one list the report prints. A report

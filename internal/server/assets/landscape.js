@@ -10,17 +10,30 @@ const el = (name, attrs = {}, text) => {
   return n;
 };
 
+// OFFLINE is set by an exported file, which carries the whole session inline.
+// The page then never reaches the network: same markup, same drawing, no server.
+const OFFLINE = typeof window !== 'undefined' ? window.__PLUM__ : null;
+
+// symbolBrief is the one place the page asks for a symbol, so it is the one
+// place that has to know whether anything is running.
+async function symbolBrief(symbol) {
+  if (OFFLINE) return OFFLINE.briefs[symbol] || { symbol, markdown: '' };
+  return (await fetch('/api/symbol/' + encodeURIComponent(symbol))).json();
+}
+
 async function boot() {
-  DATA = await (await fetch('/api/landscape')).json();
+  DATA = OFFLINE ? OFFLINE.payload : await (await fetch('/api/landscape')).json();
   setGate();
   document.getElementById('summary').textContent = DATA.summary || '';
   drawReading();
   render();
+  if (OFFLINE) offlineMode();
   document.getElementById('done').onclick = async () => {
     await fetch('/api/done', { method: 'POST' });
     document.getElementById('done').textContent = 'quiz unlocked — run: plum quiz';
   };
   document.getElementById('asked').onclick = ask;
+  document.getElementById('fit').onclick = resetView;
   listen();
   document.getElementById('route').textContent =
     'answers via ' + (DATA.ask_route === 'tmux' ? 'your tmux agent session' : DATA.ask_route);
@@ -65,7 +78,25 @@ function drawReading() {
 // listen keeps the page in step with the files it is a view of. Work in one
 // pane, watch it here in the other: a trace rewrites the landscape, an
 // interpretation appears, an edit to the source turns a reading stale.
+// offlineMode removes the parts of the page that only a running plum can do:
+// asking an agent a question, recording that you met the code, watching the
+// tree. Leaving buttons that quietly fail would be worse than not having them.
+function offlineMode() {
+  for (const id of ['done', 'ask']) {
+    const node = document.getElementById(id);
+    if (node) node.remove();
+  }
+  const foot = document.createElement('div');
+  foot.className = 'exported';
+  const s = DATA.session || {};
+  foot.textContent = 'Exported from plum · session ' + (s.id || '') +
+    (s.end_sha ? ' · ' + s.end_sha.slice(0, 12) : '') +
+    ' · a snapshot, not a live view';
+  document.body.appendChild(foot);
+}
+
 function listen() {
+  if (OFFLINE) return;
   if (!window.EventSource) return;
   const src = new EventSource('/api/live');
   src.addEventListener('reload', async (e) => {
@@ -180,7 +211,7 @@ function draw() {
     ? '⚠ the path does not close — ' + DATA.landscape.open_frame + ' was entered and never returned'
     : '';
   if (!wells.length) {
-    svg.setAttribute('height', 40);
+    fitView(svg, 400, 40);
     svg.appendChild(el('text', { x: 8, y: 24, class: 'blabel' },
       'No trace recorded yet. Run: plum trace'));
     return;
@@ -190,9 +221,7 @@ function draw() {
   const maxDepth = Math.max(...wells.map(w => w.depth));
   const width = PAD * 2 + wells.length * W;
   const height = PAD * 2 + (maxDepth + 1) * ROW + 30;
-  svg.setAttribute('width', width);
-  svg.setAttribute('height', height);
-  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  fitView(svg, width, height);
 
   const cx = i => PAD + i * W + W / 2;
   const cy = d => PAD + d * ROW;
@@ -305,7 +334,7 @@ function drawJoins(svg, w, x, y, width) {
 async function copyCallSite(bar) {
   const from = DATA.landscape.wells[bar.from];
   const to = DATA.landscape.wells[bar.to];
-  const pc = await (await fetch('/api/symbol/' + encodeURIComponent(from.symbol))).json();
+  const pc = await symbolBrief(from.symbol);
 
   const head = [
     '# Call site: ' + from.symbol + ' → ' + to.symbol,
@@ -356,7 +385,7 @@ async function select(symbol, well, opts) {
     send({ symbol: SELECTED, action: 'click', dwell_ms: Date.now() - DWELL });
   }
   SELECTED = symbol; DWELL = Date.now();
-  const pc = await (await fetch('/api/symbol/' + encodeURIComponent(symbol))).json();
+  const pc = await symbolBrief(symbol);
   const srcEl = document.getElementById('src');
   srcEl.innerHTML = '';
   if (pc.source) {
@@ -499,7 +528,7 @@ async function keep(kind) {
     '\u2713 ' + (notes || 'kept') + (r.patch_path ? '\n' + r.patch_path : '');
 }
 
-function send(e) { fetch('/api/telemetry', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(e) }); }
+function send(e) { if (OFFLINE) return; fetch('/api/telemetry', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(e) }); }
 // highlight is a deliberately small tokenizer: comments, strings, numbers and
 // keywords, for the languages this tool parses. It is not a parser and does not
 // pretend to be — but reading a frame's body as undifferentiated grey is the

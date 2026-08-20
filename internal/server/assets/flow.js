@@ -17,7 +17,7 @@ function drawFlow() {
   const nodes = relayerOutsideTables(flow.nodes || [], flow.links || []);
   const links = flow.links || [];
   if (!nodes.length) {
-    svg.setAttribute('height', 40);
+    fitView(svg, 400, 40);
     svg.appendChild(el('text', { x: 8, y: 24, class: 'blabel' }, 'Nothing in the DAG. Run: plum ingest'));
     return;
   }
@@ -55,9 +55,7 @@ function drawFlow() {
   });
   const width = PADX * 2 + (layers.length - 1) * COL + BOXW;
   const height = PADY * 2 + tallest;
-  svg.setAttribute('width', width);
-  svg.setAttribute('height', height);
-  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  fitView(svg, width, height);
 
   // Arrows first, so the tables sit on top of them.
   // Several arrows can land on one table. Their labels are spread along the
@@ -313,7 +311,7 @@ async function selectFlowNode(n) {
     for (const r of n.risks) lines.push('- ' + r);
   }
   await select(n.symbol, null, { copy: false });
-  const pc = await (await fetch('/api/symbol/' + encodeURIComponent(n.symbol))).json();
+  const pc = await symbolBrief(n.symbol);
   await copy(lines.join('\n') + '\n\n---\n\n' + (pc.markdown || ''),
     n.unresolved ? 'model copied — grain unreadable, paste it and ask' : 'model evidence copied');
 }

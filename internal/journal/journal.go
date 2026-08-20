@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kelalaike/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/bundle"
 )
 
 // Append writes one entry as JSONL. Called by an agent hook, an editor

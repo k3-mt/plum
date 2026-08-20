@@ -6,10 +6,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/kelalaike/plum/internal/bundle"
-	"github.com/kelalaike/plum/internal/config"
-	"github.com/kelalaike/plum/internal/lang"
-	"github.com/kelalaike/plum/internal/vcs"
+	"github.com/k3-mt/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/config"
+	"github.com/k3-mt/plum/internal/lang"
+	"github.com/k3-mt/plum/internal/vcs"
 )
 
 // Extractor assembles a bundle from a commit range. It reads blobs from git

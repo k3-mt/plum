@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kelalaike/plum/internal/bundle"
-	"github.com/kelalaike/plum/internal/capture"
-	"github.com/kelalaike/plum/internal/config"
-	"github.com/kelalaike/plum/internal/extract"
-	"github.com/kelalaike/plum/internal/journal"
+	"github.com/k3-mt/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/capture"
+	"github.com/k3-mt/plum/internal/config"
+	"github.com/k3-mt/plum/internal/extract"
+	"github.com/k3-mt/plum/internal/journal"
 )
 
 // autoState remembers what the last automatic capture saw, so a hook that fires

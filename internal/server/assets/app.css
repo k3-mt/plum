@@ -37,8 +37,18 @@ button:hover { border-color: var(--accent); color: var(--accent); }
 .join:hover .jcount { fill: var(--accent); }
 .jstub { stroke: var(--join); fill: none; stroke-width: 1.2; stroke-dasharray: 2 2; }
 .jcount { font-size: 9px; fill: var(--join); pointer-events: none; }
-#svgwrap { overflow-x: auto; }
-svg { display: block; }
+/* The canvas is a viewport onto a larger drawing, not the drawing itself. */
+#svgwrap {
+  height: min(58vh, 620px); overflow: hidden;
+  border: 1px solid var(--line); border-radius: 3px; background: #101316;
+}
+svg { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+svg.grabbing { cursor: grabbing; }
+.viewhint {
+  display: flex; align-items: center; gap: .6rem;
+  font-size: .7rem; color: var(--dim); padding: .35rem 0 .2rem;
+}
+.viewhint button { padding: .15rem .5rem; font-size: .7rem; }
 .well { cursor: pointer; }
 .toast {
   position: fixed; bottom: 1.2rem; left: 50%; transform: translateX(-50%);
@@ -156,3 +166,10 @@ pre { margin: 0; white-space: pre; overflow-x: auto; font-size: 12px; color: #cd
 .sp-svg-risk  { font-size: 10px; fill: var(--risk); pointer-events: none; }
 .sp-svg-ok    { font-size: 10px; fill: #6f8f7a; pointer-events: none; }
 .closed { white-space: pre-line; }
+
+/* Exported files say so, plainly and permanently. A snapshot that looks like a
+   live view is the one way this artifact could mislead. */
+.exported {
+  padding: .6rem 1rem; border-top: 1px solid var(--line);
+  color: var(--dim); font-size: .72rem;
+}

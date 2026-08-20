@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kelalaike/plum/internal/bundle"
-	"github.com/kelalaike/plum/internal/config"
+	"github.com/k3-mt/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/config"
 )
 
 func demoBundle() *bundle.Bundle {

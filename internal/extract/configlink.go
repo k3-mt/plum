@@ -5,9 +5,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/kelalaike/plum/internal/bundle"
-	"github.com/kelalaike/plum/internal/lang/conf"
-	"github.com/kelalaike/plum/internal/vcs"
+	"github.com/k3-mt/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/lang/conf"
+	"github.com/k3-mt/plum/internal/vcs"
 )
 
 // linkConfig connects code to the configuration it reads.

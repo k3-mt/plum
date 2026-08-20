@@ -1,0 +1,25 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      # Python and Node are not dependencies of plum. They are needed because
+      # the shims are tested against real interpreters rather than mocked.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: make lint
+      - run: make test
+      # CGO_ENABLED=0 cross-compilation is the acceptance test for the
+      # zero-dependency decision. If this breaks, cgo has crept in.
+      - run: make cross

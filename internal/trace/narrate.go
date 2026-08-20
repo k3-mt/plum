@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kelalaike/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/bundle"
 )
 
 // Step is one moment of the recording, said in plain language.

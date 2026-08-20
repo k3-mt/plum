@@ -16,10 +16,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kelalaike/plum/internal/bundle"
-	"github.com/kelalaike/plum/internal/config"
-	"github.com/kelalaike/plum/internal/journal"
-	"github.com/kelalaike/plum/internal/vcs"
+	"github.com/k3-mt/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/config"
+	"github.com/k3-mt/plum/internal/journal"
+	"github.com/k3-mt/plum/internal/vcs"
 )
 
 type Result struct {

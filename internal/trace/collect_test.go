@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kelalaike/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/bundle"
 )
 
 // fakeAdapter stands in for a language the engine has never heard of. If the

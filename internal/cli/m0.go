@@ -10,14 +10,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kelalaike/plum/internal/bundle"
-	"github.com/kelalaike/plum/internal/capture"
-	"github.com/kelalaike/plum/internal/config"
-	"github.com/kelalaike/plum/internal/extract"
-	"github.com/kelalaike/plum/internal/journal"
-	"github.com/kelalaike/plum/internal/report"
-	"github.com/kelalaike/plum/internal/stale"
-	"github.com/kelalaike/plum/internal/trace"
+	"github.com/k3-mt/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/capture"
+	"github.com/k3-mt/plum/internal/config"
+	"github.com/k3-mt/plum/internal/extract"
+	"github.com/k3-mt/plum/internal/journal"
+	"github.com/k3-mt/plum/internal/report"
+	"github.com/k3-mt/plum/internal/stale"
+	"github.com/k3-mt/plum/internal/trace"
 )
 
 func cmdInit(ctx context.Context, env *Env, args []string) error {

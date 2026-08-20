@@ -11,18 +11,31 @@ recorded execution.
 The deliverable is not documentation. The deliverable is a correctly updated
 model in the developer's head.
 
-Built to the specification in [`BUILD (1).md`](<BUILD (1).md>).
+Works on Go, Python, JavaScript/TypeScript, and dbt/SQL warehouses.
 
 ---
 
 ## Install
 
 ```sh
-make build            # -> bin/plum, a single static binary, CGO_ENABLED=0
-make install          # -> ~/.local/bin/plum
+# Go toolchain
+go install github.com/k3-mt/plum/cmd/plum@latest
+
+# or a prebuilt binary, no toolchain needed
+curl -fsSL https://raw.githubusercontent.com/k3-mt/plum/main/install.sh | sh
+
+# or from source
+git clone https://github.com/k3-mt/plum && cd plum && make install
 ```
 
-No third-party dependencies. Go 1.23+ and `git` on PATH is the whole story.
+Binaries for macOS, Linux and Windows on amd64 and arm64 are attached to every
+[release](https://github.com/k3-mt/plum/releases).
+
+**No third-party dependencies.** One static binary, `CGO_ENABLED=0`, Go 1.23+
+and `git` on PATH. That is deliberate: a tool that reads your repository should
+not bring a supply chain with it. `go.mod` has no `require` block, and `make
+cross` failing is the acceptance test — if it ever does, a cgo dependency has
+crept in and cross-compilation is gone.
 
 ## The loop
 
@@ -34,6 +47,7 @@ plum report                     # mechanical evidence, read-first ordering
 plum synth                      # seams doc in a fresh context, claims.yaml
 plum trace                      # run the suite with the changed set instrumented
 plum explore                    # meet the code as a landscape — no score, no timer
+plum export                     # one HTML file, opens with nothing running
 plum quiz                       # only after exploring, graded on real traces
 plum claims verify              # executable claims, for CI
 ```
@@ -60,6 +74,9 @@ plum range HEAD~3..HEAD             # any commit range, after the fact
 | `plum ask` | grounded answer | Context assembled from the bundle, routed to your agent session. A question the evidence cannot answer is itself a finding. |
 | `plum quiz` | terminal Q&A | Every question comes from a recorded invocation. Misses accumulate in your state dir. |
 | `plum claims verify` | exit 1 on failure | A failing claim means the doc is wrong or the code is. Both worth knowing. |
+| `plum export` | one `.html` file | The same page with the evidence folded in. Opens from `file://` with no network. Attach it to the PR. |
+| `plum ingest` | `flow.json` | Reads a dbt run that already happened. Never triggers one — in a warehouse every run is billed. |
+| `plum flow` | terminal DAG | Build order, join types, grain, cost per model. |
 
 ## Where things live
 
@@ -474,6 +491,64 @@ The manifest is richer but it is a build artifact and normally gitignored, so
 there is no manifest at `StartSHA` to diff against — the declared contract is
 what a reviewer actually changes, and it is what can be compared across a range.
 
+### A warehouse build is not a call stack
+
+The landscape draws code: a path that descends into a call and comes back, where
+closure is the shape you read it by. SQL has no returns. `fct_orders` does not
+call `stg_orders` and get control back — the warehouse builds `stg_orders`,
+builds `stg_payments`, then builds `fct_orders` by reading both. So dbt gets its
+own picture, layered in build order with data moving one way:
+
+```
+$ plum ingest        # reads target/manifest.json + run_results.json. Never runs dbt.
+
+build order · 1m24.1s · 37.1 GB scanned · 7,282,893 rows written · 1 test failing
+
+layer 1
+  stg_payments                       view · 1,902,115 rows · 819.2 MB · 3.2s
+      one row per capture attempt (declared)
+      ← shop_raw.payments                              from — the driving table
+      where captured_at is not null                  drops rows that do not match
+
+layer 2
+  fct_orders                         incremental on order_id · 18.4 GB · 41.7s
+      one row per order, says the doc — but the SQL groups by position over a
+      select star, so its grain is whatever columns upstream has today
+      ← stg_orders                     2,481,003 rows  from — the driving table
+      ← stg_payments                   1,902,115 rows  left join on order_id —
+                    unmatched rows are kept, and rows multiply if the key repeats
+      ← shop-prod-1234.shop_raw.refunds   left join — written into the SQL,
+                                                             invisible to dbt
+      ✗ unique_fct_orders_order_id       1,204 rows  failed
+```
+
+Every arrow carries the two facts a call arrow cannot hold and a warehouse
+reader asks for first: **how the rows were matched**, and **how many came
+through**. Read `left join … rows multiply if the key repeats` next to
+`✗ unique(order_id) — 1,204 rows failed` and that is not two facts, it is one
+diagnosis.
+
+Three things it can say that the manifest alone cannot:
+
+- **Join type, with what it does to your rows.** A run records that a query took
+  41.7s and scanned 18.4 GB. Only the statement says it left-joined on
+  `order_id`. Nothing else in the pipeline knows the difference between rows
+  being dropped, kept, or multiplied.
+- **Grain, split into what is promised and what is true.** *Declared* is the
+  author's prose ("one row per order"); *inferred* is what the SQL does. They
+  are kept apart on purpose: when they disagree that is a finding, and it is one
+  nothing else catches, because a doc is never run. `customer` and `customer_id`
+  are normalised to the same grain, and a statement with no `group by` is not
+  allowed to contradict a person. A model that groups by position over a
+  `select *` is reported as **unresolvable** rather than guessed at — a wrong
+  grain on the picture is worse than a blank one.
+- **The edge dbt cannot see.** A fully-qualified table written straight into the
+  SQL will not be built first and will not appear in lineage. It is drawn as a
+  node *outside* the DAG.
+
+`plum ingest -from stg_orders` walks the other way: what selects this model, and
+what that costs when you change it.
+
 ### Predicates that earn their place
 
 The failures these catch are not crashes. A model with `select *` keeps running
@@ -541,6 +616,30 @@ data rather than as prose:
 
 Coverage is declared rather than inferred: dbt says which tests cover which
 model, and a failing one is named as failing.
+
+## Reading it when nothing is running
+
+`plum explore` is a server because it answers questions and watches the tree.
+Reading is not that. Reading happens in a pull request, in a chat thread, on
+somebody else's laptop six months from now — and none of those can run a binary
+from your machine.
+
+```sh
+plum export -o review.html
+```
+
+One file. The same markup, stylesheet and scripts the server serves, with the
+evidence folded in: the picture, every symbol's brief, the narration, the
+findings, the recorded arguments and returns. It opens from a `file://` URL and
+makes no network request of any kind. Nothing is regenerated for the export, so
+the artifact cannot drift from the tool.
+
+The parts only a running plum can do — asking an agent a question, recording
+that you met the code — are removed rather than left to fail quietly, and the
+file says plainly that it is a snapshot.
+
+The canvas pans and zooms in both: drag to move, scroll to zoom, double-click to
+fit. A DAG with thirty models is wider than any window.
 
 ## Configuration files are part of the code
 
@@ -640,6 +739,10 @@ and the markup stripped — a claim that restates the question asserts nothing.
 
 ## Deviations from the spec, and why
 
+Built to a written specification, which is not published here. The deviations
+are recorded anyway, because a tool about comprehension debt should not run one
+of its own.
+
 | Spec said | Built | Why |
 |---|---|---|
 | `spf13/cobra`, `BurntSushi/toml`, `bubbletea` | stdlib `flag`, a small TOML subset parser, plain terminal output | The spec offers "or stdlib `flag` if you want zero deps". Zero dependencies makes `CGO_ENABLED=0` and cross-compilation unconditional, and the gate popup needs no TUI framework — `plum gate` exits non-zero and `tmux display-popup` does the rest. |
@@ -667,3 +770,11 @@ make golden   # regenerate testdata/fixtures/*/golden.json
 make lint     # gofmt + go vet
 make cross    # darwin/linux/windows, amd64 + arm64
 ```
+
+Every behaviour described above has a test, and the tests are written to state
+the failure they prevent rather than to describe the code. A release is cut by
+tagging: `git tag v0.2.0 && git push --tags` builds and attaches the binaries.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).

@@ -7,10 +7,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/kelalaike/plum/internal/bundle"
-	"github.com/kelalaike/plum/internal/claims"
-	"github.com/kelalaike/plum/internal/config"
-	"github.com/kelalaike/plum/internal/lang"
+	"github.com/k3-mt/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/claims"
+	"github.com/k3-mt/plum/internal/config"
+	"github.com/k3-mt/plum/internal/lang"
 )
 
 type Finding struct {

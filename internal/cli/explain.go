@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kelalaike/plum/internal/trace"
+	"github.com/k3-mt/plum/internal/trace"
 )
 
 // cmdExplain says what a recording actually did, in plain language.

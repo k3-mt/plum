@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/kelalaike/plum/internal/claims"
-	"github.com/kelalaike/plum/internal/config"
-	"github.com/kelalaike/plum/internal/lang"
-	"github.com/kelalaike/plum/internal/lang/gopkg"
+	"github.com/k3-mt/plum/internal/claims"
+	"github.com/k3-mt/plum/internal/config"
+	"github.com/k3-mt/plum/internal/lang"
+	"github.com/k3-mt/plum/internal/lang/gopkg"
 )
 
 const original = `package auth

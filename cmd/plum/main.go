@@ -13,7 +13,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/kelalaike/plum/internal/cli"
+	"github.com/k3-mt/plum/internal/cli"
 )
 
 // version is set at build time with -X main.version.

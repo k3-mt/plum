@@ -9,16 +9,16 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/kelalaike/plum/internal/config"
-	"github.com/kelalaike/plum/internal/lang"
-	"github.com/kelalaike/plum/internal/lang/conf"
-	"github.com/kelalaike/plum/internal/lang/dbt"
-	"github.com/kelalaike/plum/internal/lang/generic"
-	"github.com/kelalaike/plum/internal/lang/gopkg"
-	"github.com/kelalaike/plum/internal/lang/js"
-	"github.com/kelalaike/plum/internal/lang/pyast"
-	"github.com/kelalaike/plum/internal/store"
-	"github.com/kelalaike/plum/internal/vcs"
+	"github.com/k3-mt/plum/internal/config"
+	"github.com/k3-mt/plum/internal/lang"
+	"github.com/k3-mt/plum/internal/lang/conf"
+	"github.com/k3-mt/plum/internal/lang/dbt"
+	"github.com/k3-mt/plum/internal/lang/generic"
+	"github.com/k3-mt/plum/internal/lang/gopkg"
+	"github.com/k3-mt/plum/internal/lang/js"
+	"github.com/k3-mt/plum/internal/lang/pyast"
+	"github.com/k3-mt/plum/internal/store"
+	"github.com/k3-mt/plum/internal/vcs"
 )
 
 var Version = "dev"
@@ -55,6 +55,7 @@ func commands() []command {
 		{"tests", "list the tests that ran, and what each one reached", cmdTests},
 		{"landscape", "derive the energy landscape from recorded traces", cmdLandscape},
 		{"flow", "draw a warehouse build as a dataflow DAG, not a call stack", cmdFlow},
+		{"export", "write the session as one self-contained HTML file", cmdExport},
 		{"explain", "say what the recording actually did, in plain language", cmdExplain},
 		{"interpret", "ask what the change is for — a reading over the evidence, not a record", cmdInterpret},
 		{"explore", "serve the landscape UI — no scoring, no gate, no timer", cmdExplore},

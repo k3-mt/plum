@@ -12,14 +12,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kelalaike/plum/internal/ask"
-	"github.com/kelalaike/plum/internal/bundle"
-	"github.com/kelalaike/plum/internal/claims"
-	"github.com/kelalaike/plum/internal/config"
-	"github.com/kelalaike/plum/internal/explore"
-	"github.com/kelalaike/plum/internal/lang"
-	"github.com/kelalaike/plum/internal/lang/gopkg"
-	"github.com/kelalaike/plum/internal/trace"
+	"github.com/k3-mt/plum/internal/ask"
+	"github.com/k3-mt/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/claims"
+	"github.com/k3-mt/plum/internal/config"
+	"github.com/k3-mt/plum/internal/explore"
+	"github.com/k3-mt/plum/internal/lang"
+	"github.com/k3-mt/plum/internal/lang/gopkg"
+	"github.com/k3-mt/plum/internal/trace"
 )
 
 const source = `package auth
@@ -84,7 +84,7 @@ func testServer(t *testing.T) (*Server, *explore.Store) {
 func TestAssetsAreEmbeddedAndSmall(t *testing.T) {
 	s, _ := testServer(t)
 	total := 0
-	for _, path := range []string{"/", "/app.css", "/landscape.js", "/flow.js"} {
+	for _, path := range []string{"/", "/app.css", "/landscape.js", "/flow.js", "/view.js"} {
 		rec := httptest.NewRecorder()
 		s.mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 		if rec.Code != http.StatusOK {
@@ -236,7 +236,7 @@ func TestEveryFunctionTheScriptCallsIsDefined(t *testing.T) {
 	// and vice versa, and scanning either alone would report false failures and
 	// miss real ones.
 	var all strings.Builder
-	for _, name := range []string{"assets/landscape.js", "assets/flow.js"} {
+	for _, name := range []string{"assets/landscape.js", "assets/flow.js", "assets/view.js"} {
 		src, err := assets.ReadFile(name)
 		if err != nil {
 			t.Fatal(err)

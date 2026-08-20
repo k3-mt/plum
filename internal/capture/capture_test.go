@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kelalaike/plum/internal/config"
-	"github.com/kelalaike/plum/internal/vcs"
+	"github.com/k3-mt/plum/internal/config"
+	"github.com/k3-mt/plum/internal/vcs"
 )
 
 func gitRepo(t *testing.T) (*config.Config, *vcs.Repo) {

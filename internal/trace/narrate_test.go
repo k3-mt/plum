@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kelalaike/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/bundle"
 )
 
 func narrateBundle() *bundle.Bundle {

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kelalaike/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/bundle"
 )
 
 func testBundle() *bundle.Bundle {

@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kelalaike/plum/internal/bundle"
-	"github.com/kelalaike/plum/internal/config"
-	"github.com/kelalaike/plum/internal/extract"
-	"github.com/kelalaike/plum/internal/lang"
-	"github.com/kelalaike/plum/internal/lang/gopkg"
-	"github.com/kelalaike/plum/internal/vcs"
+	"github.com/k3-mt/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/config"
+	"github.com/k3-mt/plum/internal/extract"
+	"github.com/k3-mt/plum/internal/lang"
+	"github.com/k3-mt/plum/internal/lang/gopkg"
+	"github.com/k3-mt/plum/internal/vcs"
 )
 
 var update = flag.Bool("update", false, "regenerate the golden bundles in testdata/fixtures")

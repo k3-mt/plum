@@ -10,7 +10,7 @@ import (
 	"os"
 	"sort"
 
-	"github.com/kelalaike/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/bundle"
 )
 
 const SchemaVersion = "1.0"

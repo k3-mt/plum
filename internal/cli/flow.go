@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kelalaike/plum/internal/bundle"
-	"github.com/kelalaike/plum/internal/lang/dbt"
+	"github.com/k3-mt/plum/internal/bundle"
+	"github.com/k3-mt/plum/internal/lang/dbt"
 )
 
 // cmdFlow prints the dataflow picture for a warehouse session.
