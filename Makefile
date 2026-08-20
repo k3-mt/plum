@@ -1,7 +1,7 @@
 BINARY := plum
 LDFLAGS := -s -w -X main.version=$(shell git describe --tags --always 2>/dev/null || echo dev)
 
-.PHONY: build cross test golden lint install clean
+.PHONY: build cross test golden shims lint install clean
 
 build:
 	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o bin/$(BINARY) ./cmd/plum
@@ -20,6 +20,11 @@ test:
 
 golden:
 	go test ./internal/extract -run Golden -update
+
+# The Python shim is embedded from internal/trace/shim_assets because go:embed
+# cannot reach outside its package. Edit shims/python/, then run this.
+shims:
+	cp shims/python/plum_shim.py shims/python/sitecustomize.py internal/trace/shim_assets/
 
 lint:
 	gofmt -l . | tee /dev/stderr | (! read)
