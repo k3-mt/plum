@@ -89,6 +89,17 @@ func (s *Server) Export() ([]byte, error) {
 	html = strings.Replace(html, `<link rel="stylesheet" href="/app.css">`,
 		"<style>\n"+string(css)+"\n</style>", 1)
 
+	// The install manifest and its icons describe an application you can run.
+	// An export is a file you can open — there is nothing to install and no
+	// server to fetch them from, so they come out rather than becoming three
+	// dead links in an artifact whose whole promise is that it needs nothing.
+	for _, tag := range []string{
+		`<link rel="manifest" href="/manifest.webmanifest">`,
+		`<link rel="icon" href="/icon-192.png">`,
+	} {
+		html = strings.Replace(html, tag+"\n", "", 1)
+	}
+
 	for _, name := range []string{"view.js", "flow.js", "landscape.js"} {
 		src, err := fs.ReadFile(assets, "assets/"+name)
 		if err != nil {

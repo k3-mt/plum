@@ -59,6 +59,7 @@ func commands() []command {
 		{"explain", "say what the recording actually did, in plain language", cmdExplain},
 		{"interpret", "ask what the change is for — a reading over the evidence, not a record", cmdInterpret},
 		{"explore", "serve the landscape UI — no scoring, no gate, no timer", cmdExplore},
+		{"watch", "a window that stays open and follows each session as it lands", cmdWatch},
 		{"context", "print the assembled evidence for a symbol or session, for piping into any tool", cmdContext},
 		{"ask", "ask a grounded question; the answer can be kept as rationale, a claim or a patch", cmdAsk},
 		{"quiz", "interrogate yourself, graded against recorded execution", cmdQuiz},

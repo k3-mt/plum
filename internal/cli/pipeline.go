@@ -17,6 +17,7 @@ import (
 	"github.com/k3-mt/plum/internal/explore"
 	"github.com/k3-mt/plum/internal/interpret"
 	"github.com/k3-mt/plum/internal/lang/dbt"
+	"github.com/k3-mt/plum/internal/met"
 	"github.com/k3-mt/plum/internal/quiz"
 	"github.com/k3-mt/plum/internal/server"
 	"github.com/k3-mt/plum/internal/stale"
@@ -598,6 +599,7 @@ func cmdExplore(ctx context.Context, env *Env, args []string) error {
 		Adapters:   env.Reg,
 		TestFilter: *testName,
 		Watch:      !*noWatch,
+		Met:        met.Load(store.StateDir(env.Cfg.Root)),
 	}
 	// A warehouse session carries a flow as well as a landscape. When it does,
 	// the page draws the flow: a build is a DAG and a call-stack picture of it
@@ -605,6 +607,16 @@ func cmdExplore(ctx context.Context, env *Env, args []string) error {
 	if flow, err := dbt.LoadFlow(env.Store.FlowPath(id)); err == nil {
 		opts.Flow = flow
 	}
+	routeAsk(ctx, env, &opts)
+	tel := explore.NewStore(store.StateDir(env.Cfg.Root))
+	s := server.New(env.Cfg, b, l, events, cs, string(synthesis), tel, opts)
+	return s.Serve(ctx, *addr, !*noOpen)
+}
+
+// routeAsk wires the page's question box to wherever this repository has said
+// questions should go. Both windows need it and neither should own it: an
+// explore and a watch differ in how long they live, not in who answers.
+func routeAsk(ctx context.Context, env *Env, opts *server.Config) {
 	switch env.Cfg.Ask.Route {
 	case "tmux":
 		if ask.Available(ctx) {
@@ -629,9 +641,6 @@ func cmdExplore(ctx context.Context, env *Env, args []string) error {
 			fmt.Println("ask route is \"api\" but:", err)
 		}
 	}
-	tel := explore.NewStore(store.StateDir(env.Cfg.Root))
-	s := server.New(env.Cfg, b, l, events, cs, string(synthesis), tel, opts)
-	return s.Serve(ctx, *addr, !*noOpen)
 }
 
 // cmdQuiz is available only after the explore phase ended (P8): testing before a

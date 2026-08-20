@@ -2,6 +2,11 @@
 // depth, descent is entering a call, ascent is returning, and the path must close.
 const SVG = 'http://www.w3.org/2000/svg';
 let DATA = null, SELECTED = null, DWELL = null;
+// BEHIND is set when the page skipped a reload it could not usefully draw —
+// collapsed to its meter, or hidden behind other windows. It is what makes that
+// skipping safe: the page knows it owes itself a redraw, and pays it on the way
+// back rather than sitting there showing something out of date.
+let BEHIND = false;
 
 const el = (name, attrs = {}, text) => {
   const n = document.createElementNS(SVG, name);
@@ -24,6 +29,7 @@ async function symbolBrief(symbol) {
 async function boot() {
   DATA = OFFLINE ? OFFLINE.payload : await (await fetch('/api/landscape')).json();
   setGate();
+  drawDebt();
   document.getElementById('summary').textContent = DATA.summary || '';
   drawReading();
   render();
@@ -41,6 +47,29 @@ async function boot() {
     document.getElementById('keep-' + kind).onclick = () => keep(kind);
   }
   document.getElementById('q').addEventListener('keydown', e => { if (e.key === 'Enter') ask(); });
+  applyMode();
+  window.addEventListener('resize', applyMode);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) catchUp(); });
+}
+
+// A window someone left open serves two reading distances, and which one it is
+// serving is decided by how wide they have made it. Narrow is a glance from
+// across the room; opened out is a tool. An explore tab is never collapsed —
+// a small screen showing nothing but a number would just be broken.
+function peripheral() { return document.body.classList.contains('peripheral'); }
+
+function applyMode() {
+  const want = !!(DATA && DATA.resident) && window.innerWidth <= 560;
+  if (want === peripheral()) return;
+  document.body.classList.toggle('peripheral', want);
+  if (!want) catchUp(); // opened out again: draw whatever was skipped meanwhile
+}
+
+// catchUp pays back the reloads the page chose not to draw.
+function catchUp() {
+  if (!BEHIND || peripheral() || document.hidden) return;
+  BEHIND = false;
+  refreshAll('caught up — the session moved while this window was away');
 }
 
 // The reading is the only part of this page a model wrote. It sits at the top,
@@ -82,6 +111,8 @@ function drawReading() {
 // asking an agent a question, recording that you met the code, watching the
 // tree. Leaving buttons that quietly fail would be worse than not having them.
 function offlineMode() {
+  const debt = document.getElementById('debt');
+  if (debt) debt.remove();
   for (const id of ['done', 'ask']) {
     const node = document.getElementById(id);
     if (node) node.remove();
@@ -100,22 +131,84 @@ function listen() {
   if (!window.EventSource) return;
   const src = new EventSource('/api/live');
   src.addEventListener('reload', async (e) => {
-    const before = SELECTED;
-    const scroll = document.getElementById('svgwrap').scrollLeft;
-    DATA = await (await fetch('/api/landscape')).json();
-    drawReading();
-    document.getElementById('summary').textContent = DATA.summary || '';
-    setGate();
-    render();
-    document.getElementById('svgwrap').scrollLeft = scroll;
-    // Keep whatever the reader was looking at, if it still exists.
-    if (before && (DATA.landscape.wells || []).some((w) => w.symbol === before)) {
-      select(before, null, { copy: false });
-    }
-    toast(e.data === 'source'
+    // Nothing on screen: draw nothing, and remember that you owe a redraw.
+    if (document.hidden) { BEHIND = true; return; }
+    // Collapsed to the meter: the landscape is not being shown, so there is no
+    // reason to fetch one. That payload carries every changed symbol in the
+    // session and runs to megabytes on a real capture, which is exactly the
+    // cost a window left open all day must not keep paying. The number is a few
+    // hundred bytes and is the only thing visible.
+    if (peripheral()) { BEHIND = true; refreshDebt(); return; }
+    refreshAll(e.data === 'source'
       ? 'source changed on disk — reading and staleness refreshed'
       : 'session updated — landscape reloaded');
   });
+}
+
+async function refreshAll(note) {
+  const before = SELECTED;
+  const scroll = document.getElementById('svgwrap').scrollLeft;
+  DATA = await (await fetch('/api/landscape')).json();
+  drawReading();
+  document.getElementById('summary').textContent = DATA.summary || '';
+  setGate();
+  drawDebt();
+  render();
+  document.getElementById('svgwrap').scrollLeft = scroll;
+  // Keep whatever the reader was looking at, if it still exists.
+  if (before && (DATA.landscape.wells || []).some((w) => w.symbol === before)) {
+    select(before, null, { copy: false });
+  }
+  if (note) toast(note);
+}
+
+// The debt meter: how much of what this session changed you have not met, at the
+// version it is in now. It goes up on its own while an agent works and comes
+// down only when you read something — which is the entire point of leaving this
+// window open where you can see it.
+function drawDebt() {
+  const box = document.getElementById('debt');
+  if (!box) return;
+  const d = DATA.debt;
+  // An export has no reader, so it has no debt. Showing zero would be a
+  // different claim, and a false one: "you have met all of this".
+  if (OFFLINE || !d || !d.total) { box.hidden = true; return; }
+  box.hidden = false;
+  const met = d.total - d.unmet;
+  box.querySelector('.count').textContent = d.unmet;
+  box.querySelector('.meter i').style.width = Math.round(100 * met / d.total) + '%';
+  // Nothing outstanding only counts as clear if nothing is being written either.
+  box.classList.toggle('clear', d.unmet === 0 && !d.drifted);
+  box.classList.toggle('writing', !!d.drifted);
+
+  const parts = [d.unmet === 0 ? 'met, all ' + d.total : 'unmet of ' + d.total];
+  if (d.stale) parts.push(d.stale + ' changed since you read it');
+  if (d.drifted) parts.push(d.drifted + ' being written now');
+  else if (d.unmeasured) parts.push('drift not measured');
+  box.querySelector('.what').textContent = parts.join(' \u00b7 ');
+
+  const title = [d.unmet === 0
+    ? 'You have seen every symbol this session changed, at the version it was captured in.'
+    : d.unmet + ' of ' + d.total + ' changed symbols you have not seen at this version. '
+      + 'Open one to pay it down, or click "I have met this code" to clear the lot.'];
+  if (d.drifted) {
+    title.push(d.drifted + ' of them no longer match the working tree: code written '
+      + 'since the capture, which no session has recorded yet.');
+  }
+  if (d.unmeasured) title.push('Drift not measured — ' + d.unmeasured + '.');
+  box.title = title.join('\n\n');
+}
+
+// Reading a symbol pays the debt down, so the number has to move when you read
+// one. Asking for the meter alone rather than reloading the landscape keeps that
+// cheap: the landscape payload carries every changed symbol in the session.
+async function refreshDebt() {
+  if (OFFLINE) return;
+  try {
+    DATA.debt = await (await fetch('/api/debt')).json();
+    drawDebt();
+    if (!peripheral()) render(); // the hollow frames only exist when drawn
+  } catch (e) { /* the meter is not worth breaking the page over */ }
 }
 
 function setGate() {
@@ -268,15 +361,20 @@ function draw() {
     const fill = w.phase === 'escape' ? 'var(--unwind)'
       : w.context ? 'var(--context)'
       : (w.risk ? 'var(--risk)' : (w.phase === 'resume' ? 'var(--resume)' : 'var(--enter)'));
+    // A frame you have not met is drawn hollow: the shape is there, the substance
+    // is not, which is exactly the reader's position on it.
+    const unmet = (DATA.debt && DATA.debt.frames || []).includes(w.symbol);
     const rect = el('rect', {
-      x, y, width: W - 20, height: 26, rx: 3, fill,
+      x, y, width: W - 20, height: 26, rx: 3,
+      fill: unmet ? 'none' : fill,
+      stroke: unmet ? fill : (w.doc ? 'none' : 'var(--enter)'),
+      'stroke-width': unmet ? 1.5 : 1,
       opacity: w.context ? .3 : (w.phase === 'resume' ? .45 : .9),
-      stroke: w.doc ? 'none' : 'var(--enter)',
-      'stroke-dasharray': w.doc ? '' : '3 2',
+      'stroke-dasharray': unmet || w.doc ? '' : '3 2',
     });
     g.appendChild(rect);
-    g.appendChild(el('text', { x: cx(i), y: y + 17, 'text-anchor': 'middle', class: 'wlabel', fill: '#0f1113' },
-      trunc(w.label, 15)));
+    g.appendChild(el('text', { x: cx(i), y: y + 17, 'text-anchor': 'middle', class: 'wlabel',
+      fill: unmet ? 'var(--fg)' : '#0f1113' }, trunc(w.label, 15)));
     if (w.context) g.appendChild(el('title', {}, w.symbol + ' — surrounding code, recorded for structure only'));
     g.appendChild(el('text', { x: cx(i), y: y + 38, 'text-anchor': 'middle', class: 'blabel' },
       'd' + w.depth + (w.phase === 'resume' ? ' · resumed' : w.phase === 'escape' ? ' · escaped' : '')));
@@ -386,6 +484,7 @@ async function select(symbol, well, opts) {
   }
   SELECTED = symbol; DWELL = Date.now();
   const pc = await symbolBrief(symbol);
+  refreshDebt(); // the fetch above is what marked it met; show that happening
   const srcEl = document.getElementById('src');
   srcEl.innerHTML = '';
   if (pc.source) {

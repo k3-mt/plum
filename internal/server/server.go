@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"mime"
 	"net"
 	"net/http"
 	"os"
@@ -26,6 +27,7 @@ import (
 	"github.com/k3-mt/plum/internal/interpret"
 	"github.com/k3-mt/plum/internal/lang"
 	"github.com/k3-mt/plum/internal/lang/dbt"
+	"github.com/k3-mt/plum/internal/met"
 	"github.com/k3-mt/plum/internal/synth"
 	"github.com/k3-mt/plum/internal/trace"
 )
@@ -40,11 +42,14 @@ type Server struct {
 	// Flow is the warehouse picture, when the session has one. A dbt build is a
 	// DAG, not a call stack, so it gets its own drawing rather than being bent
 	// into a path that invents returns nothing performed.
-	Flow       *dbt.Flow
-	Events     []trace.Event
-	Claims     []claims.Claim
-	Synthesis  string
-	Telemetry  *explore.Store
+	Flow      *dbt.Flow
+	Events    []trace.Event
+	Claims    []claims.Claim
+	Synthesis string
+	Telemetry *explore.Store
+	// Met is what the debt meter is measured against: which symbols this reader
+	// has seen, at which version. Absent for an export, which has no reader.
+	Met        *met.Set
 	Provider   synth.Provider
 	Ask        *ask.Store
 	Bridge     *ask.Tmux
@@ -57,12 +62,33 @@ type Server struct {
 	// TestFilter narrows the view to one test's path, and is remembered so a
 	// live reload does not silently widen it back to the whole recording.
 	TestFilter string
+	// sessions, when set, is what makes the window follow the repository rather
+	// than one recording: the watcher asks it for the newest session and rebinds.
+	sessions  Sessions
+	follow    bool
+	sessionID string
+	// resident keeps the server up after "I have met this code". `plum explore`
+	// is finished at that point; a window you left on a second screen is not.
+	resident   bool
+	window     bool
+	profileDir string
 	// mu guards the session state, which the watcher replaces underneath
 	// whatever request happens to be reading it.
-	mu   sync.RWMutex
-	hub  *liveHub
-	mux  *http.ServeMux
-	done chan struct{}
+	mu sync.RWMutex
+	// drifted memoises the working-tree comparison, which is far too expensive
+	// to redo on every request for the meter.
+	drifted driftCache
+	hub     *liveHub
+	mux     *http.ServeMux
+	done    chan struct{}
+}
+
+// Sessions is the part of the session store the window needs in order to follow
+// a repository over time. *store.Store already satisfies it, so following costs
+// no change to the store and no import of it here.
+type Sessions interface {
+	Latest() (string, error)
+	Dir(id string) string
 }
 
 // Config bundles what the server needs beyond the session data itself.
@@ -78,6 +104,20 @@ type Config struct {
 	Flow       *dbt.Flow
 	// Watch reloads the page when the session or the source changes on disk.
 	Watch bool
+	// Sessions and Follow make the window outlive any one recording: when the
+	// agent stops and a new session is captured, the window moves to it rather
+	// than continuing to show a session that is no longer what you are working on.
+	Sessions Sessions
+	Follow   bool
+	// Resident, Window and ProfileDir are what `plum watch` sets and `plum
+	// explore` does not: stay up, open a frame rather than a tab, and keep that
+	// frame's position in a profile of its own.
+	Resident   bool
+	Window     bool
+	ProfileDir string
+	// Met carries the debt across sessions. It belongs to the reader, not to any
+	// one recording, which is why it is passed in rather than read from a session.
+	Met *met.Set
 }
 
 func New(cfg *config.Config, b *bundle.Bundle, l trace.Landscape, ev []trace.Event, cs []claims.Claim, synthesis string, tel *explore.Store, opts Config) *Server {
@@ -86,10 +126,17 @@ func New(cfg *config.Config, b *bundle.Bundle, l trace.Landscape, ev []trace.Eve
 		Synthesis: synthesis, Telemetry: tel, Provider: opts.Provider,
 		Ask: opts.Ask, Bridge: opts.Bridge,
 		SessionDir: opts.SessionDir, Adapters: opts.Adapters, TestFilter: opts.TestFilter,
+		sessions: opts.Sessions, follow: opts.Follow && opts.Sessions != nil,
+		resident: opts.Resident, window: opts.Window, profileDir: opts.ProfileDir,
+		Met:        opts.Met,
 		hub:        newHub(),
 		JournalDir: opts.JournalDir, ClaimsPath: opts.ClaimsPath,
 		mux: http.NewServeMux(), done: make(chan struct{}),
 	}
+	// Go's table has no entry for .webmanifest, so the file server would send it
+	// as text/plain and the browser would decline to treat the page as
+	// installable — the one thing the manifest exists to make possible.
+	_ = mime.AddExtensionType(".webmanifest", "application/manifest+json")
 	sub, _ := fs.Sub(assets, "assets")
 	s.mux.Handle("/", http.FileServer(http.FS(sub)))
 	s.mux.HandleFunc("/api/landscape", s.handleLandscape)
@@ -100,10 +147,56 @@ func New(cfg *config.Config, b *bundle.Bundle, l trace.Landscape, ev []trace.Eve
 	s.mux.HandleFunc("/api/telemetry", s.handleTelemetry)
 	s.mux.HandleFunc("/api/done", s.handleDone)
 	s.mux.HandleFunc("/api/live", s.handleLive)
-	if opts.Watch && opts.SessionDir != "" {
+	s.mux.HandleFunc("/api/health", s.handleHealth)
+	s.mux.HandleFunc("/api/debt", s.handleDebt)
+	if b != nil {
+		s.sessionID = b.Session.ID
+	}
+	// A following window starts before there is anything to show: you run it
+	// once and leave it there, and the first session arrives later.
+	if opts.Watch && (opts.SessionDir != "" || s.follow) {
 		go s.watch(s.done)
 	}
 	return s
+}
+
+// handleHealth lets a second `plum watch` discover the first one instead of
+// racing it for the port. It names the repository because the port is derived
+// from that path, and a hash collision must not silently attach the window to
+// somebody else's repository.
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	writeJSON(w, map[string]string{
+		"plum":    "ok",
+		"repo":    s.Cfg.Root,
+		"session": s.sessionID,
+	})
+}
+
+// debt measures the reader against the session currently in view. The caller
+// holds at least a read lock.
+func (s *Server) debt() met.Debt {
+	if s.Met == nil {
+		return met.Debt{}
+	}
+	drawn := make([]bundle.SymbolID, 0, len(s.Landscape.Wells))
+	for _, w := range s.Landscape.Wells {
+		drawn = append(drawn, w.Symbol)
+	}
+	d := s.Met.Of(s.Bundle, drawn)
+	d.Drifted, d.Unmeasured = s.drift()
+	return d
+}
+
+// handleDebt is the meter on its own, without the landscape around it. A window
+// sitting on a second screen asks for this and nothing else, which keeps a
+// glance cheap: the landscape payload carries every changed symbol in the
+// session and can run to megabytes.
+func (s *Server) handleDebt(w http.ResponseWriter, r *http.Request) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	writeJSON(w, s.debt())
 }
 
 // Serve binds a localhost port and opens a browser. Cold start is a few
@@ -114,14 +207,22 @@ func (s *Server) Serve(ctx context.Context, addr string, open bool) error {
 		return err
 	}
 	url := "http://" + ln.Addr().String()
-	fmt.Println("plum explore →", url)
-	fmt.Println("no score, no gate, no timer. press ctrl-c when you are done,")
-	fmt.Println("or click \"I have met this code\" to unlock `plum quiz`.")
+	if s.resident {
+		fmt.Println("plum watch →", url)
+		fmt.Println("the window follows the newest session. leave it open; ctrl-c stops it.")
+	} else {
+		fmt.Println("plum explore →", url)
+		fmt.Println("no score, no gate, no timer. press ctrl-c when you are done,")
+		fmt.Println("or click \"I have met this code\" to unlock `plum quiz`.")
+	}
 
 	srv := &http.Server{Handler: s.mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() { _ = srv.Serve(ln) }()
 	if open {
-		openBrowser(url)
+		// A frame if one can be had, a tab if not. Never nothing.
+		if !s.window || !openWindow(url, s.profileDir) {
+			openBrowser(url)
+		}
 	}
 	select {
 	case <-ctx.Done():
@@ -152,6 +253,15 @@ type landscapePayload struct {
 	Symbols        []bundle.Symbol        `json:"symbols"`
 	Notes          []string               `json:"notes"`
 	Unannotated    []string               `json:"unannotated"`
+	// Debt is how far this reader's model has drifted from the changed set. It
+	// travels with the landscape so the meter is correct on the first paint
+	// rather than a beat later.
+	Debt met.Debt `json:"debt"`
+	// Resident says this page is a window someone left open rather than a tab
+	// they opened to read one recording. The page uses it to decide whether it
+	// is allowed to collapse to its meter: a narrow explore tab showing nothing
+	// but a number would simply be broken.
+	Resident bool `json:"resident"`
 }
 
 func (s *Server) handleLandscape(w http.ResponseWriter, r *http.Request) {
@@ -165,6 +275,7 @@ func (s *Server) handleLandscape(w http.ResponseWriter, r *http.Request) {
 		Session:        s.Bundle.Session, Landscape: s.Landscape, Flow: s.Flow, Gate: s.Bundle.Gate,
 		Synthesis: s.Synthesis, Claims: s.Claims, Symbols: s.Bundle.Symbols,
 		Notes: s.Landscape.Notes(), Unannotated: s.Landscape.UnannotatedExpensive(),
+		Debt: s.debt(), Resident: s.resident,
 	})
 }
 
@@ -374,8 +485,27 @@ func (s *Server) handleSymbol(w http.ResponseWriter, r *http.Request) {
 	s.mu.RLock()
 	pc := s.buildContext(id)
 	pc.Markdown = renderContext(pc)
+	fingerprint := s.fingerprint(id)
 	s.mu.RUnlock()
+	// Fetching a brief is the moment the code is actually in front of the
+	// reader, as opposed to being drawn as a shape with a name on it. That is
+	// what the debt is counting, so that is where it is paid down.
+	if s.Met != nil {
+		_ = s.Met.Meet(id, fingerprint)
+	}
 	writeJSON(w, pc)
+}
+
+// fingerprint is the bundle's version of a symbol, not the working tree's. The
+// debt is measured against the bundle, so meeting a symbol has to be recorded
+// against the same thing or the number never moves.
+func (s *Server) fingerprint(id bundle.SymbolID) string {
+	for _, sym := range s.Bundle.Symbols {
+		if sym.ID == id {
+			return sym.Fingerprint
+		}
+	}
+	return ""
 }
 
 type askRequest struct {
@@ -943,7 +1073,17 @@ func (s *Server) handleDone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = s.Telemetry.Append(explore.Event{SessionID: s.Bundle.Session.ID, Action: "done"})
+	// "I have met this code" is a claim the reader makes about themselves. plum
+	// takes it at face value and clears the debt; the quiz is where it is checked.
+	if s.Met != nil {
+		_ = s.Met.MeetAll(s.Bundle)
+	}
 	writeJSON(w, map[string]string{"status": "ok", "next": "plum quiz " + s.Bundle.Session.ID})
+	// Meeting the code ends an explore. It does not end a window that is there
+	// to show you the next session too.
+	if s.resident {
+		return
+	}
 	select {
 	case <-s.done:
 	default:

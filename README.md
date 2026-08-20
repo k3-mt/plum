@@ -63,6 +63,7 @@ plum report                     # mechanical evidence, read-first ordering
 plum synth                      # seams doc in a fresh context, claims.yaml
 plum trace                      # run the suite with the changed set instrumented
 plum explore                    # meet the code as a landscape — no score, no timer
+plum watch                      # or leave one window open and let it follow every session
 plum export                     # one HTML file, opens with nothing running
 plum quiz                       # only after exploring, graded on real traces
 plum claims verify              # executable claims, for CI
@@ -86,6 +87,7 @@ plum range HEAD~3..HEAD             # any commit range, after the fact
 | `plum trace` | `traces/`, `landscape.json` | Only the changed symbols are instrumented, in a scratch copy. Your repo is never written to. |
 | `plum landscape` | terminal round trip | Descent is entering a call, ascent is returning, a panic is a cliff. |
 | `plum explore` | localhost UI | Click a frame, see its real recorded arguments, ask a question grounded in them. |
+| `plum watch` | a window that stays | The same page with a longer life: a stable address, its own frame, a debt meter, and it follows each session as it lands. |
 | `plum context` | evidence on stdout | Deterministic given a commit range. Pipe it into any tool. |
 | `plum ask` | grounded answer | Context assembled from the bundle, routed to your agent session. A question the evidence cannot answer is itself a finding. |
 | `plum quiz` | terminal Q&A | Every question comes from a recorded invocation. Misses accumulate in your state dir. |
@@ -377,6 +379,125 @@ No dependency and no build step: a digest of the watched files' size and
 modification time on a short timer, pushed over server-sent events. The reader's
 selection and scroll position survive a reload, and a view narrowed with `-test`
 stays narrowed. `plum explore -no-watch` turns it off.
+
+### A window, rather than a tab
+
+`plum explore` opens one recording and is finished when you close it. `plum
+watch` is the same picture with a different lifetime — the one to leave on a
+second screen while an agent works:
+
+```sh
+plum watch          # start it once; it is still the right window tomorrow
+```
+
+Three things make that possible.
+
+It **follows the session**. It starts even when the repository has none yet, and
+when capture writes one — the Stop hook firing, a commit landing — the window
+moves to it. You never go and reopen it against the session you just made.
+
+It has a **stable address**, derived from the repository's path rather than from
+whatever port was free: `http://127.0.0.1:17…`, the same one next week. So a
+bookmark keeps working, and so does a docked editor pane pointed at it. A second
+`plum watch` in the same repository raises the window that is already running
+rather than starting a rival on another port — one window per repository, the way
+opening a project twice does in an editor. If something else has the port, it
+says so and takes a temporary one.
+
+It opens a **frame, not a tab**: a Chromium-based browser started with `--app=`,
+so there is no tab strip and no address bar, it gets its own entry in the dock,
+and — because it also gets a profile of its own — it remembers where you put it.
+No Electron and no dependency; it is a different `exec`. If no such browser is
+installed it falls back to a tab, and `-tab` asks for one deliberately.
+
+Clicking "I have met this code" still unlocks `plum quiz`, but no longer closes
+anything: meeting the code ends an explore, not a window you left open for the
+next session.
+
+It is also **installable**. The page ships a web app manifest, so Chrome offers
+to install it and it gets a real icon and a real dock entry rather than a
+borrowed favicon. An export carries neither — the manifest and its icons are
+stripped on the way out, because a file you open from `file://` has nothing to
+install and no server to fetch them from.
+
+### The number on it
+
+The window carries a debt meter, which is the number all of this exists to show:
+
+```
+14  ████████░░░░  unmet of 37 · 6 changed since you read it
+```
+
+**Unmet** is how many of the symbols this session changed you have not seen at
+the version they are in now. It is keyed on the same AST fingerprint that drives
+staleness, not on a boolean — having read `Get` last week says nothing about the
+`Get` that exists today, and that difference *is* the debt. A symbol you had read
+before and that has since changed under you is counted separately, because code
+that moved while you were not looking is a different problem from code that is
+simply new.
+
+It moves in both directions on its own terms. An agent working pushes it up.
+Opening a frame pulls it down by one — the brief fetch is the moment the code is
+actually in front of you, as opposed to being a shape on a picture with a name on
+it. "I have met this code" clears the changed set in one go: that is a claim you
+are making about yourself, taken at face value, and `plum quiz` is where it gets
+checked. Frames you have not met are drawn hollow, so the picture shows the same
+thing the number does.
+
+What you have met lives in the state dir next to the explore telemetry, never in
+git — it describes you against this codebase, and two people on one repository
+have different debts. An export has no reader and so shows no meter at all;
+zero would read as *you have met all of this*, which is a different claim and an
+untrue one.
+
+### It moves while the agent is still typing
+
+A bundle is a photograph. Between the agent writing a line and the Stop hook
+capturing it there is a window — often the most interesting minute of the whole
+session — in which a meter measured only against the capture would sit perfectly
+still.
+
+So the window also asks the files. For every file the capture named, the working
+tree is re-parsed and its symbols' fingerprints compared with the recorded ones.
+What has moved is code that exists and has never been captured, let alone read:
+
+```
+14  ████████░░░░  unmet of 37 · 6 changed since you read it · 3 being written now
+```
+
+This is the same comparison `plum stale` makes for claims, run over the changed
+set instead of over `claims.yaml`, and it inherits the same property: the
+fingerprint is over the normalised subtree, so **reformatting is not drift**. An
+agent running a formatter does not make the number twitch.
+
+It is reported beside the unmet count rather than added to it. One is measured
+against a recording and the other against the disk this second; a number that
+quietly mixed the two could not be checked against anything.
+
+The work is bounded and the bound is visible. A first capture in a repository can
+name every file in it, and re-parsing all of them on a watcher tick is a build
+rather than a meter — past the budget the window says *drift not measured* and
+why, because a silent zero would read as "nothing is being written", which is
+both wrong and reassuring. The comparison is memoised on the same size-and-mtime
+digest the watcher uses, so asking for the meter is cheap however often the page
+asks.
+
+### Two reading distances
+
+Dragged narrow, the window collapses to its meter: the number at the size you
+can read from across a room, and everything that is not the number out of the
+way. Opened out, it is the full page again. Width decides this, not focus — a
+window that blanked whenever you looked elsewhere would be unusable, and dragging
+an edge is a control everyone already knows how to work. Only `plum watch` does
+this; a narrow `plum explore` tab showing nothing but a number would simply be
+broken.
+
+Collapsing is also what makes leaving it open cheap. A window showing only its
+meter does not fetch a landscape it is not drawing — that payload carries every
+changed symbol in the session — so it asks for the few hundred bytes of the
+number instead. A window behind other windows draws nothing at all. Either way
+the page remembers that it owes itself a redraw, and pays it on the way back
+rather than sitting there showing something out of date.
 
 A click is not just navigation. Clicking a **frame** copies its whole assembled
 brief to the clipboard — source, recorded arguments and returns, neighbours with

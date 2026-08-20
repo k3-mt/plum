@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -19,6 +20,8 @@ import (
 	"github.com/k3-mt/plum/internal/explore"
 	"github.com/k3-mt/plum/internal/lang"
 	"github.com/k3-mt/plum/internal/lang/gopkg"
+	"github.com/k3-mt/plum/internal/met"
+	"github.com/k3-mt/plum/internal/store"
 	"github.com/k3-mt/plum/internal/trace"
 )
 
@@ -59,7 +62,7 @@ func testServer(t *testing.T) (*Server, *explore.Store) {
 		Session: bundle.Session{ID: "s1"},
 		Symbols: []bundle.Symbol{{
 			ID: "cache.go::Get", Name: "Get", Kind: "func", File: "cache.go",
-			LineStart: 3, LineEnd: 6, Doc: "Get returns the token.",
+			LineStart: 3, LineEnd: 6, Doc: "Get returns the token.", Fingerprint: "fp1",
 			Signature: "func Get(key string) string",
 			CallSites: []bundle.CallSite{{Callee: "cache.go::lookup", CalleeRaw: "lookup", Line: 4, Rationale: "the map is authoritative"}},
 		}},
@@ -78,6 +81,7 @@ func testServer(t *testing.T) (*Server, *explore.Store) {
 		Ask:        ask.NewStore(root),
 		JournalDir: ".plum/journal",
 		ClaimsPath: filepath.Join(root, "claims.yaml"),
+		Met:        met.Load(filepath.Join(root, "state")),
 	}), tel
 }
 
@@ -498,5 +502,361 @@ func TestOnlyCallsIntoTheRepositoryCountAsUnexplained(t *testing.T) {
 	brief := renderContext(pc)
 	if !strings.Contains(brief, "could not resolve to a declaration in the repository") {
 		t.Errorf("library calls should be listed but not blamed:\n%s", brief)
+	}
+}
+
+// The window outliving one recording is the whole difference between `plum
+// explore` and `plum watch`: the agent stops, capture writes a new session, and
+// what you are looking at has to become that session without you asking.
+func TestWatchFollowsTheNewestSession(t *testing.T) {
+	s, _ := testServer(t)
+	s.SessionDir = filepath.Join(s.Cfg.Root, "session")
+	if err := os.MkdirAll(s.SessionDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s.sessions = store.New(s.Cfg)
+	s.follow = true
+
+	stop := make(chan struct{})
+	defer close(stop)
+	client := s.hub.add()
+	defer s.hub.remove(client)
+	go s.watch(stop)
+
+	time.Sleep(2 * watchInterval)
+	writeSession(t, s.Cfg.SessionsDir(), "s2")
+
+	select {
+	case what := <-client:
+		if what != "session" {
+			t.Fatalf("event = %q, want session", what)
+		}
+	case <-time.After(10 * watchInterval):
+		t.Fatal("a newly captured session never reached the window")
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.sessionID != "s2" {
+		t.Errorf("sessionID = %q, want s2", s.sessionID)
+	}
+	if s.Bundle.Session.ID != "s2" {
+		t.Errorf("bundle session = %q — the window is still showing the previous recording", s.Bundle.Session.ID)
+	}
+	if s.SessionDir != filepath.Join(s.Cfg.SessionsDir(), "s2") {
+		t.Errorf("SessionDir = %q, want the new session's directory", s.SessionDir)
+	}
+}
+
+// Following must not carry a narrowed view across. The filter was derived from
+// one recording's traces; applied to the next it would draw a path nothing took.
+func TestFollowingDropsTheTestFilter(t *testing.T) {
+	s, _ := testServer(t)
+	s.sessions = store.New(s.Cfg)
+	s.follow = true
+	s.TestFilter = "TestGet"
+	writeSession(t, s.Cfg.SessionsDir(), "s2")
+
+	if !s.followLatest() {
+		t.Fatal("followLatest did not move to the new session")
+	}
+	if s.TestFilter != "" {
+		t.Errorf("TestFilter = %q — a filter must not survive a session change", s.TestFilter)
+	}
+}
+
+// A second `plum watch` finds the first one through this, and refuses to attach
+// unless the repository matches: the port is a hash of a path, and a collision
+// must not silently point the window at somebody else's codebase.
+func TestHealthNamesTheRepositoryAndSession(t *testing.T) {
+	s, _ := testServer(t)
+	rec := httptest.NewRecorder()
+	s.mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/health", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+	var health map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&health); err != nil {
+		t.Fatal(err)
+	}
+	if health["plum"] != "ok" || health["repo"] != s.Cfg.Root || health["session"] != "s1" {
+		t.Errorf("health = %v", health)
+	}
+}
+
+// "I have met this code" ends an explore. It must not end a window someone left
+// on a second screen — the next session is exactly what they are waiting for.
+func TestResidentWindowSurvivesBeingDone(t *testing.T) {
+	s, tel := testServer(t)
+	s.resident = true
+	rec := httptest.NewRecorder()
+	s.mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/done", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+	if !tel.IsDone("s1") {
+		t.Error("the session should still be marked met")
+	}
+	select {
+	case <-s.done:
+		t.Fatal("a resident window shut itself down when the session was marked met")
+	default:
+	}
+}
+
+func writeSession(t *testing.T, sessionsDir, id string) {
+	t.Helper()
+	dir := filepath.Join(sessionsDir, id)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	b := bundle.Bundle{Session: bundle.Session{ID: id, StartedAt: time.Now()}}
+	data, err := json.Marshal(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "bundle.json"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The agent writes the code and the Stop hook captures it moments later, so an
+// edit and a capture routinely land in the same tick. The capture must not
+// swallow the edit: the source pane would then be showing text the page has
+// never been told changed.
+func TestACaptureInTheSameTickDoesNotSwallowAnEdit(t *testing.T) {
+	s, _ := testServer(t)
+	s.SessionDir = filepath.Join(s.Cfg.Root, "session")
+	if err := os.MkdirAll(s.SessionDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	st := s.baseline()
+
+	// Both between one tick and the next, the way they actually arrive.
+	if err := os.WriteFile(filepath.Join(s.Cfg.Root, "cache.go"), []byte(source+"\n// edited\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(s.SessionDir, "bundle.json"), []byte(`{"session":{"id":"s1"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if sent := s.tick(st); len(sent) != 2 || sent[0] != "session" || sent[1] != "source" {
+		t.Fatalf("tick sent %v, want both session and source", sent)
+	}
+	// And having reported them, it must not report them again.
+	if sent := s.tick(st); len(sent) != 0 {
+		t.Errorf("a quiet tick sent %v", sent)
+	}
+}
+
+// Moving to another recording is not an edit to the one you were reading. The
+// file list changes wholesale, and calling that a source change would tell the
+// reader their code moved under them when they were simply shown other code.
+func TestFollowingANewSessionDoesNotReportItAsASourceEdit(t *testing.T) {
+	s, _ := testServer(t)
+	s.sessions = store.New(s.Cfg)
+	s.follow = true
+	st := s.baseline()
+	writeSession(t, s.Cfg.SessionsDir(), "s2")
+
+	if sent := s.tick(st); len(sent) != 1 || sent[0] != "session" {
+		t.Fatalf("tick sent %v, want session alone", sent)
+	}
+	if sent := s.tick(st); len(sent) != 0 {
+		t.Errorf("the tick after a session swap sent %v — the baseline was not reset", sent)
+	}
+}
+
+// The loop the window exists to close: an agent changes a symbol, the meter says
+// you have not met it, reading it pays that down. If a brief did not count, the
+// number could only ever be cleared wholesale and would stop meaning anything.
+func TestReadingABriefPaysDownTheDebt(t *testing.T) {
+	s, _ := testServer(t)
+
+	s.mu.RLock()
+	before := s.debt()
+	s.mu.RUnlock()
+	if before.Unmet != 1 || before.Total != 1 {
+		t.Fatalf("before reading: %+v, want the one changed symbol unmet", before)
+	}
+
+	rec := httptest.NewRecorder()
+	s.mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/symbol/cache.go::Get", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+
+	rec = httptest.NewRecorder()
+	s.mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/debt", nil))
+	var after met.Debt
+	if err := json.NewDecoder(rec.Body).Decode(&after); err != nil {
+		t.Fatal(err)
+	}
+	if after.Unmet != 0 {
+		t.Errorf("after reading the brief: %+v, want the debt paid", after)
+	}
+}
+
+func TestMeetingTheCodeClearsTheWholeChangedSet(t *testing.T) {
+	s, _ := testServer(t)
+	rec := httptest.NewRecorder()
+	s.mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/done", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if d := s.debt(); d.Unmet != 0 {
+		t.Errorf("%+v, want nothing outstanding", d)
+	}
+}
+
+// The landscape payload carries every changed symbol in the session and runs to
+// megabytes on a real capture. A window glancing at the meter must not pay that.
+func TestTheMeterCanBeAskedForOnItsOwn(t *testing.T) {
+	s, _ := testServer(t)
+	small := httptest.NewRecorder()
+	s.mux.ServeHTTP(small, httptest.NewRequest(http.MethodGet, "/api/debt", nil))
+	big := httptest.NewRecorder()
+	s.mux.ServeHTTP(big, httptest.NewRequest(http.MethodGet, "/api/landscape", nil))
+	if small.Body.Len() >= big.Body.Len() {
+		t.Errorf("debt %d bytes vs landscape %d — the cheap question is not cheap",
+			small.Body.Len(), big.Body.Len())
+	}
+}
+
+// An export has no reader and no server. It must not carry an install manifest
+// pointing at endpoints that do not exist, and it must not show a debt meter:
+// zero would read as "you have met all of this", which is a different claim.
+func TestExportCarriesNoInstallManifest(t *testing.T) {
+	s, _ := testServer(t)
+	out, err := s.Export()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, dead := range []string{"manifest.webmanifest", `href="/icon-192.png"`} {
+		if strings.Contains(string(out), dead) {
+			t.Errorf("the export still references %s", dead)
+		}
+	}
+}
+
+// Served as text/plain, a manifest is ignored and the page is not installable —
+// which is the whole of what it is for.
+func TestTheManifestIsServedAsAManifest(t *testing.T) {
+	s, _ := testServer(t)
+	rec := httptest.NewRecorder()
+	s.mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/manifest.webmanifest", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+	if ct := rec.Header().Get("content-type"); !strings.HasPrefix(ct, "application/manifest+json") {
+		t.Errorf("content-type = %q", ct)
+	}
+}
+
+// A bundle is a photograph. Between the agent writing a line and the Stop hook
+// capturing it there is a window — often the most interesting minute of the
+// session — in which a meter measured only against the capture sits perfectly
+// still. So the window also asks the files.
+func TestTheMeterSeesCodeWrittenSinceTheCapture(t *testing.T) {
+	s, _ := testServer(t)
+
+	// Pin the bundle to what is actually on disk, so the starting point is
+	// agreement rather than a fixture that never matched.
+	reg := lang.NewRegistry(gopkg.New())
+	src, err := os.ReadFile(filepath.Join(s.Cfg.Root, "cache.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	syms, err := reg.For("cache.go").ParseSymbols("cache.go", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pinned bool
+	for _, sym := range syms {
+		if sym.ID == "cache.go::Get" {
+			s.Bundle.Symbols[0].Fingerprint = sym.Fingerprint
+			pinned = true
+		}
+	}
+	if !pinned {
+		t.Fatal("the fixture no longer parses to a symbol this test can pin")
+	}
+
+	s.mu.RLock()
+	quiet := s.debt()
+	s.mu.RUnlock()
+	if quiet.Drifted != 0 {
+		t.Fatalf("with the tree matching the capture: %+v, want no drift", quiet)
+	}
+
+	// The agent edits the function body. Nothing has been captured; the meter
+	// must say so anyway.
+	edited := strings.Replace(string(src), `return key + "!"`, `return key + "?"`, 1)
+	if edited == string(src) {
+		t.Fatal("the fixture changed; this edit no longer alters the body")
+	}
+	if err := os.WriteFile(filepath.Join(s.Cfg.Root, "cache.go"), []byte(edited), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if d := s.debt(); d.Drifted != 1 {
+		t.Errorf("after an uncaptured edit: %+v, want 1 drifted", d)
+	}
+}
+
+// Reformatting is not a change. The fingerprint is over the normalised subtree,
+// so the meter must not twitch every time an agent runs a formatter.
+func TestReformattingIsNotDrift(t *testing.T) {
+	s, _ := testServer(t)
+	reg := lang.NewRegistry(gopkg.New())
+	src, err := os.ReadFile(filepath.Join(s.Cfg.Root, "cache.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	syms, err := reg.For("cache.go").ParseSymbols("cache.go", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sym := range syms {
+		if sym.ID == "cache.go::Get" {
+			s.Bundle.Symbols[0].Fingerprint = sym.Fingerprint
+		}
+	}
+	if err := os.WriteFile(filepath.Join(s.Cfg.Root, "cache.go"),
+		[]byte(strings.Replace(string(src), "\n\treturn key", "\n\n\treturn key", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if d := s.debt(); d.Drifted != 0 {
+		t.Errorf("%+v — a blank line is not a change to the code", d)
+	}
+}
+
+// A first capture names every file in the repository. Re-parsing all of them on
+// a watcher tick is a build, not a meter — and a silent zero there would read as
+// "nothing is being written", which is both wrong and reassuring.
+func TestDriftBeyondTheBudgetIsReportedUnmeasuredRatherThanZero(t *testing.T) {
+	s, _ := testServer(t)
+	s.Bundle.Symbols = nil
+	for i := 0; i < driftFileBudget+1; i++ {
+		s.Bundle.Symbols = append(s.Bundle.Symbols, bundle.Symbol{
+			ID:          bundle.SymbolID(fmt.Sprintf("f%d.go::X", i)),
+			File:        fmt.Sprintf("f%d.go", i),
+			Fingerprint: "fp",
+		})
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	d := s.debt()
+	if d.Unmeasured == "" {
+		t.Errorf("%+v — the cap must be reported, not applied silently", d)
+	}
+	if d.Drifted != 0 {
+		t.Errorf("drifted = %d, want no number offered at all", d.Drifted)
 	}
 }

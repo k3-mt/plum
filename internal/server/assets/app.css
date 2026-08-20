@@ -16,6 +16,47 @@ h1 { font-size: 1rem; margin: 0; font-weight: 600; letter-spacing: .04em; }
 h1 .sub { color: var(--dim); font-weight: 400; }
 h2 { font-size: .75rem; text-transform: uppercase; letter-spacing: .1em; color: var(--dim); margin: 0 0 .6rem; }
 .gate { flex: 1; color: var(--risk); font-size: .8rem; }
+
+/* The debt meter is read from across a room, not from reading distance: it is
+   the one thing on this page a window on a second screen exists to show. Hence
+   the size of the number relative to everything around it. */
+.debt { display: flex; align-items: baseline; gap: .5rem; }
+.debt .count { font-size: 1.5rem; font-weight: 600; color: var(--risk); line-height: 1; }
+.debt .meter {
+  display: inline-block; width: 90px; height: 6px; border-radius: 3px;
+  background: var(--context); overflow: hidden; align-self: center;
+}
+.debt .meter i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+.debt .what { font-size: .7rem; color: var(--dim); }
+.debt.clear .count { color: var(--accent); }
+
+/* Something is being written that no capture has seen yet. The meter says so by
+   moving, because a still number during the most active minute of a session is
+   the most misleading thing this page could show. */
+.debt.writing .meter i { background: var(--enter); animation: writing 1.6s ease-in-out infinite; }
+@keyframes writing { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) {
+  .debt.writing .meter i { animation: none; }
+}
+
+/* Two reading distances in one window. Opened out, this is a tool you lean into.
+   Dragged narrow and parked on a second screen, it is one number read from
+   across a room — so everything that is not that number gets out of the way,
+   and the number gets the space they were using. Width decides, not focus: a
+   window that blanked whenever you looked elsewhere would be unusable, and
+   dragging an edge is a control anyone already knows how to work. */
+body.peripheral > *:not(header) { display: none; }
+body.peripheral header {
+  flex-direction: column; align-items: stretch; gap: .6rem;
+  border-bottom: 0; padding: 1rem;
+}
+body.peripheral h1 { font-size: .7rem; }
+body.peripheral #done { display: none; }
+body.peripheral .gate { flex: none; font-size: .75rem; }
+body.peripheral .debt { flex-direction: column; align-items: stretch; gap: .6rem; }
+body.peripheral .debt .count { font-size: clamp(3rem, 22vw, 6rem); }
+body.peripheral .debt .meter { width: 100%; height: 10px; }
+body.peripheral .debt .what { font-size: .8rem; line-height: 1.4; }
 button {
   background: transparent; color: var(--fg); border: 1px solid var(--line);
   padding: .35rem .7rem; border-radius: 3px; cursor: pointer; font: inherit; font-size: .8rem;
