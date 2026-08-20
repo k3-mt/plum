@@ -21,51 +21,76 @@ function drawFlow() {
     return;
   }
 
-  // Layout: one column per layer, one row per node within it.
-  const COL = 250, ROW = 112, PADX = 24, PADY = 46, BOXW = 178;
+  // Layout is measured, not assumed. Every box is as tall as it has facts to
+  // state, so a fixed row height either crushes the tall ones together or
+  // wastes a screen on the short ones. Columns are packed by real heights and
+  // centred against each other, which also keeps the arrows short.
+  const BOXW = 232, GAPX = 168, GAPY = 40, PADX = 28, PADY = 52;
+  const COL = BOXW + GAPX;
   const byLayer = new Map();
   for (const n of nodes) {
     if (!byLayer.has(n.layer)) byLayer.set(n.layer, []);
     byLayer.get(n.layer).push(n);
   }
   const layers = [...byLayer.keys()].sort((a, b) => a - b);
-  const pos = new Map();
-  let rows = 0;
-  for (const L of layers) {
+
+  const stack = layers.map(L => {
     const col = byLayer.get(L);
-    rows = Math.max(rows, col.length);
-    col.forEach((n, i) => pos.set(n.symbol, {
-      x: PADX + layers.indexOf(L) * COL,
-      y: PADY + i * ROW,
-      h: boxHeight(n),
-      node: n,
-    }));
-  }
-  const width = PADX * 2 + layers.length * COL;
-  const height = PADY * 2 + rows * ROW;
+    let h = 0;
+    const heights = col.map(n => boxHeight(n));
+    heights.forEach(v => { h += v + GAPY; });
+    return { col, heights, total: h - GAPY };
+  });
+  const tallest = Math.max(...stack.map(s => s.total));
+
+  const pos = new Map();
+  stack.forEach((s, li) => {
+    let y = PADY + (tallest - s.total) / 2;   // centre each column against the tallest
+    s.col.forEach((n, i) => {
+      pos.set(n.symbol, { x: PADX + li * COL, y, h: s.heights[i], node: n });
+      y += s.heights[i] + GAPY;
+    });
+  });
+  const width = PADX * 2 + (layers.length - 1) * COL + BOXW;
+  const height = PADY * 2 + tallest;
   svg.setAttribute('width', width);
   svg.setAttribute('height', height);
   svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
 
   // Arrows first, so the tables sit on top of them.
+  // Several arrows can land on one table. Their labels are spread along the
+  // span rather than all sitting at the midpoint, where they would overlap into
+  // an unreadable pile.
+  const arriving = new Map();
+  for (const l of links) arriving.set(l.to, (arriving.get(l.to) || 0) + 1);
+  const placed = new Map();
+
   for (const l of links) {
     const a = pos.get(l.from), b = pos.get(l.to);
     if (!a || !b) continue;
-    const x1 = a.x + BOXW, y1 = a.y + 14;
-    const x2 = b.x, y2 = b.y + 14;
-    const mid = (x1 + x2) / 2;
+    const x1 = a.x + BOXW, y1 = a.y + a.h / 2;
+    const x2 = b.x, y2 = b.y + b.h / 2;
+    const k = placed.get(l.to) || 0;
+    placed.set(l.to, k + 1);
+    const spread = arriving.get(l.to) > 1 ? (k - (arriving.get(l.to) - 1) / 2) * 24 : 0;
+    const mid = (x1 + x2) / 2 + spread;
     const d = `M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}`;
     // A dependency dbt does not know about is drawn differently, because the
     // whole hazard is that it looks like part of the DAG and is not.
     const cls = !l.in_dag ? 'link-outside' : (l.relation === 'from' ? 'link-from' : 'link-join');
     svg.appendChild(el('path', { d, class: 'flowlink ' + cls, fill: 'none', 'marker-end': 'url(#arrow)' }));
 
+    // Labels sit in the gutter immediately left of the table they arrive at,
+    // not at the midpoint of the span. An arrow that crosses two layers has its
+    // midpoint inside another column, and a label there lands on top of an
+    // unrelated table.
     const label = linkLabel(l);
     if (label) {
-      const ly = (y1 + y2) / 2 - 5;
-      svg.appendChild(el('text', { x: mid, y: ly, 'text-anchor': 'middle', class: 'blabel' }, label));
+      const lx = x2 - 12;
+      const ly = y2 + (k - (arriving.get(l.to) - 1) / 2) * 28 - 4;
+      svg.appendChild(el('text', { x: lx, y: ly, 'text-anchor': 'end', class: 'blabel' }, label));
       if (l.rows) {
-        svg.appendChild(el('text', { x: mid, y: ly + 11, 'text-anchor': 'middle', class: 'rowlabel' },
+        svg.appendChild(el('text', { x: lx, y: ly + 12, 'text-anchor': 'end', class: 'rowlabel' },
           fmtRows(l.rows) + ' rows'));
       }
     }
@@ -83,13 +108,13 @@ function drawFlow() {
     if (failing) cls += ' fn-failing';
 
     g.appendChild(el('rect', { x: p.x, y: p.y, width: BOXW, height: p.h, rx: 4, class: 'fnbox ' + cls }));
-    g.appendChild(el('text', { x: p.x + 10, y: p.y + 18, class: 'wlabel' }, trunc(n.name, 24)));
+    g.appendChild(el('text', { x: p.x + 12, y: p.y + 21, class: 'fntitle' }, trunc(n.name, 27)));
 
-    let line = p.y + 32;
+    let line = p.y + 39;
     const put = (text, klass) => {
       if (!text) return;
-      g.appendChild(el('text', { x: p.x + 10, y: line, class: klass || 'blabel' }, trunc(text, 30)));
-      line += 12;
+      g.appendChild(el('text', { x: p.x + 12, y: line, class: klass || 'blabel' }, trunc(text, 36)));
+      line += LINE;
     };
     put(materialization(n), 'sp-svg-code');
     if (n.rows || n.bytes || n.nanos) {
@@ -115,8 +140,12 @@ function drawFlow() {
 
 // boxHeight sizes a table to what it has to say. Everything on a node is a fact
 // from the run or the statement, so nothing is dropped to make the boxes tidy.
+// LINE is the leading inside a table box, and boxHeight has to agree with it or
+// the text runs out through the bottom edge.
+const LINE = 14;
+
 function boxHeight(n) {
-  let lines = 1;
+  let lines = 0;
   if (n.rows || n.bytes || n.nanos) lines++;
   if (n.grain) lines++;
   if (n.unresolved) lines++;
@@ -124,7 +153,7 @@ function boxHeight(n) {
   if ((n.aggregates || []).length) lines++;
   lines += (n.tests || []).length;
   if ((n.risks || []).length) lines++;
-  return 26 + lines * 12;
+  return 30 + lines * LINE + 10; // title band, the lines themselves, bottom padding
 }
 
 function materialization(n) {
