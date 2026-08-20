@@ -24,6 +24,10 @@ const Module = require('module');
 const path = require('path');
 const { AsyncLocalStorage } = require('node:async_hooks');
 
+// Properties of the test runner that themselves register tests, and so need the
+// same labelling as the runner they hang off.
+const RUNNER_KEYS = new Set(['test', 'it', 'describe', 'suite', 'only', 'skip', 'todo']);
+
 const OUT = process.env.PLUM_TRACE_OUT;
 const MAX = parseInt(process.env.PLUM_TRACE_MAX || '200000', 10);
 const ROOT = process.env.PLUM_REPO_ROOT || process.cwd();
@@ -50,6 +54,47 @@ if (OUT && process.env.PLUM_TRACE === '1' && !globalThis.__PLUM__) {
   // interleave async tests — a shared variable would attribute frames to
   // whichever test happened to start last.
   const currentTest = new AsyncLocalStorage();
+
+  // LABELLED marks a function this shim has already wrapped. The module object
+  // is patched in place *and* intercepted on require, so without a marker a
+  // test body would be wrapped twice.
+  const LABELLED = Symbol.for('plum.labelled');
+  const labelCache = new WeakMap();
+
+  // labelRunner wraps a test-registering function so that everything executed
+  // inside the test body knows which test it is running under. It recurses into
+  // the .only / .skip / .todo variants, which register tests just the same.
+  function labelRunner(fn) {
+    if (fn[LABELLED]) return fn;
+    if (labelCache.has(fn)) return labelCache.get(fn);
+
+    const wrapped = function (name, ...rest) {
+      // The runner accepts (name, opts?, fn) and (fn); only the named forms
+      // can label anything, so the rest pass through untouched.
+      const at = rest.findIndex((a) => typeof a === 'function');
+      if (typeof name === 'string' && at >= 0) {
+        const body = rest[at];
+        rest[at] = function (...args) {
+          // Nested scopes override outward, so an `it` inside a `describe`
+          // labels its frames with the `it` name, which is the finer intention.
+          return currentTest.run(String(name), () => body.apply(this, args));
+        };
+      }
+      return fn.apply(this, [name, ...rest]);
+    };
+    labelCache.set(fn, wrapped);
+    Object.defineProperty(wrapped, LABELLED, { value: true });
+
+    for (const key of Object.getOwnPropertyNames(fn)) {
+      if (key === 'length' || key === 'name' || key === 'prototype') continue;
+      const d = Object.getOwnPropertyDescriptor(fn, key);
+      if (!d || d.get || d.set) continue; // leave accessors to the runner
+      wrapped[key] = (typeof d.value === 'function' && RUNNER_KEYS.has(key))
+        ? labelRunner(d.value)
+        : d.value;
+    }
+    return wrapped;
+  }
 
   const emit = (fields) => {
     if (written >= MAX) return;
@@ -205,23 +250,8 @@ if (OUT && process.env.PLUM_TRACE === '1' && !globalThis.__PLUM__) {
   // `import { test } from 'node:test'` alike.
   try {
     const runner = require('node:test');
-    const label = (fn, name) => function (...args) {
-      return currentTest.run(String(name), () => fn.apply(this, args));
-    };
-    for (const key of ['test', 'it']) {
-      const original = runner[key];
-      if (typeof original !== 'function') continue;
-      const wrapped = function (name, ...rest) {
-        // The runner accepts (name, opts?, fn) and (fn); only the named forms
-        // can label anything, so the rest pass through untouched.
-        const at = rest.findIndex((a) => typeof a === 'function');
-        if (typeof name === 'string' && at >= 0) {
-          rest[at] = label(rest[at], name);
-        }
-        return original.call(this, name, ...rest);
-      };
-      Object.assign(wrapped, original);
-      runner[key] = wrapped;
+    for (const key of ['test', 'it', 'describe', 'suite']) {
+      if (typeof runner[key] === 'function') runner[key] = labelRunner(runner[key]);
     }
   } catch (e) {
     if (process.env.PLUM_TRACE_DEBUG) {
@@ -246,6 +276,15 @@ if (OUT && process.env.PLUM_TRACE === '1' && !globalThis.__PLUM__) {
   const originalLoad = Module._load;
   Module._load = function (request, parent, isMain) {
     const exported = originalLoad.apply(this, arguments);
+    // `require('node:test')` returns a *function*, and the common form calls it
+    // directly — `const test = require('node:test'); test('name', fn)`. Patching
+    // the module's .test and .it properties therefore labelled nothing: the
+    // callable being invoked was the module itself. Every frame came back with
+    // no test attached, and `plum tests` reported "(no test)" for a suite that
+    // was plainly running.
+    if (request === 'node:test' && typeof exported === 'function') {
+      return labelRunner(exported);
+    }
     if (!exported || (typeof exported !== 'object' && typeof exported !== 'function')) return exported;
     let resolved;
     try {

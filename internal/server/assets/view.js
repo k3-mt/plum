@@ -26,6 +26,14 @@ function fitView(svg, width, height) {
   svg.removeAttribute('height');
   svg.setAttribute('preserveAspectRatio', 'xMinYMin meet');
   if (!same || !VIEW) VIEW = { x: 0, y: 0, w: width, h: height };
+  // A viewport taller than its drawing is a screen of nothing. Short drawings —
+  // a two-frame trace, a three-model DAG — get a viewport their own size; long
+  // ones get the cap, and pan from there.
+  const wrap = svg.parentElement;
+  if (wrap) {
+    const natural = height * Math.min(1, wrap.clientWidth / width || 1);
+    wrap.style.height = 'min(58vh, ' + Math.max(160, Math.ceil(natural) + 8) + 'px)';
+  }
   applyView(svg);
   attachPanZoom(svg);
 }

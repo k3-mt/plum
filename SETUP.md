@@ -15,6 +15,7 @@ depends on a judgement the document does not supply.
 Check these. Do not proceed past a failure.
 
 ```sh
+cd <the repository>               # every command below runs from the repo root
 git rev-parse --show-toplevel     # must succeed — plum reads git, it is not optional
 go version                        # only if installing from source; 1.23+
 ```
@@ -71,10 +72,18 @@ Expect:
 ```
 wrote .plum/config.toml
 wrote .plum/.gitignore
+
+next: plum run -- <your agent command>
 ```
 
-This writes two files and nothing else. It does not touch source, does not
-commit, and does not run anything.
+It creates `.plum/` containing those two files plus empty `journal/` and
+`sessions/` directories. It does not touch source, does not commit, and does not
+run anything.
+
+`config.toml` is longer than the two keys below — `[gating]`, `[conventions]`,
+`[synthesis]`, `[trace]`, `[auto]`, `[ask]`. **Every one has a working default.
+Change nothing there during setup.** They are tuning knobs for once the loop is
+running, and each is commented in place.
 
 ### Configure it for this repository
 
@@ -104,10 +113,21 @@ always analysed, whatever `languages` says, because a changed default is a
 behaviour change that no compiler and no test signature announces.
 
 How to determine `test_command`: use the command the repository already
-documents. Look in `Makefile`, `package.json` `scripts.test`, `justfile`,
-`CONTRIBUTING.md`, or CI workflow files. **Do not invent one.** If you cannot
-find it, ask the user — running the wrong command wastes their time and may
-have side effects.
+documents. **Do not invent one.** If you cannot find it, ask the user — running
+the wrong command wastes their time and may have side effects.
+
+Prefer the *invocation* a contributor would type over the raw script behind it:
+
+| Where you found it | Use |
+|---|---|
+| `package.json` → `scripts.test` | `npm test` — not the script's contents |
+| `Makefile` → a `test:` target | `make test` |
+| `pyproject.toml` / `tox.ini` | `pytest`, or the documented runner |
+| a CI workflow | the same line the workflow runs |
+
+The wrapper is the right answer because it is the one the repository maintains.
+A raw script often contains a shell glob (`src/**/*.test.js`) that behaves
+differently under a different shell.
 
 Then confirm it works before plum depends on it:
 
@@ -153,6 +173,26 @@ This writes `.claude/settings.json` and `.git/hooks/post-commit`. **Tell the
 user you modified these.** If `.claude/settings.json` already exists, plum
 merges into it rather than replacing it, but the user should still know.
 
+`.claude/settings.json` contains an **absolute path to the plum binary**, which
+is specific to this machine. Do not commit it without saying so — on somebody
+else's checkout that path will not exist. `.git/hooks/` is never committed by
+git at all, so each contributor who wants the hook runs `plum hooks install`
+themselves.
+
+To undo the whole step:
+
+```sh
+plum hooks uninstall
+```
+
+### The post-commit hook and manual boundaries
+
+Once the hook is installed, committing captures a session on its own. If you are
+also using `plum mark start` / `end`, expect two sessions when you commit inside
+a marked window — the marked one, and the post-commit one. That is not a fault;
+sessions tile by SHA. Use one mechanism or the other for a given change unless
+you want both.
+
 Capture is milliseconds, so it always runs. Tracing and synthesis are not, and
 running them after every prompt is how a tool stops being read. Nothing heavier
 runs unless the gate fires and `[auto] on_gate` names it:
@@ -193,13 +233,56 @@ plum trace         # runs the suite with the changed symbols instrumented
 plum explain       # what the run actually did, in plain language
 ```
 
+Then commit the session — this is the step that makes it reviewable:
+
+```sh
+git add .plum/sessions
+git commit -m "plum: session for <what changed>"
+```
+
+`traces/` inside the session is gitignored already; the bundle and landscape are
+small and are the artifact a reviewer reads.
+
 `plum trace` writes to a scratch copy. **It never writes to the repository.**
+
+**Order matters here, and getting it wrong is quiet.** `plum trace` instruments
+the symbol set recorded in the *session bundle*, which `plum mark end` fixed at
+that moment. If you edit code after `mark end` and then trace, you are tracing
+the new code against the old symbol table — renamed or newly nested functions
+will not match, and they will be drawn as unchanged surrounding code rather than
+as your change. Nothing errors.
+
+If you have edited since closing the session, capture again before tracing:
+
+```sh
+plum range HEAD~1..HEAD     # or: plum mark start; plum mark end
+plum trace
+```
 
 Verify the evidence is real, not empty:
 
 ```sh
-plum tests         # must list tests, each with the frames it reached
+plum tests         # must list tests by name, each with the frames it reached
 ```
+
+Three outcomes, and only one is success:
+
+- **Named tests, each with frames.** Good — carry on.
+- **`no events: the changed symbols were never called by the test command`.**
+  Nothing in the suite exercises the change. That is a finding, not a failure.
+  Report it to the user in those terms.
+- **Everything under `(no test)`.** The run was recorded but the test runner is
+  not one plum can label, so "which test reaches this change" cannot be
+  answered. The landscape is still valid. Report this too — the evidence is
+  thinner than it looks.
+
+Then check that `plum explain` names a symbol `plum report` said you changed:
+
+```sh
+plum explain -brief
+```
+
+If it narrates a function you did not touch, say so rather than passing it on.
 
 **If `plum trace` says "no events: the changed symbols were never called":**
 that is a finding, not a failure. Nothing in the suite exercises the change.
@@ -216,6 +299,12 @@ plum export -o plum-review.html
 One file, opens with nothing running, safe to attach to a pull request or send
 to somebody who does not have plum installed.
 
+Written to the working tree, it will show as untracked. It is a rendering of the
+session, not a source of truth — attach it and delete it, or write it outside
+the repository (`plum export -o /tmp/review.html`). With no `-o` it goes inside
+the session directory, which is gitignored for traces but not for this. Do not
+commit it without asking.
+
 For an interactive read:
 
 ```sh
@@ -229,6 +318,22 @@ returns, neighbours, risks, rationale — which is designed to be pasted straigh
 into an agent.
 
 ---
+
+## If you are asked to wire it into CI
+
+```sh
+plum claims verify        # exit 1 on a failing claim
+plum stale                # exit 1 when a claim no longer addresses its code
+```
+
+Two behaviours to know before you rely on the exit code:
+
+- `plum claims verify` exits **1 when the session has no claims at all**, saying
+  `no claims for <session> — run plum synth first`. That is deliberate: a CI step
+  that passes because nothing was checked is worse than one that fails. So
+  `plum synth` has to have run for the session under test.
+- A claim printed as `SKIP` — no test body was written for it — **does not**
+  fail the run. Only a claim that ran and did not hold does.
 
 ## Warehouses (dbt)
 
@@ -263,6 +368,9 @@ costs money.
 - **Editing shell profiles** to add a directory to `PATH`. Do it if they agree,
   but say what you changed.
 - **`[auto] on_gate`** beyond the default. It makes every gated session slower.
+- **Committing `.claude/settings.json`**, which holds a machine-specific path.
+- **Which form of the test command** to use, if the repository documents more
+  than one and they are not equivalent.
 
 ## What you must report, even when nothing broke
 
@@ -270,11 +378,17 @@ costs money.
   `.git/hooks/post-commit`.
 - A suite that fails on a clean tree.
 - A trace that recorded no events.
+- A trace you ran against a session captured before the code was edited.
+- A `plum tests` listing where everything is `(no test)` — the run is recorded
+  but nothing is attributed, so test-level questions cannot be answered.
+- A `plum explain` that names symbols other than the ones `plum report` said
+  changed.
+- Any artifact you left untracked in the working tree.
 - Anything you had to guess.
 
 ---
 
-## Commands, in one place
+## The commands this runbook uses
 
 | Command | What it does |
 |---|---|
@@ -295,5 +409,17 @@ costs money.
 | `plum claims verify` | exit 1 on a failing claim — for CI |
 | `plum quiz` | interrogate yourself, graded against recorded execution |
 
+`plum` on its own lists every command, including ones this runbook does not
+use: `ls`, `show`, `context`, `ask`, `interpret`, `landscape`, `hooks
+uninstall`.
+
 Every command takes an optional session reference — an id, a commit, or nothing
-for the most recent. Flags may be written before or after it.
+for the most recent, which is what this runbook relies on throughout:
+
+```sh
+plum report                    # the latest session
+plum report 2026-08-20-daa7    # a named one
+plum report HEAD~2             # whichever session covers that commit
+```
+
+Flags may be written before or after it.

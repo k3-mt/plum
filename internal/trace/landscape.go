@@ -122,7 +122,7 @@ func DeriveChainN(events []Event, b *bundle.Bundle, pick Chain, maxFrames int) L
 }
 
 func deriveChain(events []Event, b *bundle.Bundle, pick Chain) Landscape {
-	chain, chains := representativeChain(events, pick)
+	chain, chains := representativeChain(events, pick, b.Has)
 	l := Landscape{SessionID: b.Session.ID, Chains: chains, Closed: true, Chain: string(pick)}
 	if len(chain) == 0 {
 		return l
@@ -390,12 +390,17 @@ func add(m map[bundle.SymbolID]map[bundle.SymbolID]bool, k, v bundle.SymbolID) {
 
 // representativeChain picks one invocation tree to render: the hottest path, or
 // the slowest when several are equally hot (spec §14.3 — this is the knob).
-func representativeChain(events []Event, pick Chain) ([]Event, int) {
+func representativeChain(events []Event, pick Chain, changed func(bundle.SymbolID) bool) ([]Event, int) {
 	SortByTime(events)
 	type chain struct {
 		events []Event
 		span   int64
 		frames int
+		// touches says the chain passes through something this session changed.
+		// It outranks every policy below, because a picture of the surrounding
+		// code with the change absent is not a smaller answer to the question,
+		// it is an answer to a different one.
+		touches bool
 	}
 	var chains []chain
 	var cur *chain
@@ -414,6 +419,9 @@ func representativeChain(events []Event, pick Chain) ([]Event, int) {
 		case "call":
 			depth++
 			cur.frames++
+			if changed != nil && changed(ev.Symbol) {
+				cur.touches = true
+			}
 		case "return", "raise":
 			// Each frame's probe reports its own exit, including on the way out of
 			// a panic, so a raise closes exactly one frame here. Coalescing the run
@@ -434,6 +442,18 @@ func representativeChain(events []Event, pick Chain) ([]Event, int) {
 	best := 0
 	for i, c := range chains {
 		bc := chains[best]
+		// Whether the chain contains the change is decided first. Chains are cut
+		// wherever the stack returns to zero, so when only a few symbols are
+		// instrumented every chain is one frame deep and every policy below ties
+		// — leaving the winner to be whichever ran first, which is how a session
+		// that changed one function came to be narrated entirely in terms of a
+		// function it did not touch.
+		if c.touches != bc.touches {
+			if c.touches {
+				best = i
+			}
+			continue
+		}
 		switch pick {
 		case ChainSlowest:
 			if c.span > bc.span {

@@ -484,3 +484,70 @@ func TestJoinsAreBoundedAndTheRemainderIsReported(t *testing.T) {
 		t.Errorf("JoinsMore = %d, want 5 — the count is the honest part", w.JoinsMore)
 	}
 }
+
+// Chains are cut wherever the stack returns to zero, so when only a few symbols
+// are instrumented every chain is one frame deep and every ranking policy ties.
+// The winner was then whichever ran first — which is how a session that changed
+// one function came to be narrated entirely in terms of a function it did not
+// touch.
+func TestTheDrawnChainContainsTheChange(t *testing.T) {
+	b := testBundle()
+	// Only lookup is this session's work; the others are surrounding code.
+	b.Symbols = []bundle.Symbol{{ID: "a.go::lookup", Name: "lookup"}}
+
+	ev := []Event{
+		// Two unchanged one-frame chains run first.
+		call("a.go::check", "1", "", 0, 0),
+		ret("a.go::check", "1", 0, 100, "true"),
+		call("a.go::MustGet", "2", "", 0, 200),
+		ret("a.go::MustGet", "2", 0, 300, "tok"),
+		// The change runs last, and is equally shallow.
+		call("a.go::lookup", "3", "", 0, 400),
+		ret("a.go::lookup", "3", 0, 500, "tok"),
+	}
+	l := DeriveChain(ev, b, ChainHottest)
+	if len(l.Wells) == 0 {
+		t.Fatal("no wells")
+	}
+	if l.Wells[0].Symbol != "a.go::lookup" {
+		t.Errorf("drew %s; a picture of the surrounding code with the change "+
+			"absent answers a different question", l.Wells[0].Symbol)
+	}
+	if l.Wells[0].Context {
+		t.Error("the drawn frame is marked as surrounding code")
+	}
+}
+
+// Preferring the change must not override a policy among chains that all
+// contain it: asking for the slowest still gets the slowest.
+func TestTheChangePreferenceDoesNotOverrideThePolicy(t *testing.T) {
+	b := testBundle()
+	b.Symbols = []bundle.Symbol{
+		{ID: "a.go::lookup", Name: "lookup"},
+		{ID: "a.go::check", Name: "check"},
+	}
+	ev := []Event{
+		call("a.go::lookup", "1", "", 0, 0),
+		ret("a.go::lookup", "1", 0, 10, "fast"),
+		call("a.go::check", "2", "", 0, 20),
+		ret("a.go::check", "2", 0, 9000, "slow"),
+	}
+	if got := DeriveChain(ev, b, ChainSlowest).Wells[0].Symbol; got != "a.go::check" {
+		t.Errorf("slowest chain = %s, want the slow one", got)
+	}
+}
+
+// And when nothing recorded touches the change, there is still a picture to
+// draw — falling back rather than showing nothing.
+func TestNoChangedSymbolRecordedStillDrawsSomething(t *testing.T) {
+	b := testBundle()
+	b.Symbols = []bundle.Symbol{{ID: "a.go::never_called", Name: "never_called"}}
+	ev := []Event{
+		call("a.go::check", "1", "", 0, 0),
+		ret("a.go::check", "1", 0, 100, "true"),
+	}
+	l := DeriveChain(ev, b, ChainHottest)
+	if len(l.Wells) == 0 || l.Wells[0].Symbol != "a.go::check" {
+		t.Errorf("wells = %+v, want the recorded chain rather than nothing", l.Wells)
+	}
+}

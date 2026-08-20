@@ -271,7 +271,23 @@ func cmdTests(ctx context.Context, env *Env, args []string) error {
 		}
 	}
 	fmt.Println()
-	fmt.Printf("explore one of them: plum explore -test %q\n", runs[0].Name)
+	// "(no test)" is a placeholder for frames the runner never attributed, not a
+	// test you can ask for — offering it as a command produced an invitation the
+	// very next command rejected. Say what happened instead.
+	named := ""
+	for _, r := range runs {
+		if r.Name != trace.NoTestLabel {
+			named = r.Name
+			break
+		}
+	}
+	if named != "" {
+		fmt.Printf("explore one of them: plum explore -test %q\n", named)
+	} else {
+		fmt.Println("no frame was attributed to a test: the runner in use is not one")
+		fmt.Println("plum can label. The recording is still evidence — `plum landscape`")
+		fmt.Println("draws it — but \"which test reaches this change\" cannot be answered.")
+	}
 	return nil
 }
 

@@ -24,6 +24,10 @@ type TestRun struct {
 
 // Tests summarises the recording, one entry per test, ordered by name so a
 // re-run lists them the same way.
+// NoTestLabel stands for frames the runner never attributed to a test. It is a
+// placeholder, not a name: nothing can be looked up by it.
+const NoTestLabel = "(no test)"
+
 func Tests(events []Event) []TestRun {
 	byName := map[string]*TestRun{}
 	seen := map[string]map[bundle.SymbolID]bool{}
@@ -31,7 +35,7 @@ func Tests(events []Event) []TestRun {
 	for _, e := range events {
 		name := e.TestID
 		if name == "" {
-			name = "(no test)"
+			name = NoTestLabel
 		}
 		run, ok := byName[name]
 		if !ok {

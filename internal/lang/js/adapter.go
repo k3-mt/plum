@@ -28,7 +28,12 @@ type Adapter struct{}
 
 func New() *Adapter { return &Adapter{} }
 
-func (a *Adapter) Name() string { return "typescript" }
+// One adapter covers both languages — the scanner is structural, and TypeScript
+// is JavaScript with annotations it steps over. Naming it for either one made
+// `plum trace` report "(typescript)" to a repository whose config said
+// javascript and which had no tsconfig.json, with no way to tell whether the
+// language had been detected wrongly.
+func (a *Adapter) Name() string { return "js/ts" }
 
 func (a *Adapter) Extensions() []string {
 	return []string{".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}
