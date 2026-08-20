@@ -31,6 +31,11 @@ git clone https://github.com/k3-mt/plum && cd plum && make install
 Binaries for macOS, Linux and Windows on amd64 and arm64 are attached to every
 [release](https://github.com/k3-mt/plum/releases).
 
+**Setting it up in a repository?** [`SETUP.md`](SETUP.md) is a runbook written to
+be handed to an agent — *"read SETUP.md and set plum up in this repository"* —
+with the commands, the expected output, what to do when it differs, and where it
+must stop and ask you rather than decide.
+
 **No third-party dependencies.** One static binary, `CGO_ENABLED=0`, Go 1.23+
 and `git` on PATH. That is deliberate: a tool that reads your repository should
 not bring a supply chain with it. `go.mod` has no `require` block, and `make

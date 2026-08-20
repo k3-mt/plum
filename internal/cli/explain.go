@@ -22,7 +22,7 @@ func cmdExplain(ctx context.Context, env *Env, args []string) error {
 	fs := flag.NewFlagSet("explain", flag.ContinueOnError)
 	testName := fs.String("test", "", "explain the path of one named test")
 	brief := fs.Bool("brief", false, "the one-paragraph summary only")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return err
 	}
 	id, err := env.Store.ResolveRef(ctx, env.Repo, first(fs.Args()))

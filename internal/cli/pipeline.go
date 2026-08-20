@@ -30,7 +30,7 @@ func cmdSynth(ctx context.Context, env *Env, args []string) error {
 	fs := flag.NewFlagSet("synth", flag.ContinueOnError)
 	provider := fs.String("provider", "", "override synthesis.provider (anthropic|offline)")
 	print := fs.Bool("print", false, "write to stdout instead of the session dir")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return err
 	}
 	id, err := env.Store.ResolveRef(ctx, env.Repo, first(fs.Args()))
@@ -137,7 +137,7 @@ func cmdTrace(ctx context.Context, env *Env, args []string) error {
 	keep := fs.Bool("keep", false, "keep the instrumented scratch copy for inspection")
 	chain := fs.String("chain", "hottest", "representative chain: hottest|slowest|raising")
 	frames := fs.Int("frames", trace.DefaultMaxFrames, "how many frames to render (0 = all)")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return err
 	}
 	id, err := env.Store.ResolveRef(ctx, env.Repo, first(fs.Args()))
@@ -241,7 +241,7 @@ func printTests(runs []trace.TestRun) {
 func cmdTests(ctx context.Context, env *Env, args []string) error {
 	fs := flag.NewFlagSet("tests", flag.ContinueOnError)
 	verbose := fs.Bool("v", false, "list the symbols each test reached")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return err
 	}
 	id, err := env.Store.ResolveRef(ctx, env.Repo, first(fs.Args()))
@@ -352,7 +352,7 @@ func cmdLandscape(ctx context.Context, env *Env, args []string) error {
 	chain := fs.String("chain", "", "re-derive from stored events: hottest|slowest|raising")
 	testName := fs.String("test", "", "draw the path of one named test")
 	frames := fs.Int("frames", trace.DefaultMaxFrames, "how many frames to render (0 = all)")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return err
 	}
 	id, err := env.Store.ResolveRef(ctx, env.Repo, first(fs.Args()))
@@ -544,7 +544,7 @@ func cmdExplore(ctx context.Context, env *Env, args []string) error {
 	noOpen := fs.Bool("no-open", false, "do not open a browser")
 	testName := fs.String("test", "", "serve the path of one named test")
 	noWatch := fs.Bool("no-watch", false, "do not reload when the session or the source changes")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return err
 	}
 	id, err := env.Store.ResolveRef(ctx, env.Repo, first(fs.Args()))
@@ -624,7 +624,7 @@ func cmdQuiz(ctx context.Context, env *Env, args []string) error {
 	fs := flag.NewFlagSet("quiz", flag.ContinueOnError)
 	n := fs.Int("n", 6, "maximum questions")
 	force := fs.Bool("force", false, "skip the explore-first requirement")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return err
 	}
 	id, err := env.Store.ResolveRef(ctx, env.Repo, first(fs.Args()))

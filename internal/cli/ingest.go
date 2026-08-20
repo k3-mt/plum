@@ -24,7 +24,7 @@ func cmdIngest(ctx context.Context, env *Env, args []string) error {
 	target := fs.String("target", "target", "the dbt target directory holding manifest.json and run_results.json")
 	chain := fs.String("chain", "hottest", "which lineage to draw: hottest|slowest|raising")
 	from := fs.String("from", "", "draw the blast radius of one model: what selects it, and what that costs")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return err
 	}
 	id, err := env.Store.ResolveRef(ctx, env.Repo, first(fs.Args()))

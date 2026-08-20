@@ -23,7 +23,7 @@ func cmdAsk(ctx context.Context, env *Env, args []string) error {
 	wait := fs.Bool("wait", true, "wait for the answer to land")
 	keepAs := fs.String("keep", "", "keep the answer: journal, claim, comment (comma-separated)")
 	pending := fs.Bool("pending", false, "list questions still waiting for an answer")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return err
 	}
 	st := ask.NewStore(env.Cfg.Root)

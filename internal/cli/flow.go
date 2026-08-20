@@ -14,7 +14,7 @@ import (
 // cmdFlow prints the dataflow picture for a warehouse session.
 func cmdFlow(ctx context.Context, env *Env, args []string) error {
 	fs := flag.NewFlagSet("flow", flag.ContinueOnError)
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return err
 	}
 	id, err := env.Store.ResolveRef(ctx, env.Repo, first(fs.Args()))

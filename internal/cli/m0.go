@@ -56,7 +56,7 @@ func cmdInit(ctx context.Context, env *Env, args []string) error {
 func cmdRun(ctx context.Context, env *Env, args []string) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	quiet := fs.Bool("quiet", false, "emit the bundle but not the report")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return err
 	}
 	argv := fs.Args()
@@ -142,7 +142,7 @@ func cmdMark(ctx context.Context, env *Env, args []string) error {
 func cmdRange(ctx context.Context, env *Env, args []string) error {
 	fs := flag.NewFlagSet("range", flag.ContinueOnError)
 	agent := fs.String("agent", "unknown", "which tool produced the change")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return err
 	}
 	spec := first(fs.Args())
@@ -192,7 +192,7 @@ func cmdNote(ctx context.Context, env *Env, args []string) error {
 	tool := fs.String("tool", "human", "what produced the change")
 	var alts multiFlag
 	fs.Var(&alts, "rejected", "an alternative that was considered and rejected (repeatable)")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return err
 	}
 	rationale := strings.TrimSpace(strings.Join(fs.Args(), " "))
@@ -213,7 +213,7 @@ func cmdNote(ctx context.Context, env *Env, args []string) error {
 func cmdReport(ctx context.Context, env *Env, args []string) error {
 	fs := flag.NewFlagSet("report", flag.ContinueOnError)
 	verbose := fs.Bool("v", false, "include signatures")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return err
 	}
 	id, err := env.Store.ResolveRef(ctx, env.Repo, first(fs.Args()))
@@ -257,7 +257,7 @@ func renderReport(env *Env, b *bundle.Bundle, verbose bool) (string, error) {
 func cmdLs(ctx context.Context, env *Env, args []string) error {
 	fs := flag.NewFlagSet("ls", flag.ContinueOnError)
 	latest := fs.Bool("latest", false, "print only the most recent session id")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return err
 	}
 	ids, err := env.Store.List()

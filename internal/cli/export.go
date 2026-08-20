@@ -26,7 +26,7 @@ func cmdExport(ctx context.Context, env *Env, args []string) error {
 	fs := flag.NewFlagSet("export", flag.ContinueOnError)
 	out := fs.String("o", "", "file to write (default plum-<session>.html beside the session)")
 	testName := fs.String("test", "", "export the path of one named test")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return err
 	}
 	id, err := env.Store.ResolveRef(ctx, env.Repo, first(fs.Args()))

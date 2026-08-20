@@ -28,7 +28,7 @@ func cmdInterpret(ctx context.Context, env *Env, args []string) error {
 	show := fs.Bool("show", false, "print the stored reading without asking for a new one")
 	refresh := fs.Bool("refresh", false, "ask again even if a reading is stored")
 	route := fs.String("route", "", "override the route: tmux | api | print")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return err
 	}
 	id, err := env.Store.ResolveRef(ctx, env.Repo, first(fs.Args()))

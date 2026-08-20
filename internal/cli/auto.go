@@ -59,7 +59,7 @@ func cmdAuto(ctx context.Context, env *Env, args []string) error {
 	quiet := fs.Bool("quiet", false, "print nothing on success")
 	asJSON := fs.Bool("json", false, "emit a Claude Code hook response on stdout")
 	force := fs.Bool("force", false, "capture even if nothing changed since the last one")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return nil // a hook must not fail on a bad flag
 	}
 	// Hooks are fed JSON on stdin and nothing here needs it. It is deliberately

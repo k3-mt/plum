@@ -34,7 +34,7 @@ func cmdHooks(ctx context.Context, env *Env, args []string) error {
 	fs := flag.NewFlagSet("hooks", flag.ContinueOnError)
 	claudeOnly := fs.Bool("claude", false, "only the Claude Code Stop hook")
 	gitOnly := fs.Bool("git", false, "only the git post-commit hook")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return err
 	}
 	both := !*claudeOnly && !*gitOnly

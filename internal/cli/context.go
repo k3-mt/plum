@@ -30,7 +30,7 @@ func cmdContext(ctx context.Context, env *Env, args []string) error {
 	session := fs.String("session", "", "session id (default: latest)")
 	asJSON := fs.Bool("json", false, "emit JSON instead of markdown")
 	withDiff := fs.Bool("diff", false, "include the diff (session brief only)")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return err
 	}
 	id, err := env.Store.ResolveRef(ctx, env.Repo, *session)
