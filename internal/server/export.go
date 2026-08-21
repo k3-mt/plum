@@ -100,7 +100,7 @@ func (s *Server) Export() ([]byte, error) {
 		html = strings.Replace(html, tag+"\n", "", 1)
 	}
 
-	for _, name := range []string{"view.js", "flow.js", "landscape.js"} {
+	for _, name := range []string{"code.js", "view.js", "flow.js", "landscape.js"} {
 		src, err := fs.ReadFile(assets, "assets/"+name)
 		if err != nil {
 			return nil, err

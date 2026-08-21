@@ -20,6 +20,7 @@ import (
 	"github.com/k3-mt/plum/internal/explore"
 	"github.com/k3-mt/plum/internal/lang/dbt"
 	"github.com/k3-mt/plum/internal/met"
+	"github.com/k3-mt/plum/internal/probe"
 	"github.com/k3-mt/plum/internal/server"
 	"github.com/k3-mt/plum/internal/store"
 	"github.com/k3-mt/plum/internal/trace"
@@ -50,7 +51,7 @@ func cmdWatch(ctx context.Context, env *Env, args []string) error {
 	// that is already running, the way opening a project twice does in an editor,
 	// rather than starting a rival server on a random port and leaving two views
 	// disagreeing about which session is current.
-	if running, id := probe(ctx, bind, env.Cfg.Root); running {
+	if running, id := alreadyRunning(ctx, bind, env.Cfg.Root); running {
 		fmt.Println("plum watch is already running for this repository →", "http://"+bind)
 		if id != "" {
 			fmt.Println("showing session", id)
@@ -61,7 +62,20 @@ func cmdWatch(ctx context.Context, env *Env, args []string) error {
 		return nil
 	}
 
-	b, l, events, cs, synthesis, id := latestSession(ctx, env, fs.Args())
+	// A handle turns this from a window on a session into a window on one test.
+	// It is checked first because that is what somebody is pasting in: a session
+	// reference is what you fall back to when they gave you nothing.
+	var watched *probe.Probe
+	rest := fs.Args()
+	if len(rest) > 0 {
+		if p, err := probe.Load(env.Cfg.Root, rest[0]); err == nil {
+			watched, rest = p, rest[1:]
+		} else if strings.HasPrefix(rest[0], "plum:") {
+			return err // they meant a probe; do not silently look for a session
+		}
+	}
+
+	b, l, events, cs, synthesis, id := latestSession(ctx, env, rest)
 	opts := server.Config{
 		JournalDir: env.Cfg.Repo.JournalDir,
 		Adapters:   env.Reg,
@@ -72,6 +86,13 @@ func cmdWatch(ctx context.Context, env *Env, args []string) error {
 		Window:     !*tab,
 		ProfileDir: profile,
 		Met:        met.Load(store.StateDir(env.Cfg.Root)),
+	}
+	if watched != nil {
+		opts.Probe = watched
+		opts.RunProbe = probeRunner(env, b, id)
+		// Following would swap the session under a probe mid-run, and the probe
+		// is the thing being watched. It stays pinned to what it was opened on.
+		opts.Follow = false
 	}
 	if id != "" {
 		opts.SessionDir = env.Store.Dir(id)
@@ -87,6 +108,13 @@ func cmdWatch(ctx context.Context, env *Env, args []string) error {
 
 	tel := explore.NewStore(store.StateDir(env.Cfg.Root))
 	s := server.New(env.Cfg, b, l, events, cs, synthesis, tel, opts)
+	if watched != nil {
+		fmt.Printf("watching %s · %s\n", watched.Handle(), watched.Test)
+		fmt.Println("        ", watched.Command)
+		// Run before the page asks, so the window opens onto a result rather
+		// than onto a button.
+		go s.Run(ctx, "window opened")
+	}
 
 	err := s.Serve(ctx, bind, !*noOpen)
 	// The stable port is a convenience, not a requirement. Something else
@@ -134,10 +162,10 @@ func stablePort(root string) int {
 	return 17000 + int(binary.BigEndian.Uint16(sum[:2])%1000)
 }
 
-// probe asks whoever holds the port whether they are plum, and plum for this
+// alreadyRunning asks whoever holds the port whether they are plum, and plum for this
 // repository. The port is a hash of a path, and a collision must not quietly
 // attach this window to a different codebase.
-func probe(ctx context.Context, addr, root string) (bool, string) {
+func alreadyRunning(ctx context.Context, addr, root string) (bool, string) {
 	req, err := http.NewRequestWithContext(ctx, "GET", "http://"+addr+"/api/health", nil)
 	if err != nil {
 		return false, ""

@@ -1,0 +1,46 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>plum · probe</title>
+<link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/probe.css">
+<link rel="icon" href="/icon-192.png">
+<meta name="theme-color" content="#0f1113">
+
+<header>
+  <h1>plum <span class="sub" id="test">…</span></h1>
+  <div id="verdict" class="verdict"></div>
+  <div class="stepper">
+    <button id="back" title="Previous step (←)">◀</button>
+    <span id="stepat" class="stepat"></span>
+    <button id="fwd" title="Next step (→)">▶</button>
+  </div>
+  <button id="again" title="Run it now">run again</button>
+</header>
+
+<div id="why" class="why"></div>
+
+<main class="journey">
+  <ol id="trace" class="trace"></ol>
+  <aside id="detail" class="detail">
+    <div id="detail-empty" class="muted small">Click a step to read the code it went through.</div>
+    <div id="detail-body" hidden>
+      <h2 id="detail-name"></h2>
+      <div id="detail-where" class="where"></div>
+      <div id="detail-stack" class="stack"></div>
+      <div id="detail-at" class="at"></div>
+      <div id="detail-sentence" class="sentence"></div>
+      <div id="detail-src" class="src"></div>
+    </div>
+  </aside>
+</main>
+
+<pre id="output" class="output" hidden></pre>
+
+<details id="fixture" hidden>
+  <summary>sample data — <span class="qualifier">saving runs it</span></summary>
+  <textarea id="fixture-body" spellcheck="false"></textarea>
+  <div class="row"><button id="fixture-save">save and run</button><span id="fixture-note" class="muted small"></span></div>
+</details>
+
+<script src="/code.js"></script>
+<script src="/probe.js"></script>

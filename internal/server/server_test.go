@@ -88,7 +88,8 @@ func testServer(t *testing.T) (*Server, *explore.Store) {
 func TestAssetsAreEmbeddedAndSmall(t *testing.T) {
 	s, _ := testServer(t)
 	total := 0
-	for _, path := range []string{"/", "/app.css", "/landscape.js", "/flow.js", "/view.js"} {
+	for _, path := range []string{"/", "/app.css", "/landscape.js", "/flow.js", "/view.js",
+		"/probe.html", "/probe.css", "/probe.js"} {
 		rec := httptest.NewRecorder()
 		s.mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 		if rec.Code != http.StatusOK {
@@ -239,8 +240,22 @@ func TestEveryFunctionTheScriptCallsIsDefined(t *testing.T) {
 	// the browser sees them: the flow renderer calls helpers defined next door
 	// and vice versa, and scanning either alone would report false failures and
 	// miss real ones.
+	// Each page is scanned as its own program, because that is how the browser
+	// sees it: the session page loads four scripts that call into each other,
+	// the probe page loads two, and a helper defined only on the other page is a
+	// real failure rather than a false one.
+	for _, page := range [][]string{
+		{"assets/code.js", "assets/view.js", "assets/flow.js", "assets/landscape.js"},
+		{"assets/code.js", "assets/probe.js"},
+	} {
+		checkScriptProgram(t, page)
+	}
+}
+
+func checkScriptProgram(t *testing.T, names []string) {
+	t.Helper()
 	var all strings.Builder
-	for _, name := range []string{"assets/landscape.js", "assets/flow.js", "assets/view.js"} {
+	for _, name := range names {
 		src, err := assets.ReadFile(name)
 		if err != nil {
 			t.Fatal(err)
@@ -248,7 +263,7 @@ func TestEveryFunctionTheScriptCallsIsDefined(t *testing.T) {
 		all.WriteString(string(src))
 		all.WriteString("\n")
 	}
-	js := stripJSLiterals(stripJSComments(all.String()))
+	js := stripCode(all.String())
 
 	defined := map[string]bool{}
 	for _, m := range regexp.MustCompile(`(?m)^(?:async )?function ([A-Za-z_$][\w$]*)`).FindAllStringSubmatch(js, -1) {
@@ -293,57 +308,116 @@ func TestEveryFunctionTheScriptCallsIsDefined(t *testing.T) {
 // stripJSComments removes comments before literals are scanned. An apostrophe
 // in prose ("the frame's cost") would otherwise open a string that never
 // closes, blanking the rest of the file and hiding every definition in it.
-func stripJSComments(js string) string {
+// stripCode blanks out comments, string bodies and regex literals in one pass,
+// because doing it in separate passes cannot be right in any order. Comments
+// first reads the `'//'` inside a string as a comment and leaves an unterminated
+// quote that swallows the code below it; strings first opens a quote on the
+// apostrophe in a comment like "the frame's body"; and either way a regex like
+// /^["'`]/ opens a string that runs to the next quote anywhere in the file.
+//
+// All three are the same problem — you cannot know what a character means
+// without knowing what you are already inside — so all three are tracked at
+// once. This test is only as good as this scanner: every blind spot here shows
+// up as a helper the page really defines being reported as missing, or worse, a
+// missing one going unreported.
+func stripCode(js string) string {
 	var out strings.Builder
-	for i := 0; i < len(js); i++ {
-		if js[i] == '/' && i+1 < len(js) && js[i+1] == '/' {
-			for i < len(js) && js[i] != '\n' {
-				i++
-			}
-			out.WriteByte('\n')
-			continue
-		}
-		if js[i] == '/' && i+1 < len(js) && js[i+1] == '*' {
-			i += 2
-			for i+1 < len(js) && !(js[i] == '*' && js[i+1] == '/') {
-				i++
-			}
-			i++
-			continue
-		}
-		out.WriteByte(js[i])
-	}
-	return out.String()
-}
+	const (
+		plain = iota
+		inLine
+		inBlock
+		inString
+		inRegex
+	)
+	state, quote, inClass := plain, byte(0), false
+	last := byte(0) // last significant character, for telling regex from division
 
-// stripJSLiterals blanks string and template contents so a CSS value like
-// "var(--risk)" is not read as a call to var().
-func stripJSLiterals(js string) string {
-	var out strings.Builder
-	quote := byte(0)
 	for i := 0; i < len(js); i++ {
 		c := js[i]
-		switch {
-		case quote != 0:
+		switch state {
+		case inLine:
+			if c == '\n' {
+				state = plain
+				out.WriteByte(c)
+				continue
+			}
+			out.WriteByte(' ')
+		case inBlock:
+			if c == '*' && i+1 < len(js) && js[i+1] == '/' {
+				state = plain
+				i++
+				out.WriteString("  ")
+				continue
+			}
+			if c == '\n' {
+				out.WriteByte(c)
+				continue
+			}
+			out.WriteByte(' ')
+		case inString:
 			if c == '\\' {
 				i++
 				out.WriteString("  ")
 				continue
 			}
 			if c == quote {
-				quote = 0
-				out.WriteByte(c)
+				state, quote = plain, 0
+			}
+			out.WriteByte(map[bool]byte{true: c, false: ' '}[c == quote])
+		case inRegex:
+			// A slash inside a character class is a literal slash, not the end.
+			switch {
+			case c == '\\':
+				i++
+				out.WriteString("  ")
+				continue
+			case c == '[':
+				inClass = true
+			case c == ']':
+				inClass = false
+			case c == '/' && !inClass:
+				state = plain
+				last = '/'
+				out.WriteByte(' ')
 				continue
 			}
 			out.WriteByte(' ')
-		case c == '\'' || c == '"' || c == '`':
-			quote = c
-			out.WriteByte(c)
 		default:
-			out.WriteByte(c)
+			switch {
+			case c == '/' && i+1 < len(js) && js[i+1] == '/':
+				state = inLine
+				out.WriteString("  ")
+				i++
+			case c == '/' && i+1 < len(js) && js[i+1] == '*':
+				state = inBlock
+				out.WriteString("  ")
+				i++
+			case c == '/' && regexPosition(last):
+				state, inClass = inRegex, false
+				out.WriteByte(' ')
+			case c == '\'' || c == '"' || c == '`':
+				state, quote = inString, c
+				out.WriteByte(c)
+			default:
+				out.WriteByte(c)
+			}
+			if c != ' ' && c != '\t' && c != '\n' && state == plain {
+				last = c
+			}
 		}
 	}
 	return out.String()
+}
+
+// regexPosition says whether a slash here can only begin a regex literal rather
+// than divide something. Division always follows a value — a name, a number, a
+// closing bracket — and a regex never does.
+func regexPosition(last byte) bool {
+	switch last {
+	case 0, '(', ',', '=', ':', '[', '!', '&', '|', '?', '{', '}', ';', '+', '-', '*', '%', '<', '>', '~', '^':
+		return true
+	}
+	return false
 }
 
 // The page is a view of files that change while you are looking at them. If the

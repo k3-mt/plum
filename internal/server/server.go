@@ -28,6 +28,7 @@ import (
 	"github.com/k3-mt/plum/internal/lang"
 	"github.com/k3-mt/plum/internal/lang/dbt"
 	"github.com/k3-mt/plum/internal/met"
+	"github.com/k3-mt/plum/internal/probe"
 	"github.com/k3-mt/plum/internal/synth"
 	"github.com/k3-mt/plum/internal/trace"
 )
@@ -80,9 +81,14 @@ type Server struct {
 	drifted driftCache
 	// trended is where the meter has been, so it can say which way it is going.
 	trended trendLog
-	hub     *liveHub
-	mux     *http.ServeMux
-	done    chan struct{}
+	// Probe and RunProbe turn this window from a view of a session into a view
+	// of one test: what it does, and what it does after you change something.
+	Probe    *probe.Probe
+	RunProbe ProbeRunner
+	runner   runner
+	hub      *liveHub
+	mux      *http.ServeMux
+	done     chan struct{}
 }
 
 // Sessions is the part of the session store the window needs in order to follow
@@ -117,6 +123,9 @@ type Config struct {
 	Resident   bool
 	Window     bool
 	ProfileDir string
+	// Probe and RunProbe make this a test window rather than a session window.
+	Probe    *probe.Probe
+	RunProbe ProbeRunner
 	// Met carries the debt across sessions. It belongs to the reader, not to any
 	// one recording, which is why it is passed in rather than read from a session.
 	Met *met.Set
@@ -131,6 +140,8 @@ func New(cfg *config.Config, b *bundle.Bundle, l trace.Landscape, ev []trace.Eve
 		sessions: opts.Sessions, follow: opts.Follow && opts.Sessions != nil,
 		resident: opts.Resident, window: opts.Window, profileDir: opts.ProfileDir,
 		Met:        opts.Met,
+		Probe:      opts.Probe,
+		RunProbe:   opts.RunProbe,
 		hub:        newHub(),
 		JournalDir: opts.JournalDir, ClaimsPath: opts.ClaimsPath,
 		mux: http.NewServeMux(), done: make(chan struct{}),
@@ -140,7 +151,17 @@ func New(cfg *config.Config, b *bundle.Bundle, l trace.Landscape, ev []trace.Eve
 	// installable — the one thing the manifest exists to make possible.
 	_ = mime.AddExtensionType(".webmanifest", "application/manifest+json")
 	sub, _ := fs.Sub(assets, "assets")
-	s.mux.Handle("/", http.FileServer(http.FS(sub)))
+	files := http.FileServer(http.FS(sub))
+	// A window watching a probe answers one question, so it serves one page. The
+	// session page is still there under `plum explore`; it is simply not what
+	// this window is for.
+	s.mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if s.Probe != nil && r.URL.Path == "/" {
+			r = r.Clone(r.Context())
+			r.URL.Path = "/probe.html"
+		}
+		files.ServeHTTP(w, r)
+	})
 	s.mux.HandleFunc("/api/landscape", s.handleLandscape)
 	s.mux.HandleFunc("/api/symbol/", s.handleSymbol)
 	s.mux.HandleFunc("/api/ask", s.handleAsk)
@@ -151,6 +172,9 @@ func New(cfg *config.Config, b *bundle.Bundle, l trace.Landscape, ev []trace.Eve
 	s.mux.HandleFunc("/api/live", s.handleLive)
 	s.mux.HandleFunc("/api/health", s.handleHealth)
 	s.mux.HandleFunc("/api/debt", s.handleDebt)
+	s.mux.HandleFunc("/api/probe", s.handleProbe)
+	s.mux.HandleFunc("/api/probe/run", s.handleProbeRun)
+	s.mux.HandleFunc("/api/probe/fixture", s.handleFixture)
 	if b != nil {
 		s.sessionID = b.Session.ID
 	}

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -173,6 +174,12 @@ func (s *Server) tick(st *watchState) []string {
 		st.source = d
 		s.hub.broadcast("source")
 		sent = append(sent, "source")
+		// A window watching a probe does not want to be told the code changed.
+		// It wants to know what the code does now. Runs coalesce, so saving
+		// three times in a second is one more run, not three.
+		if s.Probe != nil && s.RunProbe != nil {
+			go s.Run(context.Background(), "the code changed")
+		}
 	}
 	return sent
 }

@@ -1,0 +1,6 @@
+{
+  "id": "f9f7",
+  "test": "TestSymbolResponseCarriesTheRenderedBrief",
+  "command": "go test -count=1 -run ^TestSymbolResponseCarriesTheRenderedBrief$ ./internal/server/",
+  "created": "2026-08-20T23:26:30.11952Z"
+}

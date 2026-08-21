@@ -1,0 +1,189 @@
+/* The whole run, in one viewport.
+   Scrolling to see the rest of a journey is the same failure as panning to see
+   the rest of a landscape: the shape is the thing you came for, and a shape you
+   have to assemble from two screenfuls is not a shape. So the page is exactly
+   the window's height and the journey compresses to fit inside it.
+   What it drops as it compresses is chosen, not arbitrary — leg prose first,
+   then the legs entirely, and never the stations, because the stations are the
+   journey. Below that it scrolls rather than shrinking to unreadable: too small
+   to read is worse than a scrollbar. */
+html, body { height: 100%; overflow: hidden; }
+body { display: flex; flex-direction: column; }
+header, .why, .output, #fixture { flex: none; }
+.journey { flex: 1 1 auto; min-height: 0; }
+.trace { overflow: auto; max-height: 100%; }
+.detail { max-height: 100%; }
+
+/* One question, one page.
+   The session page grew a meter, a worklist, a reading, a vocabulary legend, an
+   ask box and a claims rail, and answered none of them well. This one shows what
+   a test did, and what it does after you change something. Anything that is not
+   that belongs on the other page. */
+
+.verdict { flex: 1; font-size: .85rem; }
+
+/* Stepping through, the way a debugger does: one station at a time, with the
+   code pane following and pointing at the line the next call leaves from. */
+.stepper { display: flex; align-items: center; gap: .3rem; }
+.stepper button { padding: .1rem .45rem; line-height: 1; }
+.stepat { font-size: .72rem; color: var(--dim); min-width: 5.5rem; text-align: center; }
+.verdict .dot { font-size: 1rem; }
+.verdict.pass { color: var(--accent); }
+.verdict.fail { color: var(--unwind); }
+.verdict.running { color: var(--dim); }
+
+.why { padding: .4rem 1rem; font-size: .75rem; color: var(--dim); border-bottom: 1px solid var(--line); }
+.why b { color: var(--fg); font-weight: 500; }
+
+/* A journey, drawn down the page.
+   The landscape put sequence on the horizontal axis and depth on the vertical,
+   so a deep run went off the side of the screen and had to be panned — the
+   wrong cost to pay for the one axis you follow continuously. Rotated: forward
+   in time is downward, deeper is further right, and the page scrolls the way
+   the run runs.
+   The legs between stations are not decoration. They are where the time goes
+   and what the call site did or did not explain, and they were the hump heights
+   on the old picture. */
+.journey { display: grid; grid-template-columns: minmax(0, 1fr) 28rem; align-items: stretch; }
+@media (max-width: 900px) { .journey { grid-template-columns: minmax(0, 1fr); overflow: auto; } }
+
+.trace { list-style: none; margin: 0; padding: .7rem 1rem 2rem; }
+
+/* Legs: the movement between one station and the next. */
+.trace .leg {
+  display: flex; align-items: center; gap: .45rem;
+  color: var(--dim); font-size: .72rem; min-height: 1.15rem;
+}
+.trace .leg .spine { flex: none; display: flex; align-self: stretch; }
+.trace .leg .spine i { width: .95rem; border-left: 1px solid var(--line); }
+.trace .leg .spine i.live { border-left-color: var(--resume); }
+.trace .leg .text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Stations. */
+.trace .station { display: block; }
+.trace .station button {
+  display: flex; align-items: center; gap: .45rem; width: 100%;
+  background: none; border: 0; padding: .1rem 0; font: inherit; font-size: .82rem;
+  color: var(--fg); cursor: pointer; text-align: left; border-radius: 2px;
+}
+.trace .station button:hover { background: #171b1f; }
+.trace .station.on button { background: #1c2226; }
+
+.trace .spine { flex: none; display: flex; align-items: center; }
+.trace .spine i { width: .95rem; height: 1.4rem; border-left: 1px solid var(--line); }
+.trace .dot { flex: none; width: .5rem; height: .5rem; border-radius: 50%; background: var(--enter); }
+.trace .context .dot { background: var(--context); }
+.trace .risk .dot { background: var(--risk); }
+.trace .escape .dot { background: var(--unwind); }
+
+.trace .name { flex: none; color: var(--enter); font-weight: 500; }
+.trace .context .name { color: var(--dim); font-weight: 400; }
+.trace .risk .name { color: var(--risk); }
+.trace .escape .name { color: var(--unwind); }
+.trace .undocumented .name { border-bottom: 1px dashed currentColor; }
+.trace .times { flex: none; color: var(--dim); font-size: .72rem; }
+
+.trace .vals {
+  flex: 1 1 auto; min-width: 0; color: var(--dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Cost against the most expensive station in this run: the question here is
+   where this run spent itself, which is about proportions inside one run. */
+.trace .bar { flex: none; width: 4rem; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.trace .bar i { display: block; height: 100%; background: var(--resume); }
+.trace .risk .bar i { background: var(--risk); }
+.trace .cost { flex: none; width: 3.4rem; text-align: right; color: var(--dim); font-size: .72rem; }
+.trace .empty { color: var(--dim); }
+
+/* The compression ladder. Each rung removes the least load-bearing thing left.
+   The leg prose goes first because its cost is kept beside it, and the cost is
+   the part you cannot reconstruct by looking at the stations. */
+.trace.tight { padding-top: .3rem; padding-bottom: .6rem; }
+.trace.tight .leg .text { display: none; }
+.trace.tight .leg { min-height: .8rem; }
+.trace.tight .spine i { height: 1.1rem; }
+.trace.tight .station button { padding: 0; }
+
+.trace.tighter { font-size: .74rem; }
+.trace.tighter .leg { display: none; }
+.trace.tighter .spine i { height: .95rem; }
+.trace.tighter .dot { width: .4rem; height: .4rem; }
+.trace.tighter .bar { width: 3rem; }
+
+.trace .legcost { flex: none; color: var(--resume); font-size: .68rem; }
+.trace.tighter .legcost { display: none; }
+
+/* The right-hand pane: what the step you clicked actually is. */
+.detail {
+  overflow: auto; border-left: 1px solid var(--line); padding: .8rem 1rem;
+  display: flex; flex-direction: column; min-height: 0;
+}
+.detail pre { flex: 1 1 auto; min-height: 0; overflow: auto; }
+@media (max-width: 900px) { .detail { border-left: 0; border-top: 1px solid var(--line); } }
+.detail h2 { font-size: .8rem; text-transform: none; letter-spacing: 0; color: var(--fg); margin: 0 0 .2rem; }
+.detail .where { color: var(--dim); font-size: .72rem; margin-bottom: .6rem; }
+.detail .sentence {
+  color: var(--dim); font-size: .78rem; padding-left: .7rem;
+  border-left: 2px solid var(--line); margin-bottom: .7rem;
+}
+.detail .sentence .note { color: var(--risk); margin-top: .3rem; }
+/* Source, one line per row, so a step can point at the line it is about to
+   leave from. Long lines wrap under a hanging indent rather than running off
+   the side: in a pane this narrow, a horizontal scrollbar hides the end of the
+   line that matters. */
+.detail .src {
+  margin: 0; background: #101316; border: 1px solid var(--line); border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .74rem;
+  overflow: auto; min-height: 0; flex: 1 1 auto;
+}
+.detail .src .ln { display: flex; gap: .6rem; padding: 0 .5rem; }
+.detail .src .ln > .n {
+  flex: none; width: 2.2rem; text-align: right; color: var(--context);
+  user-select: none;
+}
+.detail .src .ln > .c {
+  flex: 1 1 auto; min-width: 0; white-space: pre-wrap;
+  overflow-wrap: anywhere; text-indent: -1.4rem; padding-left: 1.4rem;
+}
+.detail .src .ln.here { background: #1e2a1c; }
+.detail .src .ln.here > .n { color: var(--accent); }
+.detail .src .ln.here::before { content: '\25b8'; position: absolute; margin-left: -.45rem; color: var(--accent); }
+
+/* Everything in this pane wraps. It is the place the journey sends you when a
+   line was too long to show, so truncating here would leave nowhere to read it. */
+.detail .sentence, .detail .where, .detail .stack { overflow-wrap: anywhere; }
+.detail .stack {
+  font-size: .72rem; color: var(--dim); margin-bottom: .6rem;
+  padding-left: .7rem; border-left: 2px solid var(--context);
+}
+.detail .stack b { color: var(--fg); font-weight: 500; }
+
+/* Where the walk is standing, said in words. The highlighted line says it too,
+   but only if you notice it — and when no call site was recorded there is no
+   line to notice, which is worth saying rather than leaving as an absence. */
+.detail .at { font-size: .74rem; color: var(--accent); margin-bottom: .5rem; overflow-wrap: anywhere; }
+.detail .at.unknown { color: var(--dim); }
+.detail .stack .sep { color: var(--context); }
+
+/* Both of these sit outside the flexible middle, so either could push the
+   journey out of the viewport on its own. Capped instead. */
+.output {
+  margin: 0 1rem 1rem; padding: .7rem; font-size: .78rem;
+  max-height: 22vh; overflow: auto;
+  border-left: 2px solid var(--unwind); background: #14181b;
+  white-space: pre-wrap; overflow-x: auto;
+}
+
+#fixture { padding: .6rem 1rem 1rem; border-top: 1px solid var(--line); max-height: 45vh; overflow: auto; }
+#fixture > summary {
+  cursor: pointer; font-size: .75rem; text-transform: uppercase;
+  letter-spacing: .1em; color: var(--risk); list-style: none;
+}
+#fixture > summary .qualifier { text-transform: none; letter-spacing: 0; color: var(--dim); }
+#fixture textarea {
+  width: 100%; min-height: 6rem; max-height: 28vh; margin-top: .6rem; padding: .6rem;
+  background: #101316; color: var(--fg); border: 1px solid var(--line);
+  border-radius: 3px; font: inherit; font-size: .8rem; resize: vertical;
+}
+#fixture .row { display: flex; align-items: center; gap: .8rem; margin-top: .5rem; }
