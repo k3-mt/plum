@@ -25,6 +25,12 @@ type Well struct {
 	// inside the system it perturbs rather than floating free of it.
 	Context     bool     `json:"context"`
 	Invocations []string `json:"invocations"`
+	// InvocationID identifies the recorded call this frame is, so a consumer can
+	// find its arguments and result in the events rather than parsing them back
+	// out of the rendered strings above. Those strings are for reading; a
+	// renderer that has to parse its own prose gets it wrong the first time the
+	// prose changes.
+	InvocationID string `json:"invocation_id,omitempty"`
 	// Joins are the edges touching this frame that the drawn path does not
 	// follow. The path stays a path — this is what it is not showing, named on
 	// the shoulder of the frame rather than drawn as another line.
@@ -139,7 +145,7 @@ func deriveChain(events []Event, b *bundle.Bundle, pick Chain) Landscape {
 	parentOf := map[int]bundle.SymbolID{}
 	childrenOf := map[int]map[bundle.SymbolID]bool{}
 
-	emit := func(sym bundle.SymbolID, depth int, phase string, inv string) int {
+	emit := func(sym bundle.SymbolID, depth int, phase, inv, invID string) int {
 		s := b.Lookup(sym)
 		w := Well{
 			Symbol: sym, Label: s.Name, Depth: depth, Phase: phase,
@@ -154,6 +160,7 @@ func deriveChain(events []Event, b *bundle.Bundle, pick Chain) Landscape {
 		if inv != "" {
 			w.Invocations = []string{inv}
 		}
+		w.InvocationID = invID
 		l.Wells = append(l.Wells, w)
 		return len(l.Wells) - 1
 	}
@@ -195,7 +202,7 @@ func deriveChain(events []Event, b *bundle.Bundle, pick Chain) Landscape {
 			if len(stack) > 0 {
 				parent = l.Wells[stack[len(stack)-1]].Symbol
 			}
-			idx := emit(ev.Symbol, ev.Depth, "enter", formatArgs(ev))
+			idx := emit(ev.Symbol, ev.Depth, "enter", formatArgs(ev), ev.InvocationID)
 			l.Wells[idx].Joins = append(l.Wells[idx].Joins, ev.Joins...)
 			openArgs[ev.InvocationID] = ev.Args
 			if i > 0 {
@@ -225,7 +232,7 @@ func deriveChain(events []Event, b *bundle.Bundle, pick Chain) Landscape {
 				continue // returned past the entry point; the path is closed
 			}
 			parent := l.Wells[stack[len(stack)-1]]
-			emit(parent.Symbol, parent.Depth, "resume", "← "+leaving.Label+" "+truncate(ev.Result, 120))
+			emit(parent.Symbol, parent.Depth, "resume", "← "+leaving.Label+" "+truncate(ev.Result, 120), parent.InvocationID)
 			link("ascend", ev.TSNanos-prevTS, 1, ev, parent.Symbol)
 
 		case "raise":
@@ -249,14 +256,14 @@ func deriveChain(events []Event, b *bundle.Bundle, pick Chain) Landscape {
 			stack = stack[:target]
 			if len(stack) > 0 {
 				parent := l.Wells[stack[len(stack)-1]]
-				emit(parent.Symbol, parent.Depth, "resume", "✗ "+truncate(ev.Exception, 200))
+				emit(parent.Symbol, parent.Depth, "resume", "✗ "+truncate(ev.Exception, 200), parent.InvocationID)
 				link("unwind", chain[last].TSNanos-prevTS, frames, ev, parent.Symbol)
 			} else {
 				// Nothing inside the traced set caught it. The cliff still happened
 				// and is still the most legible thing on the landscape, so it is
 				// drawn falling to depth 0 and marked as an escape.
 				l.Escaped = truncate(ev.Exception, 200)
-				emit(deepest.Symbol, 0, "escape", "✗ escaped: "+truncate(ev.Exception, 200))
+				emit(deepest.Symbol, 0, "escape", "✗ escaped: "+truncate(ev.Exception, 200), deepest.InvocationID)
 				link("unwind", chain[last].TSNanos-prevTS, frames, ev, deepest.Symbol)
 			}
 			i = last

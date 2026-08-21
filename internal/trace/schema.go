@@ -24,9 +24,17 @@ type Event struct {
 	TSNanos       int64             `json:"ts_ns"`
 	Depth         int               `json:"depth"`
 	Args          map[string]string `json:"args"`
-	Result        string            `json:"result"`
-	Exception     string            `json:"exception"`
-	TestID        string            `json:"test_id"`
+	// ArgsOut is what the caller holds after the call, for the arguments where
+	// that differs from what it passed. Arguments alone say what a function was
+	// given and nothing about what it did to it — a function that fills a slice
+	// or writes through a pointer changes its caller's world, and that change
+	// was invisible. Only the differences are carried: an argument that came
+	// back unchanged is the normal case, and recording it on every return would
+	// bury the ones that did not.
+	ArgsOut   map[string]string `json:"args_out,omitempty"`
+	Result    string            `json:"result"`
+	Exception string            `json:"exception"`
+	TestID    string            `json:"test_id"`
 	// Joins names edges touching this frame that the recorded path does not
 	// walk: the other callers of a shared helper, the other models feeding a
 	// mart. A trace is one cut through a graph, and without this a frame looks

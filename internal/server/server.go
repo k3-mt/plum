@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -85,6 +86,10 @@ type Server struct {
 	// of one test: what it does, and what it does after you change something.
 	Probe    *probe.Probe
 	RunProbe ProbeRunner
+	// Discover and Mint let the window choose its own subject: every test in
+	// the repository, in a list, without going back to the command line.
+	Discover TestFinder
+	Mint     Minter
 	runner   runner
 	hub      *liveHub
 	mux      *http.ServeMux
@@ -123,9 +128,12 @@ type Config struct {
 	Resident   bool
 	Window     bool
 	ProfileDir string
-	// Probe and RunProbe make this a test window rather than a session window.
+	// Probe and RunProbe make this a test window rather than a session window;
+	// Discover and Mint let it change which test that is.
 	Probe    *probe.Probe
 	RunProbe ProbeRunner
+	Discover TestFinder
+	Mint     Minter
 	// Met carries the debt across sessions. It belongs to the reader, not to any
 	// one recording, which is why it is passed in rather than read from a session.
 	Met *met.Set
@@ -142,6 +150,8 @@ func New(cfg *config.Config, b *bundle.Bundle, l trace.Landscape, ev []trace.Eve
 		Met:        opts.Met,
 		Probe:      opts.Probe,
 		RunProbe:   opts.RunProbe,
+		Discover:   opts.Discover,
+		Mint:       opts.Mint,
 		hub:        newHub(),
 		JournalDir: opts.JournalDir, ClaimsPath: opts.ClaimsPath,
 		mux: http.NewServeMux(), done: make(chan struct{}),
@@ -156,7 +166,11 @@ func New(cfg *config.Config, b *bundle.Bundle, l trace.Landscape, ev []trace.Eve
 	// session page is still there under `plum explore`; it is simply not what
 	// this window is for.
 	s.mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if s.Probe != nil && r.URL.Path == "/" {
+		// A window that can choose a test is a test window, whether or not one
+		// has been chosen yet. Falling through to the session page when nothing
+		// is selected showed the reader the wrong page and hid the picker that
+		// would have fixed it.
+		if (s.Probe != nil || s.Discover != nil) && r.URL.Path == "/" {
 			r = r.Clone(r.Context())
 			r.URL.Path = "/probe.html"
 		}
@@ -175,6 +189,13 @@ func New(cfg *config.Config, b *bundle.Bundle, l trace.Landscape, ev []trace.Eve
 	s.mux.HandleFunc("/api/probe", s.handleProbe)
 	s.mux.HandleFunc("/api/probe/run", s.handleProbeRun)
 	s.mux.HandleFunc("/api/probe/fixture", s.handleFixture)
+	s.mux.HandleFunc("/api/tests", s.handleTests)
+	s.mux.HandleFunc("/api/probe/select", s.handleSelect)
+	s.mux.HandleFunc("/api/resolve", s.handleResolve)
+	s.mux.HandleFunc("/api/explain", s.handleExplain)
+	s.mux.HandleFunc("/api/explain/", s.handleExplainPoll)
+	s.mux.HandleFunc("/api/pane", s.handlePane)
+	s.mux.HandleFunc("/api/explain-api/", s.handleExplainAPI)
 	if b != nil {
 		s.sessionID = b.Session.ID
 	}
@@ -227,6 +248,83 @@ func (s *Server) handleDebt(w http.ResponseWriter, r *http.Request) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	writeJSON(w, s.debt())
+}
+
+// handleResolve says what one name means inside one declaration.
+//
+// It asks the language, because only the language knows. A text search over the
+// same source reports a closure as a call, a package qualifier as a local, and
+// has nothing at all to say about where a value came from — and those are the
+// three questions a reader clicking a name is actually asking.
+func (s *Server) handleResolve(w http.ResponseWriter, r *http.Request) {
+	name := r.URL.Query().Get("name")
+	symbol := bundle.SymbolID(r.URL.Query().Get("symbol"))
+	if name == "" || symbol == "" {
+		http.Error(w, "name and symbol are required", http.StatusBadRequest)
+		return
+	}
+	file := symbol.File()
+	if file == "" || s.Adapters == nil {
+		writeJSON(w, bundle.Resolution{Name: name, Kind: "unknown", Note: "no adapter for this file"})
+		return
+	}
+	resolver := s.Adapters.ResolverFor(file)
+	if resolver == nil {
+		// Said plainly. A language whose adapter cannot walk a scope should not
+		// have its reader shown a guess dressed as a fact.
+		writeJSON(w, bundle.Resolution{
+			Name: name, Kind: "unsupported",
+			Note: "plum resolves names for " + supportedResolvers(s.Adapters) +
+				" so far; for " + s.Adapters.Language(file) + " it can only show where the text appears",
+		})
+		return
+	}
+	src, err := os.ReadFile(filepath.Join(s.Cfg.Root, file))
+	if err != nil {
+		writeJSON(w, bundle.Resolution{Name: name, Kind: "unknown", Note: "the file is not in the working tree"})
+		return
+	}
+	// The line the reader clicked, so the resolver answers for the scope they
+	// are standing in rather than for the first binding with that name. Two
+	// variables sharing a name in one function are two variables.
+	line, _ := strconv.Atoi(r.URL.Query().Get("line"))
+	if line == 0 {
+		s.mu.RLock()
+		line = s.Bundle.Lookup(symbol).LineStart
+		s.mu.RUnlock()
+	}
+	if line == 0 {
+		// The bundle may predate the symbol; the working tree is the authority
+		// on where it is now.
+		if syms, perr := s.Adapters.For(file).ParseSymbols(file, src); perr == nil {
+			for _, sym := range syms {
+				if sym.ID == symbol {
+					line = sym.LineStart
+				}
+			}
+		}
+	}
+	res, err := resolver.ResolveIdentifier(file, src, line, name)
+	if err != nil {
+		writeJSON(w, bundle.Resolution{Name: name, Kind: "unknown", Note: err.Error()})
+		return
+	}
+	writeJSON(w, res)
+}
+
+// supportedResolvers names the languages that can answer, so the message is a
+// statement about plum rather than about the reader's code.
+func supportedResolvers(reg *lang.Registry) string {
+	var names []string
+	for _, a := range reg.All() {
+		if _, ok := a.(lang.Resolver); ok {
+			names = append(names, a.Name())
+		}
+	}
+	if len(names) == 0 {
+		return "no language"
+	}
+	return strings.Join(names, " and ")
 }
 
 // Serve binds a localhost port and opens a browser. Cold start is a few
@@ -334,6 +432,10 @@ type PromptContext struct {
 	// Changed says whether this session touched it, or the run merely passed
 	// through it.
 	Changed bool `json:"changed"`
+	// Drifted says the symbol has been edited since the capture, so anything
+	// recorded against it by line number — the risk markers especially — is
+	// describing code that has since moved.
+	Drifted bool `json:"drifted"`
 	// Narration is what this frame did, in the sentences the landscape uses.
 	Narration []trace.Step `json:"narration"`
 	// Markdown is this same context rendered as a brief — what `plum context`
@@ -361,32 +463,121 @@ const maxSamples = 8
 // doc is worse than useless, because it looks like the evidence is missing
 // rather than merely unlooked-for. So an unknown symbol is parsed out of the
 // working tree on demand.
+// symbolFor answers two different questions that were tangled together: where
+// this symbol is *now*, and whether this session changed it.
+//
+// It used to return the bundle's copy whenever the bundle had one, and the
+// bundle's copy carries the line span from when the capture was taken. Every
+// edit since moves the code and leaves that span pointing at whatever now
+// occupies those lines. Observed here: handleSymbol was recorded at 485–503,
+// the file has since grown, and the pane showed buildContext under
+// handleSymbol's name — with handleSymbol's recorded arguments beside it.
+//
+// That is the worst thing this window can do. Its whole premise is "this is the
+// code that ran"; showing different code under that promise is worse than
+// showing nothing, because it is confidently wrong. So position and text come
+// from the working tree whenever the file still parses, and only what the
+// session did with the symbol comes from the bundle.
 func (s *Server) symbolFor(id bundle.SymbolID) (bundle.Symbol, bool) {
-	if s.Bundle.Has(id) {
-		return s.Bundle.Lookup(id), true
+	changed := s.Bundle.Has(id)
+	recorded := s.Bundle.Lookup(id)
+	current, ok := s.currentSymbol(id)
+	if !ok {
+		// Nothing to check against — a deleted file, an unparseable one, a
+		// language with no adapter. The capture is all there is.
+		return recorded, changed
 	}
+	// Change and Tested describe what the session did, which the working tree
+	// cannot know. Everything else — lines, signature, doc, call sites — has to
+	// describe the code as it is, because that is the code being displayed.
+	current.Change = recorded.Change
+	current.Tested = recorded.Tested
+	return current, changed
+}
+
+// currentSymbol finds the symbol in the working tree as it stands.
+func (s *Server) currentSymbol(id bundle.SymbolID) (bundle.Symbol, bool) {
 	file := id.File()
 	if file == "" || s.Adapters == nil {
-		return s.Bundle.Lookup(id), false
+		return bundle.Symbol{}, false
 	}
 	a := s.Adapters.For(file)
 	if a == nil {
-		return s.Bundle.Lookup(id), false
+		return bundle.Symbol{}, false
 	}
 	src, err := os.ReadFile(filepath.Join(s.Cfg.Root, file))
 	if err != nil {
-		return s.Bundle.Lookup(id), false
+		return bundle.Symbol{}, false
 	}
 	syms, err := a.ParseSymbols(file, src)
 	if err != nil {
-		return s.Bundle.Lookup(id), false
+		return bundle.Symbol{}, false
 	}
 	for _, sym := range syms {
 		if sym.ID == id {
-			return sym, false
+			return sym, true
 		}
 	}
-	return s.Bundle.Lookup(id), false
+	return bundle.Symbol{}, false
+}
+
+// risksFor returns the recorded findings with their lines moved to where the
+// code is now.
+//
+// A finding is recorded as an absolute line number in the file as it stood at
+// capture time. Move the function and that number points at a stranger — the
+// handler here was captured at 485 and now sits at 658, so its "line 500"
+// finding was landing in the middle of a different function.
+//
+// The offset within the declaration is the part that survives, and when the
+// body is unchanged — same fingerprint — shifting by the difference is exact
+// rather than a guess. When the body has changed, no arithmetic can place it:
+// the line is dropped to zero and the note says so, because a finding pointing
+// confidently at the wrong line is worse than one that admits it lost its place.
+func (s *Server) risksFor(id bundle.SymbolID) []bundle.RiskMarker {
+	found := s.Bundle.RisksFor(id)
+	if len(found) == 0 {
+		return found
+	}
+	recorded := s.Bundle.Lookup(id)
+	current, ok := s.currentSymbol(id)
+	if !ok || recorded.LineStart == 0 || current.LineStart == 0 {
+		return found
+	}
+	shift := current.LineStart - recorded.LineStart
+	drifted := recorded.Fingerprint != "" && current.Fingerprint != recorded.Fingerprint
+
+	out := make([]bundle.RiskMarker, 0, len(found))
+	for _, m := range found {
+		if drifted {
+			m.Line = 0
+			m.Note = strings.TrimSpace(m.Note) +
+				" (recorded before this symbol was edited; the line it was on no longer applies)"
+			out = append(out, m)
+			continue
+		}
+		if m.Line > 0 {
+			m.Line += shift
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+// drifted reports whether the symbol has changed since the capture. When it
+// has, anything the capture recorded by line number — risk markers most of all
+// — is describing code that has since moved, and saying so is the difference
+// between a stale finding and a wrong one.
+func (s *Server) hasDrifted(id bundle.SymbolID) bool {
+	recorded := s.Bundle.Lookup(id)
+	if recorded.Fingerprint == "" {
+		return false
+	}
+	current, ok := s.currentSymbol(id)
+	if !ok {
+		return false
+	}
+	return current.Fingerprint != recorded.Fingerprint
 }
 
 func (s *Server) buildContext(sym bundle.SymbolID) PromptContext {
@@ -410,7 +601,8 @@ func (s *Server) buildContext(sym bundle.SymbolID) PromptContext {
 		Invocations: trace.For(s.Events, sym, maxSamples),
 		Callers:     b.EdgesTo(sym),
 		Callees:     b.EdgesFrom(sym),
-		Risks:       b.RisksFor(sym),
+		Risks:       s.risksFor(sym),
+		Drifted:     s.hasDrifted(sym),
 		Rationale:   b.JournalFor(sym),
 		Seams:       seams,
 		CallSites:   symbol.CallSites,
@@ -436,7 +628,7 @@ func (s *Server) related(sym bundle.SymbolID) []RelatedSymbol {
 			return
 		}
 		seen[id] = true
-		other := s.Bundle.Lookup(id)
+		other, _ := s.symbolFor(id)
 		r := RelatedSymbol{
 			Symbol: id, Relation: relation,
 			Signature: other.Signature, Doc: other.Doc,

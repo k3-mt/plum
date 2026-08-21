@@ -428,7 +428,31 @@ func isLiteral(v string) bool {
 			return true
 		}
 	}
+	// A composite the language named before opening its brackets is still a
+	// composite: Bundle{...}, Point(1, 2), datetime.date(2026, 8, 21). Quoting
+	// those wraps a structure in quotes and escapes every quote inside it, which
+	// is how one argument became an unreadable run of backslashes.
+	if end := v[len(v)-1]; end == '}' || end == ']' || end == ')' {
+		if i := strings.IndexAny(v, "{[("); i > 0 && isTypeName(v[:i]) {
+			return true
+		}
+	}
 	return false
+}
+
+// isTypeName reports whether the text before a bracket reads as a type rather
+// than as prose — letters, digits, dots and underscores, and no spaces. A
+// sentence that happens to end in a bracket is not a composite.
+func isTypeName(s string) bool {
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '.' || r == '_' || r == '*':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func firstSentence(doc string) string {

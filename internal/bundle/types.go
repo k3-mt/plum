@@ -173,3 +173,39 @@ type Gate struct {
 	Fired   bool     `json:"fired"`
 	Reasons []string `json:"reasons"`
 }
+
+// Resolution is what one name means inside one declaration.
+//
+// The page needs this because "where does this come from" is the question a
+// reader actually has, and text matching cannot answer it. In renderContext,
+// `sym := pc.Symbol_` makes sym derived from a parameter; `p := func(...)` makes
+// p a local closure that looks exactly like a call to a string matcher; and
+// `strings` looks exactly like a local variable. Only a parser knows which is
+// which, and the difference is the whole value of being able to click a name.
+type Resolution struct {
+	Name string `json:"name"`
+	// Kind is what the name is: parameter, result, local, field, call, type,
+	// package, constant, receiver, or unknown. Unknown is a real answer and is
+	// reported as one rather than guessed into a plausible category.
+	Kind string `json:"kind"`
+	// Type is the static type where the language states it, empty where it does
+	// not. Never inferred.
+	Type string `json:"type,omitempty"`
+	// DeclaredAt is the line that introduces the name, and DerivedFrom is the
+	// expression it was introduced from, verbatim. That expression is the answer
+	// to "where does this come from".
+	DeclaredAt  int    `json:"declared_at,omitempty"`
+	DerivedFrom string `json:"derived_from,omitempty"`
+	// Writes are lines that assign to it, Reads are lines that only read it.
+	// Kept apart because a name reassigned halfway through a function is a
+	// different thing to follow than one that is set once.
+	Writes []int `json:"writes,omitempty"`
+	Reads  []int `json:"reads,omitempty"`
+	// Callee is where a call goes, when the extractor could resolve it.
+	Callee SymbolID `json:"callee,omitempty"`
+	// Doc is the declaration's own comment, when the name has one.
+	Doc string `json:"doc,omitempty"`
+	// Note says what could not be determined and why, so an incomplete answer
+	// reads as incomplete rather than as an absence of anything to find.
+	Note string `json:"note,omitempty"`
+}

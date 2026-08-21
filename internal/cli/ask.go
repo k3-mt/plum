@@ -34,9 +34,18 @@ func cmdAsk(ctx context.Context, env *Env, args []string) error {
 			fmt.Println("nothing waiting")
 			return nil
 		}
+		// The paths, not just the ids. An agent reading this is about to answer,
+		// and telling it a question exists without saying where to read it or
+		// where to put the answer makes it go and look — which is a round trip
+		// for something plum already knows.
 		for _, r := range reqs {
-			fmt.Printf("%s  %s\n    %s\n", r.ID, r.Symbol, r.Question)
+			fmt.Printf("%s  %s\n", r.ID, r.Symbol)
+			fmt.Printf("    %s\n", r.Question)
+			fmt.Printf("    read   %s\n", rel(env, st.PromptPath(r.ID)))
+			fmt.Printf("    answer %s\n", rel(env, st.AnswerPath(r.ID)))
 		}
+		fmt.Println()
+		fmt.Println("answer one by writing the file named above it. change no source files.")
 		return nil
 	}
 

@@ -1,3 +1,66 @@
+/* The probe page has its own skin.
+   The session page is a terminal that happens to be in a browser — flat black,
+   hard edges, monospace throughout — which suits a document you read once. This
+   page is somewhere you sit while an agent works, and an hour of hard edges and
+   pure black is tiring in a way ten minutes is not.
+   So: a warm near-black rather than a cold one, paper-coloured text rather than
+   white, rounded corners, and a prose typeface for prose with monospace kept for
+   the things that are literally code. The colours are the same family the
+   landscape uses, softened — a reader who knows what blue means there should not
+   have to learn it again here. */
+:root {
+  --p-bg: #16161a;
+  --p-panel: #1c1c22;
+  --p-raised: #22222a;
+  --p-line: #2e2e38;
+  --p-fg: #ece7de;
+  --p-dim: #9a958f;
+  --p-faint: #635f5c;
+
+  --p-code: #8fbcd8;      /* identifiers, and the frames that are yours */
+  --p-ctx: #6f6a78;       /* surrounding code, recorded for structure only */
+  --p-warm: #d9a26a;      /* a finding: risk, mutation, something to look at */
+  --p-good: #a8c98a;      /* it passed */
+  --p-bad: #d98287;       /* it failed, it panicked, it unwound */
+  --p-cool: #7d8fa8;      /* measured cost */
+  --p-shadow: rgba(0, 0, 0, .38);
+
+  --p-r: 7px;             /* one radius, used everywhere */
+  --p-prose: ui-sans-serif, -apple-system, "Segoe UI", Inter, system-ui, sans-serif;
+  --p-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+body {
+  background:
+    radial-gradient(1100px 520px at 12% -12%, #1e1e26 0%, transparent 62%),
+    var(--p-bg);
+  color: var(--p-fg);
+  font-family: var(--p-prose);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+header {
+  gap: .75rem; padding: .55rem .9rem;
+  border-bottom: 1px solid var(--p-line);
+  background: linear-gradient(180deg, #1f1f27, #1a1a21);
+}
+h1 { font-size: .8rem; font-weight: 600; letter-spacing: .01em; color: var(--p-dim); }
+
+button {
+  background: var(--p-raised); color: var(--p-fg);
+  border: 1px solid var(--p-line); border-radius: var(--p-r);
+  padding: .28rem .7rem; font: inherit; font-size: .76rem; cursor: pointer;
+  transition: border-color .12s, color .12s, background .12s;
+}
+button:hover:not(:disabled) { border-color: var(--p-code); color: var(--p-code); }
+button:disabled { opacity: .35; cursor: default; }
+
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb { background: #33333d; border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: #414150; }
+::-webkit-scrollbar-track { background: transparent; }
+
 /* The whole run, in one viewport.
    Scrolling to see the rest of a journey is the same failure as panning to see
    the rest of a landscape: the shape is the thing you came for, and a shape you
@@ -20,20 +83,81 @@ header, .why, .output, #fixture { flex: none; }
    a test did, and what it does after you change something. Anything that is not
    that belongs on the other page. */
 
-.verdict { flex: 1; font-size: .85rem; }
+/* The window chooses its own subject. Going back to a command line to point it
+   at a different test is the friction that stops you looking at the second one. */
+.picker { display: flex; align-items: center; gap: .5rem; min-width: 0; flex: 1; }
+.picker input {
+  flex: 1 1 auto; min-width: 9rem; max-width: 28rem; padding: .32rem .7rem;
+  background: var(--p-panel); color: var(--p-fg); border: 1px solid var(--p-line);
+  border-radius: var(--p-r); font: inherit; font-size: .78rem;
+  transition: border-color .12s, box-shadow .12s;
+}
+.picker input::placeholder { color: var(--p-faint); }
+.picker input:focus {
+  outline: none; border-color: var(--p-code);
+  box-shadow: 0 0 0 3px rgba(143, 188, 216, .12);
+}
+.found { font-size: .68rem; color: var(--p-dim); white-space: nowrap; }
+
+/* A native datalist cannot be grouped, cannot show a second line, and cannot be
+   styled — and two hundred flat names is a list you scroll rather than one you
+   navigate. Sections are packages, because which package a test lives in is the
+   first thing you know about what it covers; the sentence under each name is
+   the test's own comment, which is usually what you are actually scanning for. */
+.testlist {
+  position: absolute; top: 2.4rem; left: 0; z-index: 20;
+  width: min(46rem, calc(100vw - 2rem)); max-height: 70vh; overflow: auto;
+  background: var(--p-panel); border: 1px solid var(--p-line); border-radius: var(--p-r);
+  box-shadow: 0 16px 44px var(--p-shadow);
+}
+.picker { position: relative; }
+
+.testlist .sec > summary {
+  display: flex; align-items: center; gap: .5rem; cursor: pointer; list-style: none;
+  padding: .35rem .7rem; font-size: .74rem; color: var(--p-fg);
+  border-bottom: 1px solid var(--p-line); background: var(--p-raised);
+}
+.testlist .sec > summary::-webkit-details-marker { display: none; }
+.testlist .sec > summary:hover { color: var(--p-good); }
+.testlist .sec > summary .caret { flex: none; color: var(--p-ctx); width: .6rem; }
+.testlist .sec[open] > summary .caret { color: var(--p-good); }
+.testlist .sec > summary .pkg { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.testlist .sec > summary .n { flex: none; color: var(--p-dim); font-size: .68rem; }
+
+.testlist .opt {
+  display: block; width: 100%; text-align: left; background: none; border: 0;
+  padding: .3rem .7rem .3rem 1.9rem; font: inherit; cursor: pointer;
+  border-bottom: 1px solid var(--p-panel);
+}
+.testlist .opt:hover, .testlist .opt.on { background: var(--p-raised); }
+.testlist .opt .nm { display: block; font-size: .76rem; color: var(--p-code); overflow-wrap: anywhere; }
+.testlist .opt.on .nm { color: var(--p-good); }
+.testlist .opt .doc {
+  display: block; font-size: .69rem; color: var(--p-dim); margin-top: .1rem;
+  overflow-wrap: anywhere;
+}
+.testlist .opt .hnd { color: var(--p-cool); font-size: .66rem; margin-left: .4rem; }
+.testlist .opt mark { background: none; color: var(--p-good); }
+.testlist .none { padding: .6rem .7rem; font-size: .74rem; color: var(--p-dim); }
+.testlist .limit {
+  padding: .45rem .7rem; font-size: .66rem; color: var(--p-dim);
+  border-top: 1px solid var(--p-line); background: var(--p-panel); position: sticky; bottom: 0;
+}
+
+.verdict { flex: none; font-size: .78rem; font-variant-numeric: tabular-nums; }
 
 /* Stepping through, the way a debugger does: one station at a time, with the
    code pane following and pointing at the line the next call leaves from. */
 .stepper { display: flex; align-items: center; gap: .3rem; }
 .stepper button { padding: .1rem .45rem; line-height: 1; }
-.stepat { font-size: .72rem; color: var(--dim); min-width: 5.5rem; text-align: center; }
+.stepat { font-size: .7rem; color: var(--p-dim); min-width: 5.2rem; text-align: center; font-variant-numeric: tabular-nums; }
 .verdict .dot { font-size: 1rem; }
-.verdict.pass { color: var(--accent); }
-.verdict.fail { color: var(--unwind); }
-.verdict.running { color: var(--dim); }
+.verdict.pass { color: var(--p-good); }
+.verdict.fail { color: var(--p-bad); }
+.verdict.running { color: var(--p-dim); }
 
-.why { padding: .4rem 1rem; font-size: .75rem; color: var(--dim); border-bottom: 1px solid var(--line); }
-.why b { color: var(--fg); font-weight: 500; }
+.why { padding: .35rem .9rem; font-size: .72rem; color: var(--p-dim); border-bottom: 1px solid var(--p-line); }
+.why b { color: var(--p-fg); font-weight: 500; }
 
 /* A journey, drawn down the page.
    The landscape put sequence on the horizontal axis and depth on the vertical,
@@ -52,49 +176,64 @@ header, .why, .output, #fixture { flex: none; }
 /* Legs: the movement between one station and the next. */
 .trace .leg {
   display: flex; align-items: center; gap: .45rem;
-  color: var(--dim); font-size: .72rem; min-height: 1.15rem;
+  color: var(--p-dim); font-size: .72rem; min-height: 1.15rem;
 }
 .trace .leg .spine { flex: none; display: flex; align-self: stretch; }
-.trace .leg .spine i { width: .95rem; border-left: 1px solid var(--line); }
-.trace .leg .spine i.live { border-left-color: var(--resume); }
+.trace .leg .spine i { width: 1rem; border-left: 1px solid var(--p-line); }
+.trace .leg .spine i.live { border-left-color: var(--p-cool); }
 .trace .leg .text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Stations. */
 .trace .station { display: block; }
 .trace .station button {
   display: flex; align-items: center; gap: .45rem; width: 100%;
-  background: none; border: 0; padding: .1rem 0; font: inherit; font-size: .82rem;
-  color: var(--fg); cursor: pointer; text-align: left; border-radius: 2px;
+  background: none; border: 0; padding: .16rem .4rem; font: inherit; font-size: .8rem;
+  color: var(--p-fg); cursor: pointer; text-align: left; border-radius: var(--p-r);
+  transition: background .12s;
 }
-.trace .station button:hover { background: #171b1f; }
-.trace .station.on button { background: #1c2226; }
+.trace .station button:hover { background: var(--p-raised); }
+/* The station you are standing on. A left edge rather than a heavier fill: it
+   marks the row without making it shout over the ones around it. */
+.trace .station.on button {
+  background: var(--p-raised);
+  box-shadow: inset 2px 0 0 var(--p-good);
+}
 
 .trace .spine { flex: none; display: flex; align-items: center; }
-.trace .spine i { width: .95rem; height: 1.4rem; border-left: 1px solid var(--line); }
-.trace .dot { flex: none; width: .5rem; height: .5rem; border-radius: 50%; background: var(--enter); }
-.trace .context .dot { background: var(--context); }
-.trace .risk .dot { background: var(--risk); }
-.trace .escape .dot { background: var(--unwind); }
+.trace .spine i { width: 1rem; height: 1.5rem; border-left: 1px solid var(--p-line); }
+.trace .dot {
+  flex: none; width: .52rem; height: .52rem; border-radius: 50%;
+  background: var(--p-code); box-shadow: 0 0 0 3px rgba(143, 188, 216, .1);
+}
+.trace .context .dot { background: var(--p-ctx); }
+.trace .risk .dot { background: var(--p-warm); }
+.trace .escape .dot { background: var(--p-bad); }
 
-.trace .name { flex: none; color: var(--enter); font-weight: 500; }
-.trace .context .name { color: var(--dim); font-weight: 400; }
-.trace .risk .name { color: var(--risk); }
-.trace .escape .name { color: var(--unwind); }
+.trace .name { flex: none; color: var(--p-code); font-weight: 500; }
+.trace .context .name { color: var(--p-dim); font-weight: 400; }
+.trace .risk .name { color: var(--p-warm); }
+.trace .escape .name { color: var(--p-bad); }
 .trace .undocumented .name { border-bottom: 1px dashed currentColor; }
-.trace .times { flex: none; color: var(--dim); font-size: .72rem; }
+.trace .times { flex: none; color: var(--p-dim); font-size: .72rem; }
+/* A station that changed what it was given. The journey is where you notice it;
+   the pane is where you read what changed. */
+.trace .mut { flex: none; color: var(--p-warm); font-size: .7rem; }
 
 .trace .vals {
-  flex: 1 1 auto; min-width: 0; color: var(--dim);
+  flex: 1 1 auto; min-width: 0; color: var(--p-dim);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 /* Cost against the most expensive station in this run: the question here is
    where this run spent itself, which is about proportions inside one run. */
-.trace .bar { flex: none; width: 4rem; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
-.trace .bar i { display: block; height: 100%; background: var(--resume); }
-.trace .risk .bar i { background: var(--risk); }
-.trace .cost { flex: none; width: 3.4rem; text-align: right; color: var(--dim); font-size: .72rem; }
-.trace .empty { color: var(--dim); }
+.trace .bar {
+  flex: none; width: 4rem; height: 5px; border-radius: 3px;
+  background: rgba(255, 255, 255, .05); overflow: hidden;
+}
+.trace .bar i { display: block; height: 100%; background: var(--p-cool); border-radius: 3px; }
+.trace .risk .bar i { background: var(--p-warm); }
+.trace .cost { flex: none; width: 3.4rem; text-align: right; color: var(--p-dim); font-size: .72rem; }
+.trace .empty { color: var(--p-dim); }
 
 /* The compression ladder. Each rung removes the least load-bearing thing left.
    The leg prose goes first because its cost is kept beside it, and the cost is
@@ -111,79 +250,314 @@ header, .why, .output, #fixture { flex: none; }
 .trace.tighter .dot { width: .4rem; height: .4rem; }
 .trace.tighter .bar { width: 3rem; }
 
-.trace .legcost { flex: none; color: var(--resume); font-size: .68rem; }
+.trace .legcost { flex: none; color: var(--p-cool); font-size: .68rem; }
 .trace.tighter .legcost { display: none; }
 
 /* The right-hand pane: what the step you clicked actually is. */
 .detail {
-  overflow: auto; border-left: 1px solid var(--line); padding: .8rem 1rem;
+  overflow: auto; border-left: 1px solid var(--p-line); padding: .8rem 1rem;
   display: flex; flex-direction: column; min-height: 0;
 }
 .detail pre { flex: 1 1 auto; min-height: 0; overflow: auto; }
-@media (max-width: 900px) { .detail { border-left: 0; border-top: 1px solid var(--line); } }
-.detail h2 { font-size: .8rem; text-transform: none; letter-spacing: 0; color: var(--fg); margin: 0 0 .2rem; }
-.detail .where { color: var(--dim); font-size: .72rem; margin-bottom: .6rem; }
+@media (max-width: 900px) { .detail { border-left: 0; border-top: 1px solid var(--p-line); } }
+.detail h2 { font-size: .8rem; text-transform: none; letter-spacing: 0; color: var(--p-fg); margin: 0 0 .2rem; }
+.detail .where { color: var(--p-dim); font-size: .72rem; margin-bottom: .6rem; }
 .detail .sentence {
-  color: var(--dim); font-size: .78rem; padding-left: .7rem;
-  border-left: 2px solid var(--line); margin-bottom: .7rem;
+  color: var(--p-dim); font-size: .78rem; padding-left: .7rem;
+  border-left: 2px solid var(--p-line); margin-bottom: .7rem;
 }
-.detail .sentence .note { color: var(--risk); margin-top: .3rem; }
+.detail .sentence .note { color: var(--p-warm); margin-top: .3rem; }
 /* Source, one line per row, so a step can point at the line it is about to
    leave from. Long lines wrap under a hanging indent rather than running off
    the side: in a pane this narrow, a horizontal scrollbar hides the end of the
    line that matters. */
 .detail .src {
-  margin: 0; background: #101316; border: 1px solid var(--line); border-radius: 3px;
+  margin: 0; background: var(--p-panel); border: 1px solid var(--p-line); border-radius: 3px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .74rem;
   overflow: auto; min-height: 0; flex: 1 1 auto;
 }
 .detail .src .ln { display: flex; gap: .6rem; padding: 0 .5rem; }
 .detail .src .ln > .n {
-  flex: none; width: 2.2rem; text-align: right; color: var(--context);
+  flex: none; width: 2.2rem; text-align: right; color: var(--p-ctx);
   user-select: none;
 }
 .detail .src .ln > .c {
   flex: 1 1 auto; min-width: 0; white-space: pre-wrap;
   overflow-wrap: anywhere; text-indent: -1.4rem; padding-left: 1.4rem;
 }
-.detail .src .ln.here { background: #1e2a1c; }
-.detail .src .ln.here > .n { color: var(--accent); }
-.detail .src .ln.here::before { content: '\25b8'; position: absolute; margin-left: -.45rem; color: var(--accent); }
+.detail .src .ln.here { background: rgba(168, 201, 138, .13); }
+.detail .src .ln.here > .n { color: var(--p-good); }
+.detail .src .ln.here::before { content: '\25b8'; position: absolute; margin-left: -.45rem; color: var(--p-good); }
+
+/* Arguments and returns as rows, not prose.
+   Eight arguments flattened into a sentence is a paragraph nobody reads; the
+   same eight as rows is a glance. The value column is monospace because these
+   are structures, and wraps because the pane is where nothing is cut off. */
+.detail .values { margin-bottom: .7rem; }
+.detail .values .grp {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .1em;
+  color: var(--p-dim); margin: .5rem 0 .25rem;
+}
+.detail .values .v { display: flex; gap: .5rem; padding: .12rem 0; align-items: baseline; }
+.detail .values .k {
+  flex: none; min-width: 3.2rem; color: var(--p-code); font-size: .74rem;
+  overflow-wrap: anywhere;
+}
+.detail .values .val {
+  flex: 1 1 auto; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .72rem; color: var(--p-fg); overflow-wrap: anywhere; white-space: pre-wrap;
+}
+.detail .values .val.long { cursor: pointer; }
+.detail .values .val.long.folded {
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.detail .values .raised .k, .detail .values .raised .val { color: var(--p-bad); }
+
+/* An argument the call changed, and what the caller holds now directly beneath
+   it. Arguments are recorded on the way in, which says what a function was
+   given and nothing about what it did to it — a function that fills a slice or
+   writes through a pointer changes its caller's world, and that was invisible. */
+.detail .values .mutated .k { color: var(--p-warm); }
+.detail .values .after .k { color: var(--p-warm); font-size: .68rem; }
+.detail .values .after .val { color: var(--p-warm); }
+.detail .values .more { font-size: .66rem; color: var(--p-cool); }
 
 /* Everything in this pane wraps. It is the place the journey sends you when a
    line was too long to show, so truncating here would leave nowhere to read it. */
 .detail .sentence, .detail .where, .detail .stack { overflow-wrap: anywhere; }
+/* Prose in the prose typeface. The value and source panes stay monospace,
+   because those are literally code and alignment carries meaning there. */
+.detail .sentence, .detail .at, .trace .leg .text, .testlist .opt .doc { font-family: var(--p-prose); }
+.detail .where, .trace .name, .testlist .opt .nm { font-family: var(--p-mono); }
 .detail .stack {
-  font-size: .72rem; color: var(--dim); margin-bottom: .6rem;
-  padding-left: .7rem; border-left: 2px solid var(--context);
+  font-size: .72rem; color: var(--p-dim); margin-bottom: .6rem;
+  padding-left: .7rem; border-left: 2px solid var(--p-ctx);
 }
-.detail .stack b { color: var(--fg); font-weight: 500; }
+.detail .stack b { color: var(--p-fg); font-weight: 500; }
 
 /* Where the walk is standing, said in words. The highlighted line says it too,
    but only if you notice it — and when no call site was recorded there is no
    line to notice, which is worth saying rather than leaving as an absence. */
-.detail .at { font-size: .74rem; color: var(--accent); margin-bottom: .5rem; overflow-wrap: anywhere; }
-.detail .at.unknown { color: var(--dim); }
-.detail .stack .sep { color: var(--context); }
+.detail .at { font-size: .74rem; color: var(--p-good); margin-bottom: .5rem; overflow-wrap: anywhere; }
+.detail .at.unknown { color: var(--p-dim); }
+.detail .stack .sep { color: var(--p-ctx); }
 
 /* Both of these sit outside the flexible middle, so either could push the
    journey out of the viewport on its own. Capped instead. */
 .output {
   margin: 0 1rem 1rem; padding: .7rem; font-size: .78rem;
   max-height: 22vh; overflow: auto;
-  border-left: 2px solid var(--unwind); background: #14181b;
+  border-left: 2px solid var(--p-bad); background: var(--p-panel);
   white-space: pre-wrap; overflow-x: auto;
 }
 
-#fixture { padding: .6rem 1rem 1rem; border-top: 1px solid var(--line); max-height: 45vh; overflow: auto; }
+#fixture { padding: .6rem 1rem 1rem; border-top: 1px solid var(--p-line); max-height: 45vh; overflow: auto; }
 #fixture > summary {
   cursor: pointer; font-size: .75rem; text-transform: uppercase;
-  letter-spacing: .1em; color: var(--risk); list-style: none;
+  letter-spacing: .1em; color: var(--p-warm); list-style: none;
 }
-#fixture > summary .qualifier { text-transform: none; letter-spacing: 0; color: var(--dim); }
+#fixture > summary .qualifier { text-transform: none; letter-spacing: 0; color: var(--p-dim); }
 #fixture textarea {
   width: 100%; min-height: 6rem; max-height: 28vh; margin-top: .6rem; padding: .6rem;
-  background: #101316; color: var(--fg); border: 1px solid var(--line);
+  background: var(--p-panel); color: var(--p-fg); border: 1px solid var(--p-line);
   border-radius: 3px; font: inherit; font-size: .8rem; resize: vertical;
 }
 #fixture .row { display: flex; align-items: center; gap: .8rem; margin-top: .5rem; }
+
+/* Softer edges on the two panes and the fixture editor, so the page reads as
+   surfaces rather than as a grid of boxes. */
+.detail { background: linear-gradient(180deg, rgba(255,255,255,.014), transparent 40%); }
+.output { border-radius: var(--p-r); border-left: 3px solid var(--p-bad); }
+#fixture textarea { border-radius: var(--p-r); font-family: var(--p-mono); }
+.detail .src { border-radius: var(--p-r); }
+.detail .values .val.long.folded { position: relative; }
+
+/* Identifiers you can point at.
+   "Where does n come from" and "where does cutoff go" are questions about a
+   name, so a name is a thing you click rather than text you read. Everything
+   the answer says is recorded or parsed — the values are what the run passed,
+   the call target is the edge the extractor resolved — and where it cannot tell,
+   it says so. A navigator that is sometimes wrong is worse than one that is
+   sometimes silent. */
+.detail .src .id {
+  background: none; border: 0; padding: 0; margin: 0; font: inherit;
+  color: inherit; cursor: pointer; border-radius: 2px;
+}
+.detail .src .id:hover {
+  background: rgba(143, 188, 216, .16); color: var(--p-code);
+}
+.detail .src .id.lit {
+  background: rgba(217, 162, 106, .2); color: var(--p-warm);
+  box-shadow: inset 0 -1px 0 var(--p-warm);
+}
+
+.inspect {
+  margin: .5rem 0 .55rem; padding: .55rem .7rem;
+  background: var(--p-raised); border: 1px solid var(--p-line);
+  border-radius: var(--p-r); font-size: .74rem;
+}
+.inspect .ihead { display: flex; align-items: baseline; gap: .5rem; margin-bottom: .35rem; }
+.inspect .ihead b { flex: 1 1 auto; font-family: var(--p-mono); color: var(--p-warm); overflow-wrap: anywhere; }
+.inspect .x {
+  flex: none; background: none; border: 0; color: var(--p-faint);
+  font-size: .9rem; line-height: 1; padding: 0 .2rem; cursor: pointer;
+}
+.inspect .x:hover { color: var(--p-fg); }
+
+.inspect .ifact { color: var(--p-dim); margin-bottom: .25rem; }
+.inspect .iquote {
+  color: var(--p-fg); font-style: italic; margin: .3rem 0;
+  padding-left: .6rem; border-left: 2px solid var(--p-ctx);
+}
+.inspect .inote { color: var(--p-faint); font-size: .68rem; margin-top: .35rem; }
+
+.inspect .ival { display: flex; gap: .5rem; margin-top: .25rem; align-items: baseline; }
+.inspect .ival .k { flex: none; min-width: 4.6rem; color: var(--p-dim); font-size: .68rem; }
+.inspect .ival .v {
+  flex: 1 1 auto; min-width: 0; font-family: var(--p-mono); font-size: .7rem;
+  color: var(--p-fg); overflow-wrap: anywhere;
+}
+.inspect .ival.after .k, .inspect .ival.after .v { color: var(--p-warm); }
+
+.inspect .igo {
+  margin-top: .45rem; font-size: .72rem; padding: .22rem .6rem;
+  border-color: var(--p-code); color: var(--p-code);
+}
+.inspect .igo:hover { background: rgba(143, 188, 216, .12); }
+
+.inspect .ilines { margin-top: .4rem; color: var(--p-dim); font-size: .7rem; }
+.inspect .lnk {
+  background: none; border: 0; padding: 0 .1rem; font: inherit; font-size: .7rem;
+  color: var(--p-code); cursor: pointer; font-variant-numeric: tabular-nums;
+}
+.inspect .lnk:hover { text-decoration: underline; }
+
+.inspect .ibody { min-height: 1rem; }
+
+/* Select some code, ask about it.
+   What makes this worth more than pasting into a chat window is what travels
+   with the question: which frame it is, what the run passed in, what came back,
+   and what changed. A model given only the text can say what the code would do;
+   given the evidence it can say what it did. */
+/* A tooltip on the selection, not a button in the layout.
+   A button has to live somewhere, and wherever that is, it is not where you are
+   looking — you have just selected something and your eyes are on it. This
+   floats over what you selected and goes away when you stop pointing at it,
+   which is how every other selection affordance on the machine behaves. */
+.tip {
+  position: fixed; z-index: 40; transform: translate(-50%, -100%);
+  padding: .26rem .6rem; border-radius: var(--p-r);
+  background: var(--p-raised); border: 1px solid var(--p-line);
+  box-shadow: 0 8px 22px var(--p-shadow);
+  font-family: var(--p-prose); font-size: .72rem; color: var(--p-fg);
+  cursor: pointer; user-select: none; white-space: nowrap;
+  opacity: 0; transition: opacity .12s ease, transform .12s ease;
+  pointer-events: auto;
+}
+.tip.on { opacity: 1; transform: translate(-50%, calc(-100% - 6px)); }
+.tip:hover { border-color: var(--p-warm); color: var(--p-warm); }
+.tip .k { color: var(--p-faint); margin-left: .4rem; font-size: .66rem; }
+.tip .lines { color: var(--p-faint); }
+/* The little stem that ties it to the text it is about. */
+.tip::after {
+  content: ''; position: absolute; left: 50%; bottom: -5px; width: 8px; height: 8px;
+  margin-left: -4px; transform: rotate(45deg);
+  background: var(--p-raised); border-right: 1px solid var(--p-line);
+  border-bottom: 1px solid var(--p-line);
+}
+.tip.busy { cursor: default; color: var(--p-dim); }
+
+.explained {
+  /* Bounded and scrollable. An answer is meant to be read where you are looking,
+     and one that pushes the code out of the window costs you the thing you were
+     asking about. */
+  max-height: 46vh; overflow-y: auto;
+  margin: 0 0 .6rem; padding: .6rem .75rem;
+  background: var(--p-raised); border: 1px solid var(--p-line);
+  border-left: 3px solid var(--p-warm); border-radius: var(--p-r);
+  font-size: .78rem; line-height: 1.55; overflow-wrap: anywhere;
+}
+.explained .who {
+  font-size: .66rem; color: var(--p-faint); margin-bottom: .4rem;
+  display: flex; gap: .5rem; align-items: baseline;
+}
+.explained .who .x { margin-left: auto; background: none; border: 0; color: var(--p-faint); cursor: pointer; padding: 0 .2rem; }
+.explained .who .x:hover { color: var(--p-fg); }
+.explained p { margin: 0 0 .5rem; }
+.explained p:last-child { margin-bottom: 0; }
+.explained code {
+  font-family: var(--p-mono); font-size: .72rem;
+  background: rgba(255, 255, 255, .05); padding: .05rem .25rem; border-radius: 3px;
+}
+.explained .thinking { color: var(--p-dim); font-style: italic; }
+.explained .failed { color: var(--p-bad); }
+
+/* The answer has to find the reader. The pane scrolls on its own and this panel
+   sits above the source, so an answer can land off-screen — which reads exactly
+   like nothing having happened, which is what it did read like. */
+@keyframes explained-in {
+  from { box-shadow: 0 0 0 2px rgba(217, 162, 106, .5); }
+  to   { box-shadow: 0 0 0 2px rgba(217, 162, 106, 0); }
+}
+.explained.flash { animation: explained-in 1.1s ease-out; }
+
+.explained .enote { color: var(--p-faint); font-size: .68rem; margin: .35rem 0; }
+.explained .erow { display: flex; align-items: center; gap: .5rem; margin-top: .5rem; flex-wrap: wrap; }
+.explained .erow button { font-size: .7rem; padding: .22rem .6rem; }
+
+/* Pick the pane your agent is in, rather than being told to edit a file. */
+.explained .panes { display: flex; flex-direction: column; gap: .25rem; margin: .3rem 0 .2rem; }
+.explained .pane {
+  text-align: left; font-size: .72rem; padding: .28rem .55rem;
+  border-color: var(--p-line); color: var(--p-dim);
+}
+.explained .pane b { color: var(--p-code); font-family: var(--p-mono); }
+.explained .pane:hover { border-color: var(--p-warm); color: var(--p-fg); }
+
+.explained .pane.agent b { color: var(--p-good); }
+.explained .pane .notagent { color: var(--p-faint); font-style: italic; }
+.explained .warn {
+  margin-top: .5rem; padding: .45rem .6rem; border-radius: var(--p-r);
+  background: rgba(217, 162, 106, .1); border: 1px solid rgba(217, 162, 106, .35);
+  color: var(--p-warm); font-size: .72rem;
+  display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+}
+.explained .warn button { font-size: .68rem; padding: .18rem .5rem; margin-left: auto; }
+
+/* One of many. A test that calls something twelve times records twelve trees;
+   drawing one and saying nothing reads as "this is what happened". */
+.why .chains { color: var(--p-warm); }
+
+/* The line you paste to an agent plum cannot reach. Shown as well as copied:
+   a copy button that may or may not have worked is not evidence. */
+.explained .instruction {
+  margin-top: .4rem; padding: .45rem .6rem; border-radius: var(--p-r);
+  background: var(--p-panel); border: 1px solid var(--p-line);
+  font-family: var(--p-mono); font-size: .68rem; color: var(--p-dim);
+  user-select: all; overflow-wrap: anywhere;
+}
+.explained .erow button.primary { border-color: var(--p-warm); color: var(--p-warm); }
+.explained .erow button.primary:hover { background: rgba(217, 162, 106, .12); }
+
+/* Markdown in an answer. Small enough to read at a glance, structured enough
+   that a bulleted list of what the run showed reads as a list. */
+.explained .mh {
+  font-weight: 600; color: var(--p-fg); margin: .6rem 0 .3rem;
+  font-size: .78rem; letter-spacing: .01em;
+}
+.explained .mh:first-child { margin-top: 0; }
+.explained .mh1, .explained .mh2 { color: var(--p-warm); font-size: .74rem; text-transform: uppercase; letter-spacing: .08em; }
+.explained ul { margin: .3rem 0 .5rem; padding-left: 1.1rem; }
+.explained li { margin-bottom: .2rem; line-height: 1.5; }
+.explained li.sub { list-style: none; margin-left: .4rem; color: var(--p-dim); }
+.explained li.sub::before { content: '\21b3'; margin-right: .35rem; color: var(--p-faint); }
+.explained b { color: var(--p-fg); font-weight: 600; }
+.explained em { color: var(--p-dim); font-style: italic; }
+.explained pre {
+  margin: .4rem 0; padding: .5rem .6rem; border-radius: var(--p-r);
+  background: var(--p-panel); border: 1px solid var(--p-line);
+  font-family: var(--p-mono); font-size: .7rem; overflow-x: auto; white-space: pre;
+}
+/* The one line that says what could not be settled, so it does not read as
+   another bullet. */
+.explained p:last-child { margin-bottom: 0; }

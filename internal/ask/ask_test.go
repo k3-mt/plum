@@ -180,3 +180,34 @@ func TestFirstParagraphHandlesPlainReplies(t *testing.T) {
 		}
 	}
 }
+
+// A shell is not an agent, and the difference is invisible from send-keys:
+// sending to a shell succeeds, the shell tries to run the instruction as a
+// command, and prints an error into scrollback nobody is watching. The question
+// looks asked and is in fact lost.
+func TestAPaneIsOnlyAnAgentWhenSomethingThereCanAnswer(t *testing.T) {
+	cases := []struct {
+		name      string
+		processes []string
+		command   string
+		want      bool
+	}{
+		{"claude code, which renames itself", []string{"/usr/local/bin/node /opt/claude/cli.js"}, "node", true},
+		{"claude by name", []string{"claude --resume"}, "2.1.236", true},
+		{"aider", []string{"python -m aider"}, "python", true},
+		{"a plain shell", []string{"-zsh"}, "zsh", false},
+		{"a shell running vim", []string{"-zsh", "vim main.go"}, "vim", false},
+		{"nothing at all", nil, "zsh", false},
+	}
+	for _, c := range cases {
+		p := Pane{Processes: c.processes, Command: c.command}
+		if _, got := p.AgentName(); got != c.want {
+			t.Errorf("%s: AgentName ok = %v, want %v", c.name, got, c.want)
+		}
+		// Agent() stays a display string either way, and never claims to be
+		// something it recognised when it did not.
+		if _, ok := p.AgentName(); !ok && p.Agent() != c.command {
+			t.Errorf("%s: Agent() = %q, want the raw command when nothing was recognised", c.name, p.Agent())
+		}
+	}
+}

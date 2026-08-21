@@ -19,13 +19,15 @@ import (
 	"os"
 	"reflect"
 	"runtime"
+	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
-// KV is one recorded argument. Values are formatted with %v and truncated,
+// KV is one recorded argument. Values are rendered for a person and truncated,
 // because a trace is evidence, not a heap dump.
 type KV struct {
 	K string
@@ -41,6 +43,7 @@ type event struct {
 	TSNanos       int64             ` + "`json:\"ts_ns\"`" + `
 	Depth         int               ` + "`json:\"depth\"`" + `
 	Args          map[string]string ` + "`json:\"args,omitempty\"`" + `
+	ArgsOut       map[string]string ` + "`json:\"args_out,omitempty\"`" + `
 	Result        string            ` + "`json:\"result,omitempty\"`" + `
 	Exception     string            ` + "`json:\"exception,omitempty\"`" + `
 	TestID        string            ` + "`json:\"test_id,omitempty\"`" + `
@@ -113,10 +116,206 @@ func goid() int64 {
 }
 
 func truncate(s string) string {
-	if len(s) > 200 {
-		return s[:200] + "..."
+	if len(s) > 240 {
+		return s[:240] + "..."
 	}
 	return s
+}
+
+// render formats a recorded value for someone reading evidence, rather than for
+// a debugger reading memory.
+//
+// This used %v, which is written for the machine's convenience: it prints
+// struct fields positionally so you cannot tell which is which, prints pointers
+// as addresses that mean nothing once the process has exited, and spends thirty
+// characters on a zero time.Time to say "unset". A single argument came out as
+// an unreadable run of braces, and a value nobody can read is the same as
+// having recorded nothing.
+//
+// So: fields are named, pointers are followed rather than printed, zero fields
+// are left out because their absence is the information, and long collections
+// say how many they are instead of listing them.
+func render(v any) string {
+	var b strings.Builder
+	writeValue(&b, reflect.ValueOf(v), 0)
+	return b.String()
+}
+
+const (
+	renderDepth  = 3  // past this, say the shape rather than the contents
+	renderItems  = 4  // elements of a slice or map before counting the rest
+	renderString = 72 // characters of a string before the middle is dropped
+)
+
+func writeValue(b *strings.Builder, rv reflect.Value, depth int) {
+	if !rv.IsValid() {
+		b.WriteString("nil")
+		return
+	}
+	// A type that knows how to print itself almost always prints itself better
+	// than reflection can — but not at depth, where its output is what made the
+	// line unreadable in the first place.
+	if depth > 0 && rv.CanInterface() {
+		if s, ok := rv.Interface().(fmt.Stringer); ok {
+			b.WriteString(clip(s.String()))
+			return
+		}
+		if e, ok := rv.Interface().(error); ok {
+			b.WriteString(clip(e.Error()))
+			return
+		}
+	}
+	switch rv.Kind() {
+	case reflect.Pointer, reflect.Interface:
+		if rv.IsNil() {
+			b.WriteString("nil")
+			return
+		}
+		// The address is noise; what it points at is the evidence.
+		writeValue(b, rv.Elem(), depth)
+	case reflect.String:
+		b.WriteString(strconv.Quote(clip(rv.String())))
+	case reflect.Struct:
+		writeStruct(b, rv, depth)
+	case reflect.Slice, reflect.Array:
+		writeList(b, rv, depth)
+	case reflect.Map:
+		writeMap(b, rv, depth)
+	case reflect.Func, reflect.Chan, reflect.UnsafePointer:
+		// Nothing about the value is legible, but whether it was set is.
+		if rv.IsNil() {
+			b.WriteString("nil")
+			return
+		}
+		b.WriteString(rv.Type().String())
+	default:
+		if rv.CanInterface() {
+			fmt.Fprintf(b, "%v", rv.Interface())
+			return
+		}
+		fmt.Fprintf(b, "%v", rv)
+	}
+}
+
+func writeStruct(b *strings.Builder, rv reflect.Value, depth int) {
+	t := rv.Type()
+	if depth >= renderDepth {
+		b.WriteString(shortType(t) + "{...}")
+		return
+	}
+	b.WriteString(shortType(t))
+	b.WriteString("{")
+	shown := 0
+	for i := 0; i < rv.NumField(); i++ {
+		fv := rv.Field(i)
+		// A zero field is the absence of information, and printing it at full
+		// width is how a struct with three set fields fills a line.
+		if !fv.IsValid() || fv.IsZero() {
+			continue
+		}
+		if shown >= renderItems {
+			b.WriteString(" ...")
+			break
+		}
+		if shown > 0 {
+			b.WriteString(" ")
+		}
+		b.WriteString(t.Field(i).Name)
+		b.WriteString(":")
+		writeValue(b, fv, depth+1)
+		shown++
+	}
+	b.WriteString("}")
+}
+
+func writeList(b *strings.Builder, rv reflect.Value, depth int) {
+	if rv.Kind() == reflect.Slice && rv.IsNil() {
+		b.WriteString("nil")
+		return
+	}
+	n := rv.Len()
+	// Bytes are text far more often than they are numbers.
+	if rv.Type().Elem().Kind() == reflect.Uint8 && rv.Kind() == reflect.Slice && rv.CanInterface() {
+		b.WriteString(strconv.Quote(clip(string(rv.Bytes()))))
+		return
+	}
+	if n == 0 {
+		b.WriteString("[]")
+		return
+	}
+	if depth >= renderDepth {
+		fmt.Fprintf(b, "[%d]", n)
+		return
+	}
+	b.WriteString("[")
+	for i := 0; i < n && i < renderItems; i++ {
+		if i > 0 {
+			b.WriteString(" ")
+		}
+		writeValue(b, rv.Index(i), depth+1)
+	}
+	if n > renderItems {
+		fmt.Fprintf(b, " ...+%d", n-renderItems)
+	}
+	b.WriteString("]")
+}
+
+func writeMap(b *strings.Builder, rv reflect.Value, depth int) {
+	if rv.IsNil() {
+		b.WriteString("nil")
+		return
+	}
+	n := rv.Len()
+	if n == 0 {
+		b.WriteString("{}")
+		return
+	}
+	if depth >= renderDepth {
+		fmt.Fprintf(b, "{%d}", n)
+		return
+	}
+	// Sorted, so the same call twice reads the same twice. Map order is random
+	// in Go, and a value that shuffles between runs cannot be compared.
+	keys := rv.MapKeys()
+	sort.Slice(keys, func(i, j int) bool {
+		return fmt.Sprint(keys[i]) < fmt.Sprint(keys[j])
+	})
+	b.WriteString("{")
+	for i, k := range keys {
+		if i >= renderItems {
+			fmt.Fprintf(b, " ...+%d", n-renderItems)
+			break
+		}
+		if i > 0 {
+			b.WriteString(" ")
+		}
+		fmt.Fprintf(b, "%v:", k)
+		writeValue(b, rv.MapIndex(k), depth+1)
+	}
+	b.WriteString("}")
+}
+
+// clip drops the middle of a long string rather than the end. These are mostly
+// paths and identifiers, where both ends carry meaning and the middle is the
+// part you can infer.
+func clip(s string) string {
+	if len(s) <= renderString {
+		return s
+	}
+	head := renderString/2 - 1
+	tail := renderString - head - 3
+	return s[:head] + "..." + s[len(s)-tail:]
+}
+
+// shortType drops the package qualifier. The file is already named by the
+// symbol this event belongs to, so "bundle.Bundle" repeated down every line is
+// width spent on something the reader already knows.
+func shortType(t reflect.Type) string {
+	name := t.Name()
+	if name == "" {
+		return ""
+	}
+	return name
 }
 
 // EnterTest marks the goroutine as running a named test for as long as the test
@@ -149,7 +348,7 @@ func EnterContext(symbol string) func(...any) {
 	if enc == nil {
 		return func(...any) {}
 	}
-	return enter(symbol, nil)
+	return enter(symbol, nil, nil)
 }
 
 // Enter records a call and returns the deferred half, which records the return
@@ -161,12 +360,63 @@ func Enter(symbol string, args ...KV) func(...any) {
 	}
 	m := map[string]string{}
 	for _, kv := range args {
-		m[kv.K] = truncate(fmt.Sprintf("%v", kv.V))
+		m[kv.K] = truncate(render(kv.V))
 	}
-	return enter(symbol, m)
+	return enter(symbol, m, args)
 }
 
-func enter(symbol string, m map[string]string) func(...any) {
+// mutable reports whether a value could come back different from how it went in.
+//
+// Arguments are recorded on the way in, which says what a function was given
+// and nothing about what it did to it. A function that fills a slice, populates
+// a map or writes through a pointer changes its caller's world, and that change
+// was invisible: the value the caller passed and the value it holds afterwards
+// are different things, and only the first was ever recorded.
+//
+// Re-reading every argument on the way out would be waste, because most cannot
+// have changed. A copy is a copy — an int or a string that went in one way
+// cannot come back another, and re-rendering it only to compare it with itself
+// costs time and finds nothing. These kinds are the ones that carry a reference
+// to something the callee can reach.
+func mutable(v any) bool {
+	rv := reflect.ValueOf(v)
+	if !rv.IsValid() {
+		return false
+	}
+	switch rv.Kind() {
+	case reflect.Pointer, reflect.Slice, reflect.Map, reflect.Interface,
+		reflect.Chan, reflect.Func, reflect.UnsafePointer:
+		return true
+	case reflect.Struct, reflect.Array:
+		// A struct is a copy, but a struct holding a pointer is a copy of a
+		// handle on something shared, and writing through it is exactly how
+		// most of this happens.
+		return holdsReference(rv.Type(), 0)
+	}
+	return false
+}
+
+func holdsReference(t reflect.Type, depth int) bool {
+	if depth > 3 {
+		return true // cannot rule it out; assume it can change rather than miss it
+	}
+	switch t.Kind() {
+	case reflect.Pointer, reflect.Slice, reflect.Map, reflect.Interface,
+		reflect.Chan, reflect.Func, reflect.UnsafePointer:
+		return true
+	case reflect.Array:
+		return holdsReference(t.Elem(), depth+1)
+	case reflect.Struct:
+		for i := 0; i < t.NumField(); i++ {
+			if holdsReference(t.Field(i).Type, depth+1) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func enter(symbol string, m map[string]string, args []KV) func(...any) {
 	gid := goid()
 	id := strconv.FormatInt(gid, 10) + "-" + strconv.FormatInt(counter.Add(1), 10)
 
@@ -191,7 +441,7 @@ func enter(symbol string, m map[string]string) func(...any) {
 
 		if r := recover(); r != nil {
 			emit(event{Kind: "raise", Symbol: symbol, InvocationID: id, ParentID: parent, Depth: depth,
-				Exception: truncate(fmt.Sprintf("%v", r))})
+				Exception: truncate(render(r))})
 			panic(r) // observe, do not swallow
 		}
 		res := ""
@@ -199,9 +449,27 @@ func enter(symbol string, m map[string]string) func(...any) {
 			if i > 0 {
 				res += ", "
 			}
-			res += fmt.Sprintf("%v", deref(r))
+			res += render(deref(r))
 		}
-		emit(event{Kind: "return", Symbol: symbol, InvocationID: id, ParentID: parent, Depth: depth, Result: truncate(res)})
+		// What the caller holds now, where that differs from what it passed.
+		// Only the differences: an argument that came back the same is the
+		// normal case and saying so on every line would bury the ones that did.
+		var out map[string]string
+		for _, kv := range args {
+			if !mutable(kv.V) {
+				continue
+			}
+			after := truncate(render(kv.V))
+			if after == m[kv.K] {
+				continue
+			}
+			if out == nil {
+				out = map[string]string{}
+			}
+			out[kv.K] = after
+		}
+		emit(event{Kind: "return", Symbol: symbol, InvocationID: id, ParentID: parent, Depth: depth,
+			Result: truncate(res), ArgsOut: out})
 	}
 }
 

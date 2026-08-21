@@ -77,3 +77,27 @@ func (r *Registry) Language(path string) string {
 	}
 	return ""
 }
+
+// Resolver is an adapter that can say what a name means inside a declaration.
+//
+// Optional, and deliberately so: it needs a real parse with scope, which the Go
+// adapter gets free from go/ast and which a language reached through a
+// line-based extractor cannot honestly provide. An adapter that cannot do this
+// should not implement it — the window then says the language is not supported
+// for this, which is true, rather than showing a guess that reads like a fact.
+type Resolver interface {
+	// ResolveIdentifier answers for one name inside the declaration containing
+	// line. A name that is not found is not an error: it returns a Resolution
+	// with Kind "unknown" and a Note saying so.
+	ResolveIdentifier(path string, src []byte, line int, name string) (bundle.Resolution, error)
+}
+
+// ResolverFor returns the resolver for a path, or nil when the language has none.
+func (r *Registry) ResolverFor(path string) Resolver {
+	a := r.For(path)
+	if a == nil {
+		return nil
+	}
+	res, _ := a.(Resolver)
+	return res
+}

@@ -1,3 +1,6 @@
 sessions/*/traces/
 current-session.json
+auto-state.json
 journal/
+ask/
+patches/

@@ -68,8 +68,18 @@ func Mint(root, test, command, fixture string) (*Probe, error) {
 	// A four-character handle is short enough to say out loud and has room for
 	// far more probes than a repository will ever hold — but "far more" is not
 	// "all", so a collision is detected rather than assumed away.
-	if existing, err := load(root, p.ID); err == nil && existing.Test != test {
-		p.ID = hex.EncodeToString(sha256Sum(test))[:8]
+	if existing, err := load(root, p.ID); err == nil {
+		if existing.Test != test {
+			p.ID = hex.EncodeToString(sha256Sum(test))[:8]
+		} else {
+			// Same probe, unchanged: keep the file exactly as it is. Probes are
+			// committed, and re-selecting a test in the window should not show
+			// up as a diff on a timestamp nobody asked to change.
+			p.Created = existing.Created
+			if existing.Command == p.Command && existing.Fixture == p.Fixture {
+				return existing, nil
+			}
+		}
 	}
 	return p, p.save(root)
 }

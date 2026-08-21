@@ -617,10 +617,14 @@ func cmdExplore(ctx context.Context, env *Env, args []string) error {
 // questions should go. Both windows need it and neither should own it: an
 // explore and a watch differ in how long they live, not in who answers.
 func routeAsk(ctx context.Context, env *Env, opts *server.Config) {
+	// The question store is a directory, and needs nothing running. Wiring it
+	// only when tmux was available meant an agent in an IDE had nowhere to leave
+	// a question — the one setup where leaving it somewhere is the whole plan.
+	opts.Ask = ask.NewStore(env.Cfg.Root)
+
 	switch env.Cfg.Ask.Route {
 	case "tmux":
 		if ask.Available(ctx) {
-			opts.Ask = ask.NewStore(env.Cfg.Root)
 			opts.Bridge = &ask.Tmux{Target: env.Cfg.Ask.TmuxTarget}
 			target := env.Cfg.Ask.TmuxTarget
 			if target == "" {
@@ -639,6 +643,15 @@ func routeAsk(ctx context.Context, env *Env, opts *server.Config) {
 			opts.Provider = ap
 		} else {
 			fmt.Println("ask route is \"api\" but:", err)
+		}
+	}
+	// Explaining a selection needs a model and nothing else — not the tmux
+	// bridge, not a route setting. Requiring a config change as well as a key
+	// is a step somebody has to be told about, and a button that is dark for a
+	// reason nobody mentioned reads as broken.
+	if opts.Provider == nil {
+		if ap, err := synth.NewAnthropic(env.Cfg.Synthesis.Model); err == nil {
+			opts.Provider = ap
 		}
 	}
 }

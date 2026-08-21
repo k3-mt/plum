@@ -20,6 +20,14 @@ type Provider interface {
 	Complete(ctx context.Context, system, user string) (string, error)
 }
 
+// Thinker is a provider that can reason before answering. Optional, because not
+// every provider can, and a caller that wants reasoning should be able to ask
+// for it without knowing which concrete provider it is holding.
+type Thinker interface {
+	Provider
+	Thinking() Provider
+}
+
 type Result struct {
 	Markdown string
 	Claims   []claims.Claim

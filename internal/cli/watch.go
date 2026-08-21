@@ -87,9 +87,23 @@ func cmdWatch(ctx context.Context, env *Env, args []string) error {
 		ProfileDir: profile,
 		Met:        met.Load(store.StateDir(env.Cfg.Root)),
 	}
+	// The window can point itself at any test in the repository, so it gets the
+	// list and the means to switch whether or not a handle was passed. Opening
+	// it bare and choosing from the list is the shorter path to the same place.
+	opts.Discover = func() ([]probe.Test, error) {
+		return probe.Discover(env.Cfg.Root, env.Reg, env.Cfg.Trace.TestCommand)
+	}
+	opts.Mint = func(test string) (*probe.Probe, error) {
+		cmd, ok := probe.ScopeCommand(env.Cfg.Trace.TestCommand, test, packageOf(env, test))
+		if !ok {
+			return nil, fmt.Errorf("cannot narrow %q to %s alone — mint a probe with -cmd",
+				env.Cfg.Trace.TestCommand, test)
+		}
+		return probe.Mint(env.Cfg.Root, test, cmd, "")
+	}
+	opts.RunProbe = probeRunner(env, b, id)
 	if watched != nil {
 		opts.Probe = watched
-		opts.RunProbe = probeRunner(env, b, id)
 		// Following would swap the session under a probe mid-run, and the probe
 		// is the thing being watched. It stays pinned to what it was opened on.
 		opts.Follow = false

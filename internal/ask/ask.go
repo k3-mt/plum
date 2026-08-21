@@ -164,8 +164,13 @@ func (s *Store) Pending() []Request {
 // pane. It sends a one-line instruction pointing at the prompt file rather than
 // pasting the context into the prompt: the context is large, and a file is
 // something the agent can re-read.
+// Tmux sends a question to an agent running in a pane.
 type Tmux struct {
 	Target string // "session:window.pane", or "" to auto-detect
+	// Force sends to Target even when nothing recognisable as an agent is
+	// running there. Offered rather than forbidden: an agent plum has not heard
+	// of is a real thing, and the reader is better placed to know than the list.
+	Force bool
 }
 
 func (t *Tmux) Name() string { return "tmux" }
@@ -252,16 +257,34 @@ func (t procTree) descendants(pid string) []string {
 	return out
 }
 
+// agents are the sessions that can read a brief and write an answer.
+var agents = []string{"claude", "aider", "codex", "cursor-agent"}
+
 // Agent names the agent recognised in this pane, for display. Falls back to the
 // tmux-reported command, which is better than nothing but often wrong.
 func (p Pane) Agent() string {
-	hay := strings.ToLower(strings.Join(p.Processes, " "))
-	for _, name := range []string{"claude", "aider", "codex", "cursor-agent"} {
-		if strings.Contains(hay, name) {
-			return name
-		}
+	if name, ok := p.AgentName(); ok {
+		return name
 	}
 	return p.Command
+}
+
+// AgentName separates "an agent is running here" from "something is running
+// here", which Agent alone cannot express.
+//
+// Sending a brief to a pane that is not an agent looks like success — send-keys
+// worked — and then the shell tries to execute the instruction as a command and
+// prints an error into its own scrollback. Nobody is watching that pane, so the
+// question simply never gets answered and the window waits forever. Telling the
+// two apart is what stops plum reporting that as a question asked.
+func (p Pane) AgentName() (string, bool) {
+	hay := strings.ToLower(strings.Join(p.Processes, " "))
+	for _, name := range agents {
+		if strings.Contains(hay, name) {
+			return name, true
+		}
+	}
+	return "", false
 }
 
 // FindPane picks the pane most likely to be a Claude Code session: one whose
@@ -316,6 +339,23 @@ func (t *Tmux) Send(ctx context.Context, repoRoot string, req Request) (string, 
 			return "", err
 		}
 		target = pane.Target
+	} else if !t.Force {
+		// An explicitly chosen pane still has to be able to answer. send-keys
+		// succeeds against a shell, which then tries to run the instruction as a
+		// command and prints an error nobody is watching — so the send looks
+		// like a question asked and is in fact a question lost.
+		if panes, err := Panes(ctx); err == nil {
+			for _, p := range panes {
+				if p.Target != target {
+					continue
+				}
+				if _, isAgent := p.AgentName(); !isAgent {
+					return target, fmt.Errorf(
+						"%s is running %s, not an agent — it cannot read a brief or write an answer",
+						target, p.Command)
+				}
+			}
+		}
 	}
 	instruction := fmt.Sprintf(
 		"Read %s and answer the question in it, writing your answer to %s — it comes from plum explore and is about %s.",

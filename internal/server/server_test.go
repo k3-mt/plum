@@ -25,12 +25,20 @@ import (
 	"github.com/k3-mt/plum/internal/trace"
 )
 
+// The fixture's source and its bundle have to agree. They did not: the bundle
+// described a call site the source did not contain, which only passed because
+// the server read the bundle's copy rather than the file. Now that it reads the
+// file, an inconsistent fixture is a test of an impossible state.
 const source = `package auth
 
 // Get returns the token.
 func Get(key string) string {
+	// the map is authoritative
+	_ = lookup(key)
 	return key + "!"
 }
+
+func lookup(k string) string { return k }
 
 func Helper(v string) string {
 	return v
@@ -87,19 +95,29 @@ func testServer(t *testing.T) (*Server, *explore.Store) {
 
 func TestAssetsAreEmbeddedAndSmall(t *testing.T) {
 	s, _ := testServer(t)
-	total := 0
-	for _, path := range []string{"/", "/app.css", "/landscape.js", "/flow.js", "/view.js",
-		"/probe.html", "/probe.css", "/probe.js"} {
-		rec := httptest.NewRecorder()
-		s.mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
-		if rec.Code != http.StatusOK {
-			t.Fatalf("%s = %d", path, rec.Code)
-		}
-		total += rec.Body.Len()
+	// Per page, not summed across every page in the binary. The budget is about
+	// what a browser has to fetch to show you something, and nobody loads both
+	// of these at once; adding them together would make each page's allowance
+	// shrink every time another page was added, which is the wrong pressure.
+	pages := map[string][]string{
+		"session": {"/", "/app.css", "/code.js", "/view.js", "/flow.js", "/landscape.js"},
+		"probe":   {"/probe.html", "/probe.css", "/code.js", "/probe.js"},
 	}
-	// No framework, no build step: the whole page must stay tiny (spec §10.5).
-	if total > 100*1024 {
-		t.Errorf("page weight %d bytes exceeds the 100KB budget", total)
+	for name, paths := range pages {
+		total := 0
+		for _, path := range paths {
+			rec := httptest.NewRecorder()
+			s.mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("%s: %s = %d", name, path, rec.Code)
+			}
+			total += rec.Body.Len()
+		}
+		// No framework, no build step: a page must stay tiny (spec §10.5).
+		if total > 100*1024 {
+			t.Errorf("%s page weight %d bytes exceeds the 100KB budget", name, total)
+		}
+		t.Logf("%s page: %d bytes", name, total)
 	}
 }
 
@@ -287,6 +305,8 @@ func checkScriptProgram(t *testing.T, names []string) {
 		"fetch": true, "setTimeout": true, "clearTimeout": true, "setInterval": true,
 		"clearInterval": true, "parseInt": true, "encodeURIComponent": true,
 		"decodeURIComponent": true, "alert": true, "isNaN": true,
+		"requestAnimationFrame": true, "cancelAnimationFrame": true,
+		"getComputedStyle": true, "structuredClone": true, "queueMicrotask": true,
 	}
 
 	seen := map[string]bool{}
@@ -932,5 +952,221 @@ func TestDriftBeyondTheBudgetIsReportedUnmeasuredRatherThanZero(t *testing.T) {
 	}
 	if d.Drifted != 0 {
 		t.Errorf("drifted = %d, want no number offered at all", d.Drifted)
+	}
+}
+
+// A page whose script does not parse is a blank page. The undefined-call check
+// above passed happily on a file with a duplicated function header that no
+// browser could load, because it looks for missing names and nothing else.
+//
+// There is no JavaScript parser in the standard library and this tool does not
+// take dependencies, so this is the cheap half of one: with comments, strings
+// and regex literals blanked out, every bracket must close, in order, before the
+// file ends. That will not catch every syntax error, but it catches the ones an
+// editing mistake actually produces — a lost brace, a doubled header, a
+// half-applied replacement.
+func TestEveryScriptHasBalancedBrackets(t *testing.T) {
+	for _, name := range []string{
+		"assets/code.js", "assets/view.js", "assets/flow.js",
+		"assets/landscape.js", "assets/probe.js",
+	} {
+		src, err := assets.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		js := stripCode(string(src))
+
+		var stack []rune
+		line := 1
+		closers := map[rune]rune{')': '(', ']': '[', '}': '{'}
+		for _, c := range js {
+			switch c {
+			case '\n':
+				line++
+			case '(', '[', '{':
+				stack = append(stack, c)
+			case ')', ']', '}':
+				if len(stack) == 0 {
+					t.Errorf("%s:%d: %q closes nothing", name, line, c)
+					return
+				}
+				if got := stack[len(stack)-1]; got != closers[c] {
+					t.Errorf("%s:%d: %q closes a %q", name, line, c, got)
+					return
+				}
+				stack = stack[:len(stack)-1]
+			}
+		}
+		if len(stack) > 0 {
+			t.Errorf("%s: %d bracket(s) never closed — the page would not load", name, len(stack))
+		}
+	}
+}
+
+// Code moves. A capture records where a symbol was; every edit since shifts it,
+// and slicing the current file with the recorded span shows whatever now
+// occupies those lines.
+//
+// Observed for real: handleSymbol was recorded at 485–503, server.go grew by a
+// hundred lines, and the pane showed buildContext under handleSymbol's name —
+// with handleSymbol's recorded arguments beside it. That is worse than showing
+// nothing, because it is confidently wrong about the one thing this window
+// promises: that you are looking at the code that ran.
+func TestSourceComesFromWhereTheSymbolIsNowNotWhereItWas(t *testing.T) {
+	s, _ := testServer(t)
+
+	// The bundle keeps the position from capture time.
+	if got := s.Bundle.Lookup("cache.go::Get").LineStart; got != 3 {
+		t.Fatalf("fixture drift: bundle says Get starts at %d", got)
+	}
+
+	// The file grows above it, exactly as a session of edits does.
+	grown := "package auth\n\n" +
+		"func Added() string { return \"a\" }\n\n" +
+		"func AlsoAdded() string { return \"b\" }\n\n" +
+		strings.TrimPrefix(source, "package auth\n\n")
+	if err := os.WriteFile(filepath.Join(s.Cfg.Root, "cache.go"), []byte(grown), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	pc := s.buildContext("cache.go::Get")
+	if !strings.Contains(pc.Source, `return key + "!"`) {
+		t.Errorf("source = %q\nwant the body of Get, wherever it now lives", pc.Source)
+	}
+	if strings.Contains(pc.Source, "func Added") || strings.Contains(pc.Source, "func AlsoAdded") {
+		t.Error("the pane is showing the code that moved into Get's recorded lines")
+	}
+	// The line the reader is told about has to be the line it is on now, or
+	// every click that carries a line — identifier resolution, the call-site
+	// highlight — resolves against the wrong function.
+	if pc.Symbol_.LineStart == 3 {
+		t.Error("the reported line is still the recorded one; it moved")
+	}
+	// And it still knows the session changed this symbol: where it is and what
+	// the session did with it are different questions.
+	if !pc.Changed {
+		t.Error("a symbol the bundle holds is still a changed symbol")
+	}
+}
+
+// Drift is worth saying out loud. Anything the capture recorded by line number
+// against a symbol that has since been edited — the risk markers above all — is
+// describing code that has moved.
+func TestAnEditedSymbolIsReportedAsDrifted(t *testing.T) {
+	s, _ := testServer(t)
+	// Pin the bundle to what is actually on disk. The fixture carries a stand-in
+	// fingerprint, so the starting point has to be agreement or every symbol
+	// reads as drifted before anything is touched.
+	cur, ok := s.currentSymbol("cache.go::Get")
+	if !ok {
+		t.Fatal("the fixture no longer parses")
+	}
+	s.Bundle.Symbols[0].Fingerprint = cur.Fingerprint
+
+	if s.buildContext("cache.go::Get").Drifted {
+		t.Fatal("nothing has been edited yet")
+	}
+	edited := strings.Replace(source, `return key + "!"`, `return key + "?"`, 1)
+	if edited == source {
+		t.Fatal("the fixture changed; this edit no longer alters the body")
+	}
+	if err := os.WriteFile(filepath.Join(s.Cfg.Root, "cache.go"), []byte(edited), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !s.buildContext("cache.go::Get").Drifted {
+		t.Error("the body changed since the capture and nothing said so")
+	}
+}
+
+// A finding is recorded as an absolute line in the file as it stood. Move the
+// function and that number points at a stranger — observed here as a
+// swallowed-error finding at "line 500" for a handler that had moved to 658,
+// putting the finding inside a different function entirely.
+func TestFindingsMoveWithTheCodeTheyWereFoundIn(t *testing.T) {
+	s, _ := testServer(t)
+	// The fixture's risk marker sits on line 5 of the file as captured.
+	if got := s.Bundle.RisksFor("cache.go::Get"); len(got) != 1 || got[0].Line != 5 {
+		t.Fatalf("fixture drift: risks = %+v", got)
+	}
+	// Pin the fingerprint so the body counts as unchanged; only its position moves.
+	cur, ok := s.currentSymbol("cache.go::Get")
+	if !ok {
+		t.Fatal("the fixture no longer parses")
+	}
+	s.Bundle.Symbols[0].Fingerprint = cur.Fingerprint
+
+	grown := "package auth\n\nfunc Added() string { return \"a\" }\n\n" +
+		strings.TrimPrefix(source, "package auth\n\n")
+	if err := os.WriteFile(filepath.Join(s.Cfg.Root, "cache.go"), []byte(grown), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	moved, ok := s.currentSymbol("cache.go::Get")
+	if !ok {
+		t.Fatal("Get vanished")
+	}
+	shift := moved.LineStart - 3 // the fixture captured Get at line 3
+	if shift == 0 {
+		t.Fatal("the edit did not move it")
+	}
+	risks := s.buildContext("cache.go::Get").Risks
+	if len(risks) != 1 || risks[0].Line != 5+shift {
+		t.Errorf("finding at line %d, want %d — it should move with the code",
+			risks[0].Line, 5+shift)
+	}
+}
+
+// When the body itself changed, no arithmetic can place the finding. Saying so
+// beats pointing confidently at a line that means nothing now.
+func TestAFindingInEditedCodeAdmitsItLostItsPlace(t *testing.T) {
+	s, _ := testServer(t)
+	cur, ok := s.currentSymbol("cache.go::Get")
+	if !ok {
+		t.Fatal("the fixture no longer parses")
+	}
+	s.Bundle.Symbols[0].Fingerprint = cur.Fingerprint
+
+	edited := strings.Replace(source, `return key + "!"`, `return key + "?"`, 1)
+	if err := os.WriteFile(filepath.Join(s.Cfg.Root, "cache.go"), []byte(edited), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	risks := s.buildContext("cache.go::Get").Risks
+	if len(risks) != 1 {
+		t.Fatalf("risks = %+v", risks)
+	}
+	if risks[0].Line != 0 {
+		t.Errorf("line = %d, want it withheld rather than guessed", risks[0].Line)
+	}
+	if !strings.Contains(risks[0].Note, "no longer applies") {
+		t.Errorf("note = %q, want it to say why the line is missing", risks[0].Note)
+	}
+}
+
+// The answer comes from a model, so it is untrusted text. The renderer must
+// build it from text nodes rather than assigning innerHTML, or a stray angle
+// bracket in an explanation becomes markup in the page.
+func TestTheAnswerRendererNeverAssignsMarkup(t *testing.T) {
+	src, err := assets.ReadFile("assets/probe.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	js := stripCode(string(src))
+	start := strings.Index(js, "function markdown(")
+	if start < 0 {
+		t.Fatal("the markdown renderer is gone; this test needs rewriting")
+	}
+	end := strings.Index(js[start:], "\nfunction lineLink(")
+	if end < 0 {
+		end = len(js) - start
+	}
+	body := js[start : start+end]
+
+	for _, banned := range []string{"innerHTML", "outerHTML", "insertAdjacentHTML", "document.write"} {
+		if strings.Contains(body, banned) {
+			t.Errorf("the renderer uses %s; model output would become markup", banned)
+		}
+	}
+	if !strings.Contains(body, "createTextNode") {
+		t.Error("the renderer should be building text nodes")
 	}
 }
