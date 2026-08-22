@@ -131,7 +131,7 @@
     <section class="setup" id="setup">
       <h2>Get it working on a repository</h2>
       <p>The easiest way is to ask your agent. Paste this into Claude Code or Codex, in the repository you want plum on:</p>
-      <pre class="cmd ask"><code id="ask-text">Install plum (go install github.com/k3-mt/plum/cmd/plum@latest, or curl -fsSL https://raw.githubusercontent.com/k3-mt/plum/main/install.sh | sh), then run plum init and plum hooks install in this repository, then plum agent install, then plum watch. Tell me what each one printed.</code><button class="copy" id="copy" type="button">copy</button></pre>
+      <pre class="cmd ask"><code id="ask-text">Install plum (go install github.com/k3-mt/plum/cmd/plum@latest, or curl -fsSL https://raw.githubusercontent.com/k3-mt/plum/main/install.sh | sh), then run plum init and plum hooks install in this repository, then plum agent install. Then confirm plum records real execution: trace the newest session and check it reports more than 0 events. If it reports 0 events on a Python repo, the test command is running the wrong interpreter — set test_command in .plum/config.toml to the python that has this project&#39;s dependencies (your virtualenv&#39;s), then re-trace. Finally run plum watch. Tell me what each step printed.</code><button class="copy" id="copy" type="button">copy</button></pre>
       <p class="small">Your agent will ask before it writes anything. plum needs git, and works on Go, Python, JavaScript, TypeScript and dbt.</p>
 
       <details class="byhand">

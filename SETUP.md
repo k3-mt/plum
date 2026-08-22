@@ -142,6 +142,25 @@ Then confirm it works before plum depends on it:
 **If the suite fails on a clean tree, stop.** plum traces a *passing* suite to
 learn what the code does. Report the failure; do not work around it.
 
+**Python: point `test_command` at the interpreter that has the dependencies.**
+`plum init` writes `python3 -m pytest`, and on many machines that `python3` is a
+system interpreter with pytest but *not* this project's packages — the suite
+then dies collecting `conftest.py` and records nothing. Use the project's
+environment instead. Because plum runs the suite in a **scratch copy** of the
+repo (a relative `.venv/` is not there), give the interpreter as a path that
+resolves from anywhere:
+
+```toml
+test_command = "/abs/path/to/repo/.venv/bin/python -m pytest"
+```
+
+`.venv/bin/python` is the right wrapper even though `readlink -f` on it points
+back at a system interpreter — the wrapper is what carries the venv's packages.
+Note `config.toml` is committed: an absolute path is machine-specific, so a team
+should prefer activating the venv before running plum and using
+`test_command = "python -m pytest"`, or agree on a shared path. Confirm the
+choice records events (below) before trusting it.
+
 ---
 
 ## Step 3 — commit the configuration
@@ -293,9 +312,14 @@ plum tests         # must list tests by name, each with the frames it reached
 Three outcomes, and only one is success:
 
 - **Named tests, each with frames.** Good — carry on.
-- **`no events: the changed symbols were never called by the test command`.**
+- **`no events: the suite ran but entered none of the changed symbols`.**
   Nothing in the suite exercises the change. That is a finding, not a failure.
   Report it to the user in those terms.
+- **`no events: the test command failed (...)`.** Different thing entirely: no
+  test ran, so nothing *could* be recorded — this is the command, not the code.
+  plum prints the tail of what it printed. The usual cause on a Python repo is
+  the wrong interpreter (see `test_command` above); fix that and re-trace before
+  reporting anything about the change.
 - **Everything under `(no test)`.** The run was recorded but the test runner is
   not one plum can label, so "which test reaches this change" cannot be
   answered. The landscape is still valid. Report this too — the evidence is
@@ -313,9 +337,11 @@ plum explain -brief
 
 If it narrates a function you did not touch, say so rather than passing it on.
 
-**If `plum trace` says "no events: the changed symbols were never called":**
-that is a finding, not a failure. Nothing in the suite exercises the change.
-Report it to the user in exactly those terms.
+**If `plum trace` records no events:** read which of the two it is. *"the suite
+ran but entered none of the changed symbols"* is a finding — nothing exercises
+the change; report it in those terms. *"the test command failed"* is not about
+the code at all — the command never ran a test; fix the command (on Python,
+usually the interpreter) and re-trace.
 
 ---
 
