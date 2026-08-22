@@ -186,17 +186,33 @@ func cmdTrace(ctx context.Context, env *Env, args []string) error {
 	for _, s := range res.Skipped {
 		fmt.Println("  skipped:", s)
 	}
-	if res.TestErr != nil {
-		fmt.Println("  the suite exited non-zero — recorded execution is still evidence")
-	}
 	if len(res.Events) == 0 {
 		fmt.Println()
-		fmt.Println("no events: the changed symbols were never called by the test command.")
-		fmt.Println("that is itself a finding — nothing in the suite exercises this session's code.")
+		if res.TestErr != nil {
+			// The command failed before it could record anything. Saying
+			// "nothing exercises your code" here is false — no test ran, so
+			// nothing could have. This is the command, and its output is what
+			// the reader needs, not a verdict about their code.
+			fmt.Printf("no events: the test command failed (%v).\n", res.TestErr)
+			fmt.Println("no test ran, so nothing was recorded — this is the command, not the code.")
+			if out := lastLines(res.TestOutput, 40); out != "" {
+				fmt.Println()
+				fmt.Println("what it printed (last 40 lines):")
+				fmt.Println(out)
+			}
+		} else {
+			fmt.Println("no events: the suite ran but entered none of the changed symbols.")
+			fmt.Println("that is itself a finding — nothing the suite ran exercises this session's code.")
+		}
 		if !*keep {
 			_ = os.RemoveAll(scratch)
 		}
 		return nil
+	}
+	if res.TestErr != nil {
+		// Events were recorded, so a test ran and then failed: the recording is
+		// real evidence of what it did on the way down.
+		fmt.Println("  the suite exited non-zero — recorded execution is still evidence")
 	}
 
 	if err := os.MkdirAll(env.Store.TracesDir(id), 0o755); err != nil {
@@ -801,4 +817,19 @@ func cmdClaims(ctx context.Context, env *Env, args []string) error {
 		return nil
 	}
 	return fmt.Errorf("usage: plum claims list|verify [session]")
+}
+
+// lastLines returns the final n non-empty-trimmed lines of s, so a failing test
+// command's output can be shown without burying the terminal in a full pytest
+// dump — the tail is where the traceback and the error line are.
+func lastLines(s string, n int) string {
+	s = strings.TrimRight(s, "\n")
+	if s == "" {
+		return ""
+	}
+	lines := strings.Split(s, "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return strings.Join(lines, "\n")
 }
