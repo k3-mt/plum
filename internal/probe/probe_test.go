@@ -100,6 +100,15 @@ func TestPytestAndJestAreNarrowedToo(t *testing.T) {
 		!strings.Contains(got, "-k test_evicts") || !strings.Contains(got, "app/cache") {
 		t.Errorf("pytest: %q ok=%v", got, ok)
 	}
+	// The command `plum init` writes for a Python repo runs pytest as a module,
+	// so pytest is the third word, not the first — it must still narrow.
+	if got, ok := ScopeCommand("python3 -m pytest", "test_records_a_failure", "app"); !ok ||
+		!strings.Contains(got, "-k test_records_a_failure") || !strings.Contains(got, "app") {
+		t.Errorf("python3 -m pytest: %q ok=%v", got, ok)
+	}
+	if _, ok := ScopeCommand("uv run pytest", "test_x", ""); !ok {
+		t.Error("uv run pytest was not recognised as pytest")
+	}
 	if got, ok := ScopeCommand("npx vitest run", "evicts", ""); !ok || !strings.Contains(got, "-t evicts") {
 		t.Errorf("vitest: %q ok=%v", got, ok)
 	}

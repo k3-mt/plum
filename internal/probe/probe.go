@@ -180,7 +180,10 @@ func ScopeCommand(base, test, pkgDir string) (string, bool) {
 			out = strings.Replace(out, "./...", "./"+strings.Trim(pkgDir, "/")+"/", 1)
 		}
 		return out, true
-	case strings.Contains(fields[0], "pytest"), len(fields) > 1 && fields[1] == "pytest":
+	case invokesPytest(fields):
+		// pytest is named anywhere in the command, not only first: `pytest`,
+		// `python3 -m pytest`, `uv run pytest`, `poetry run pytest` all count.
+		// -k selects by test name; a package directory narrows where it looks.
 		if pkgDir != "" {
 			return base + " " + pkgDir + " -k " + test, true
 		}
@@ -189,6 +192,20 @@ func ScopeCommand(base, test, pkgDir string) (string, bool) {
 		return base + " -t " + test, true
 	}
 	return base, false
+}
+
+// invokesPytest reports whether the command runs pytest, wherever pytest sits in
+// it. The command a Python project is tested with is rarely bare `pytest` — it
+// is `python -m pytest`, `python3 -m pytest`, or a runner wrapping it — and
+// looking only at the first word or two, as this once did, refuses to narrow
+// every one of those to a single test.
+func invokesPytest(fields []string) bool {
+	for _, f := range fields {
+		if strings.Contains(f, "pytest") {
+			return true
+		}
+	}
+	return false
 }
 
 func insertAfter(fields []string, at int, extra ...string) string {
