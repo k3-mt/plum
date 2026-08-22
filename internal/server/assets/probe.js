@@ -155,11 +155,15 @@ function draw() {
   drawWelcome();
   drawTrace();
 
-  // The test's own output only earns space when something went wrong. When it
-  // passed, the picture is the answer and the output is "ok  0.168s".
+  // The test's own output earns space when something went wrong OR when there
+  // is no picture to read instead: a passing run that drew nothing is exactly
+  // when its output is the only thing that explains why, so hiding it then is
+  // what makes a real run look like it never happened.
   const out = $('output');
-  const failed = !RUN.passed || RUN.error;
-  out.hidden = !failed || !(RUN.output || RUN.error);
+  const drewNothing = !((RUN.landscape && RUN.landscape.wells) || []).length
+    && RUN.why !== 'nothing chosen yet' && RUN.why !== 'not run yet' && RUN.why !== 'running';
+  const worthShowing = !RUN.passed || RUN.error || drewNothing;
+  out.hidden = !worthShowing || !(RUN.output || RUN.error);
   out.textContent = [RUN.error, RUN.output].filter(Boolean).join('\n\n');
 
   drawFixture();
@@ -223,9 +227,13 @@ function drawTrace() {
       li.textContent = 'Nothing chosen. Pick a test above and it runs.';
     } else if (RUN.error) {
       li.textContent = 'Could not run it — ' + RUN.error;
+    } else if (!RUN.recorded && !RUN.passed) {
+      li.textContent = 'The command failed before it recorded anything — the output '
+        + 'below is what it printed.';
     } else if (!RUN.recorded) {
-      li.textContent = 'The test never ran. Nothing was recorded at all, so this '
-        + 'is the command failing rather than the code — the output below says why.';
+      li.textContent = 'It ran and passed, but plum recorded nothing: no instrumented '
+        + 'function was entered. Either this test does not exercise the changed code, '
+        + 'or the tracer did not attach. The output below is the whole run.';
     } else {
       li.textContent = 'It ran, but entered none of the code this session changed.';
     }
