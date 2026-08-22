@@ -114,9 +114,13 @@ header, .why, .output, #fixture { flex: none; }
 
 .testlist .sec > summary {
   display: flex; align-items: center; gap: .5rem; cursor: pointer; list-style: none;
-  padding: .35rem .7rem; font-size: .74rem; color: var(--p-fg);
+  padding: .35rem .7rem; padding-left: calc(.7rem + var(--depth, 0) * .95rem);
+  font-size: .74rem; color: var(--p-fg);
   border-bottom: 1px solid var(--p-line); background: var(--p-raised);
 }
+/* Nested directory rows sit on a slightly darker ground than their parent so the
+   nesting reads at a glance, not only from the indent. */
+.testlist .sec .sec > summary { background: var(--p-panel); }
 .testlist .sec > summary::-webkit-details-marker { display: none; }
 .testlist .sec > summary:hover { color: var(--p-good); }
 .testlist .sec > summary .caret { flex: none; color: var(--p-ctx); width: .6rem; }
@@ -126,7 +130,7 @@ header, .why, .output, #fixture { flex: none; }
 
 .testlist .opt {
   display: block; width: 100%; text-align: left; background: none; border: 0;
-  padding: .3rem .7rem .3rem 1.9rem; font: inherit; cursor: pointer;
+  padding: .3rem .7rem .3rem calc(1.9rem + var(--depth, 0) * .95rem); font: inherit; cursor: pointer;
   border-bottom: 1px solid var(--p-panel);
 }
 .testlist .opt:hover, .testlist .opt.on { background: var(--p-raised); }

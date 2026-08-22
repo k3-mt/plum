@@ -689,9 +689,10 @@ async function loadTests() {
   drawTestList();
 }
 
-// drawTestList groups the tests by package, because which package a test lives
-// in is the first thing you know about what it covers. Two hundred flat names is
-// a list you scroll; sections are a list you navigate.
+// drawTestList lays the tests out as a collapsible directory tree, because which
+// directory a test lives in is the first thing you know about what it covers,
+// and a repo nested a few directories deep is a wall of long paths as a flat
+// list. Two hundred names you scroll; a tree you open a branch of.
 //
 // Filtering matches the name and the test's own comment, and opens the sections
 // that contain a hit — searching a tree that stays shut is searching nothing.
@@ -715,37 +716,59 @@ function drawTestList() {
     return;
   }
 
-  const groups = new Map();
+  // A directory tree, not a flat list of leaf packages. A repo nested a few
+  // deep is a wall of long identical prefixes otherwise; a tree is something you
+  // open a branch of. Each node is one path segment, holding the directories
+  // under it and the tests declared directly in it.
+  const root = { name: '', dirs: new Map(), tests: [] };
   for (const t of hits) {
-    if (!groups.has(t.package)) groups.set(t.package, []);
-    groups.get(t.package).push(t);
+    const segs = (t.package && t.package !== '.') ? t.package.split('/').filter(Boolean) : [];
+    let node = root;
+    for (const seg of segs) {
+      let child = node.dirs.get(seg);
+      if (!child) { child = { name: seg, dirs: new Map(), tests: [] }; node.dirs.set(seg, child); }
+      node = child;
+    }
+    node.tests.push(t);
   }
 
-  for (const [pkg, items] of groups) {
-    const sec = document.createElement('details');
-    sec.className = 'sec';
-    // Filtering opens what it found. With nothing typed, only the section you
-    // are already in opens, so the list starts as an overview rather than a wall.
-    sec.open = !!q || items.some((t) => t.name === current);
+  // Count every test beneath each node — the number on a closed section has to
+  // mean "this many inside", not "this many at this exact level".
+  const settle = (node) => {
+    node.count = node.tests.length;
+    for (const child of node.dirs.values()) node.count += settle(child);
+    return node.count;
+  };
+  settle(root);
 
-    const sum = document.createElement('summary');
-    const caret = document.createElement('span');
-    caret.className = 'caret';
-    caret.textContent = '\u25b8';
-    const name = document.createElement('span');
-    name.className = 'pkg';
-    name.textContent = pkg || '(root)';
-    const n = document.createElement('span');
-    n.className = 'n';
-    n.textContent = items.length;
-    sum.append(caret, name, n);
-    sec.appendChild(sum);
+  // Fold a run of directories that each hold nothing but a single subdirectory
+  // into one row: "internal/lang/dbt", not "internal" opening to "lang" opening
+  // to "dbt". A directory that actually branches, or holds its own tests, stays.
+  const collapse = (node) => {
+    for (const child of node.dirs.values()) collapse(child);
+    const entries = [...node.dirs.entries()];
+    node.dirs = new Map();
+    for (let [key, child] of entries) {
+      while (child.tests.length === 0 && child.dirs.size === 1) {
+        const [ck, only] = [...child.dirs.entries()][0];
+        only.name = child.name + '/' + only.name;
+        key = key + '/' + ck;
+        child = only;
+      }
+      node.dirs.set(key, child);
+    }
+  };
+  collapse(root);
 
-    for (const t of items) {
+  const byName = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+  const containsCurrent = (node) =>
+    node.tests.some((t) => t.name === current) || [...node.dirs.values()].some(containsCurrent);
+
+  const renderTests = (items, container) => {
+    for (const t of [...items].sort((a, b) => byName(a.name, b.name))) {
       const b = document.createElement('button');
       b.className = 'opt' + (t.name === current ? ' on' : '');
       b.type = 'button';
-
       const nm = document.createElement('span');
       nm.className = 'nm';
       nm.appendChild(mark(t.name, q));
@@ -756,19 +779,50 @@ function drawTestList() {
         nm.appendChild(h);
       }
       b.appendChild(nm);
-
       if (t.doc) {
         const doc = document.createElement('span');
         doc.className = 'doc';
         doc.appendChild(mark(t.doc, q));
         b.appendChild(doc);
       }
-
       b.onclick = () => pick(t.name);
       MATCHES.push(t.name);
-      sec.appendChild(b);
+      container.appendChild(b);
     }
-    box.appendChild(sec);
+  };
+
+  const renderDir = (node, container, depth) => {
+    const sec = document.createElement('details');
+    sec.className = 'sec';
+    sec.style.setProperty('--depth', depth);
+    // Filtering opens what it found; with nothing typed only the branch holding
+    // the current test opens, so the list starts as an overview, not a wall.
+    sec.open = !!q || containsCurrent(node);
+
+    const sum = document.createElement('summary');
+    const caret = document.createElement('span');
+    caret.className = 'caret';
+    caret.textContent = '\u25b8';
+    const name = document.createElement('span');
+    name.className = 'pkg';
+    name.textContent = node.name;
+    const n = document.createElement('span');
+    n.className = 'n';
+    n.textContent = node.count;
+    sum.append(caret, name, n);
+    sec.appendChild(sum);
+
+    for (const [, child] of [...node.dirs.entries()].sort((a, b) => byName(a[0], b[0]))) {
+      renderDir(child, sec, depth + 1);
+    }
+    renderTests(node.tests, sec);
+    container.appendChild(sec);
+  };
+
+  // Tests sitting at the repo root come first, above the directory sections.
+  renderTests(root.tests, box);
+  for (const [, child] of [...root.dirs.entries()].sort((a, b) => byName(a[0], b[0]))) {
+    renderDir(child, box, 0);
   }
 
   // The limit is worth stating where it applies, rather than in a tooltip

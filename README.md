@@ -32,14 +32,14 @@ curl -fsSL https://raw.githubusercontent.com/k3-mt/plum/main/install.sh | sh
 git clone https://github.com/k3-mt/plum && cd plum && make install
 ```
 
-All three give you the current release — **v0.2.0** at the time of writing;
+All three give you the current release — **v0.2.1** at the time of writing;
 `plum version` tells you what you actually have. Binaries for macOS, Linux and
 Windows on amd64 and arm64, with `checksums.txt`, are attached to every
 [release](https://github.com/k3-mt/plum/releases). To pin one:
 
 ```sh
-go install github.com/k3-mt/plum/cmd/plum@v0.2.0
-VERSION=v0.2.0 sh install.sh
+go install github.com/k3-mt/plum/cmd/plum@v0.2.1
+VERSION=v0.2.1 sh install.sh
 ```
 
 **Setting it up in a repository?** [`SETUP.md`](SETUP.md) is a runbook written to
