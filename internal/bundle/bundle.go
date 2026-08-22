@@ -221,5 +221,10 @@ func IsTestPath(path string) bool {
 			return true
 		}
 	}
-	return strings.HasPrefix(base, "test_")
+	// pytest's convention is test_*.py — a real Python source file. A compiled
+	// test_*.pyc in __pycache__ still carries the test's name as a bytecode
+	// constant, so without the extension check it is mistaken for the test
+	// itself and a probe narrows to __pycache__, which collects nothing.
+	return strings.HasPrefix(base, "test_") &&
+		(strings.HasSuffix(base, ".py") || strings.HasSuffix(base, ".pyi"))
 }

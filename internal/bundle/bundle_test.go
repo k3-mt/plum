@@ -20,6 +20,10 @@ func TestIsTestPathKnowsEveryConventionThePackagesHadSeparately(t *testing.T) {
 	for _, path := range []string{
 		"internal/server/server.go", "cache.py", "src/cache.ts",
 		"contest.go", "latest.js", "protest_helper.go",
+		// A compiled test in __pycache__ is not the test — narrowing a probe to
+		// it collects nothing.
+		"tests/__pycache__/test_cache.cpython-313-pytest-9.1.1.pyc",
+		"tests/__pycache__/test_cache.cpython-313.pyc",
 	} {
 		if IsTestPath(path) {
 			t.Errorf("IsTestPath(%q) = true", path)

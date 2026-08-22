@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/k3-mt/plum/internal/bundle"
 	"github.com/k3-mt/plum/internal/probe"
@@ -115,7 +114,7 @@ func packageOf(env *Env, test string) string {
 			return nil
 		}
 		if info.IsDir() {
-			if strings.HasPrefix(info.Name(), ".") && info.Name() != "." || env.Cfg.Excluded(rel) {
+			if probe.SkipDir(info.Name()) || env.Cfg.Excluded(rel) {
 				return filepath.SkipDir
 			}
 			return nil

@@ -51,7 +51,7 @@ func Discover(root string, reg *lang.Registry, testCommand string) ([]Test, erro
 			return nil
 		}
 		if info.IsDir() {
-			if skipDir(info.Name()) {
+			if SkipDir(info.Name()) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -109,9 +109,14 @@ func Discover(root string, reg *lang.Registry, testCommand string) ([]Test, erro
 	return out, nil
 }
 
-func skipDir(name string) bool {
+// SkipDir names the directories no test lives in that is worth finding: build
+// output, dependency trees, and compiled-cache directories such as __pycache__,
+// whose contents look enough like source to fool a name match. Both the test
+// discovery here and the package lookup in the CLI walk by it, so they agree.
+func SkipDir(name string) bool {
 	switch name {
-	case "node_modules", "vendor", "dist", "build", "target", "__pycache__", ".git":
+	case "node_modules", "vendor", "dist", "build", "target", "__pycache__",
+		".git", ".venv", "venv", ".tox", ".pytest_cache", ".mypy_cache":
 		return true
 	}
 	return strings.HasPrefix(name, ".") && name != "."
