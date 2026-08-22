@@ -1,10 +1,24 @@
 <!doctype html>
 <meta charset="utf-8">
 <title>plum · probe</title>
+<script>
+  // The server decides, from the app bundle on disk, whether this window is the
+  // installed application; if it is not, it never serves this page. The only
+  // case left to guard here is someone opening this URL in an ordinary browser
+  // tab — display-mode: browser — where the test window has no business. An app
+  // window, whether it draws its own title bar (overlay) or wears the system's
+  // (standalone), stays.
+  if (matchMedia('(display-mode: browser)').matches &&
+      sessionStorage.getItem('plum-unframed') !== '1') {
+    location.replace('/');
+  }
+</script>
 <link rel="stylesheet" href="/app.css">
 <link rel="stylesheet" href="/probe.css">
+<link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icon-192.png">
 <meta name="theme-color" content="#0f1113">
+<meta name="color-scheme" content="dark">
 
 <header>
   <h1>plum</h1>
@@ -26,6 +40,31 @@
 <div id="why" class="why"></div>
 
 <main class="journey">
+  <!-- The first time the application opens there is nothing to draw and nobody
+       has been told what the bar does. This stands where the journey will be,
+       once, and goes for good the moment a test is chosen. -->
+  <section id="welcome" class="welcome" hidden>
+    <p class="eyebrow">you are in</p>
+    <h2>plum is an application now. Three things to know.</h2>
+    <ol>
+      <li>
+        <b>The bar at the top is the title bar.</b>
+        <span>Choose a test in it. The test's name, its verdict and the stepper
+        live up there, beside the window controls.</span>
+      </li>
+      <li>
+        <b>Saving runs it.</b>
+        <span>Edit any file the test touches and it runs again on its own. The
+        journey below redraws with what the change did.</span>
+      </li>
+      <li>
+        <b>◀ ▶ walk the run.</b>
+        <span>Each step is a real call with its real arguments. Click one to
+        read the code it went through, and ask about it from there.</span>
+      </li>
+    </ol>
+    <button id="welcome-go" type="button">Choose a test</button>
+  </section>
   <ol id="trace" class="trace"></ol>
   <aside id="detail" class="detail">
     <div id="detail-empty" class="muted small">Click a step to read the code it went through.</div>

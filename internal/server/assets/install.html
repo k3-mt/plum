@@ -1,0 +1,172 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>plum</title>
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0f1113">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon-192.png">
+<script>
+  // Decided before anything is painted, so the installed app never flashes an
+  // invitation to install itself. The overlay is the one honest signal that this
+  // is the application rather than a shortcut wearing its clothes — Chrome's own
+  // profile goes on claiming an uninstalled app is installed, so it cannot be
+  // asked, and plum's own note would say the same thing for the same reason.
+  if (matchMedia('(display-mode: window-controls-overlay)').matches) {
+    location.replace('/probe.html');
+  }
+</script>
+<link rel="stylesheet" href="/install.css">
+
+<!-- The whole picture, for someone who has never heard of plum, with one thing
+     to do. A sticky masthead carries the ask; below it, two columns — the left
+     says, the right shows. Laid out from the design canvas "Plum Install":
+     1152 wide, 1fr + 460 columns, 64 gutter, 96 between rows. -->
+<div class="door" id="gate">
+  <header class="mast">
+    <img class="mark" src="/icon-512.png" alt="" width="24" height="24">
+    <span class="name">plum</span>
+    <span class="repo" id="repo"></span>
+    <nav class="jump" aria-label="on this page">
+      <a href="#what">what it is</a><i>·</i>
+      <a href="#where">where it lives</a><i>·</i>
+      <a href="#setup">get it working</a><i>·</i>
+      <a href="#agent">your agent</a>
+    </nav>
+    <div class="cta">
+      <p class="note" id="note">waiting for the browser…</p>
+      <button id="go" disabled>Install plum</button>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="row">
+      <section id="what">
+        <h1 id="head"><span class="n" id="n">&nbsp;</span><span id="head-rest">pieces of this codebase were changed by an agent and you have not read them yet.</span></h1>
+        <p class="lede" id="lede">That number is real — counted from the last session an agent ran here. plum exists to get it to zero.</p>
+
+        <h2>What plum is</h2>
+        <p>When an AI coding agent — Claude Code, Codex — writes your code, the tests
+        can pass while you have no idea how the code works. plum is a window that
+        stays open next to your editor. It keeps a record of what the agent changed,
+        what that code actually did when it ran, and how much of it you have not
+        read.</p>
+
+        <h2>What it does</h2>
+        <ol class="loop">
+          <li><i>1</i><span><b>Records what the agent did.</b> Every function it changed, kept with the real calls that function made when the code ran — real arguments, real values back.</span></li>
+          <li><i>2</i><span><b>Counts what you have not read.</b> One number for the repository. It only goes down when you have actually looked.</span></li>
+          <li><i>3</i><span><b>Shows a test running, step by step.</b> Pick a test and plum draws the run — which functions ran, in what order, with what values.</span></li>
+          <li><i>4</i><span><b>Reruns when you save.</b> Save a file and the same test runs again. The drawing updates in place.</span></li>
+          <li><i>5</i><span><b>Answers questions from the evidence.</b> Ask why a value changed; the answer comes from recorded runs, not from guessing.</span></li>
+        </ol>
+      </section>
+
+      <aside>
+        <!-- The window, as it will be: drawn from this repository's data, in the
+             application's own palette. Nothing on it can be out of date because
+             nothing on it is written down. -->
+        <figure class="specimen" id="specimen" aria-label="the plum window">
+          <div class="frame">
+            <div class="bar">
+              <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="bar-name">plum</span>
+              <span class="bar-pick" id="bar-pick">choose a test…</span>
+              <span class="bar-n" id="bar-n"></span>
+            </div>
+            <div class="debt">
+              <b class="count" id="count">–</b>
+              <span class="track">
+                <span class="meter"><i id="meter"></i></span>
+                <span class="of" id="of"></span>
+              </span>
+            </div>
+            <ol class="owed" id="owed"></ol>
+            <p class="more" id="more"></p>
+          </div>
+          <figcaption>The window itself, at reduced size. Every number and name here is live — read from your repository, never from this page.</figcaption>
+        </figure>
+      </aside>
+    </div>
+
+    <div class="row">
+      <section id="where">
+        <h2>Where it lives while you code</h2>
+        <p>It is meant to stay open while you work. Two ways to keep it:</p>
+        <div class="ways">
+          <div class="way">
+            <span class="way-pic" aria-hidden="true">
+              <i class="scr editor"><u></u><u></u><u></u><u></u></i>
+              <i class="scr plum"><em>76</em><u></u><u></u></i>
+            </span>
+            <b>On a second screen, opened out.</b>
+            <span>The full window: the count, the list, and the drawing of the current test.</span>
+          </div>
+          <div class="way">
+            <span class="way-pic" aria-hidden="true">
+              <i class="scr editor wide"><u></u><u></u><u></u><u></u></i>
+              <i class="scr strip"><em>76</em></i>
+            </span>
+            <b>As a narrow panel beside the editor.</b>
+            <span>It narrows to the number alone, large enough to read at a glance; the rest unfolds when you widen it.</span>
+          </div>
+        </div>
+        <p>Either way it follows along: when the agent finishes more work, the window moves to it on its own.</p>
+      </section>
+
+      <aside id="agent">
+        <h2>Let your agent use it</h2>
+        <p>Your agent can use the same evidence. One command, run once on this machine, teaches it how:</p>
+        <pre class="cmd"><code>plum agent install</code></pre>
+        <p class="small">Adds a short block to the instructions file your agent already reads. Your own text in it is untouched.</p>
+        <p class="from">From then on your agent will:</p>
+        <ul class="will">
+          <li>offer to set plum up — never without asking</li>
+          <li>ask "want to see what changed, visualised?" when it finishes a piece of work</li>
+          <li>use plum's recorded runs when you ask how the code behaves</li>
+          <li>never run anything slow on its own</li>
+        </ul>
+      </aside>
+    </div>
+
+    <section class="setup" id="setup">
+      <h2>Get it working on a repository</h2>
+      <p>The easiest way is to ask your agent. Paste this into Claude Code or Codex, in the repository you want plum on:</p>
+      <pre class="cmd ask"><code id="ask-text">Install plum (go install github.com/k3-mt/plum/cmd/plum@latest, or curl -fsSL https://raw.githubusercontent.com/k3-mt/plum/main/install.sh | sh), then run plum init and plum hooks install in this repository, then plum agent install, then plum watch. Tell me what each one printed.</code><button class="copy" id="copy" type="button">copy</button></pre>
+      <p class="small">Your agent will ask before it writes anything. plum needs git, and works on Go, Python, JavaScript, TypeScript and dbt.</p>
+
+      <details class="byhand">
+        <summary>Or by hand — four commands</summary>
+        <div class="steps">
+          <div class="step">
+            <div class="lead"><i>1</i><b>Get the plum command.</b></div>
+            <pre><code>go install github.com/k3-mt/plum/cmd/plum@latest</code></pre>
+            <span class="hint">Or: <code>curl -fsSL https://raw.githubusercontent.com/k3-mt/plum/main/install.sh | sh</code></span>
+          </div>
+          <div class="step">
+            <div class="lead"><i>2</i><b>Set up the repository.</b></div>
+            <pre><code>plum init &amp;&amp; plum hooks install</code></pre>
+            <span class="hint">Run inside the repository. Writes <code>.plum/config.toml</code> and a hook that records each agent turn. Touches nothing else.</span>
+          </div>
+          <div class="step">
+            <div class="lead"><i>3</i><b>Teach your agent.</b></div>
+            <pre><code>plum agent install</code></pre>
+            <span class="hint">The same command as above — once per machine, not per repository.</span>
+          </div>
+          <div class="step">
+            <div class="lead"><i>4</i><b>Leave it watching.</b></div>
+            <pre><code>plum watch</code></pre>
+            <span class="hint">Opens this window and keeps it current — it reruns every time you save.</span>
+          </div>
+        </div>
+      </details>
+    </section>
+  </main>
+
+  <footer class="fine" id="fine">
+    <span class="host">serving <span id="where-host"></span></span>
+    <span class="about">Installing gives plum its own window and a place in your dock. Everything keeps running locally, at the address on the left.</span>
+    <a href="#" id="anyway">continue without installing</a>
+  </footer>
+</div>
+
+<script src="/install.js"></script>

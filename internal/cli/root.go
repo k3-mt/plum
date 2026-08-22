@@ -67,6 +67,7 @@ func commands() []command {
 		{"claims", "list|verify — executable claims", cmdClaims},
 		{"auto", "capture a session if anything changed — what the hooks call", cmdAuto},
 		{"hooks", "install|uninstall|status — wire capture into Claude Code and git", cmdHooks},
+		{"agent", "install|uninstall|status — teach Claude Code and Codex to offer plum in every session", cmdAgent},
 		{"gate", "exit non-zero when the session needs attention (for hooks)", cmdGate},
 		{"version", "print the version", cmdVersion},
 	}
@@ -82,10 +83,16 @@ func Main(ctx context.Context, args []string) int {
 		if c.name != name {
 			continue
 		}
-		env, err := newEnv(ctx)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "plum:", err)
-			return 1
+		// `plum agent` writes to the user's home, not to a repository, and is
+		// most useful run from wherever they happen to be. It is the one command
+		// that must not fail for want of a .git directory.
+		var env *Env
+		if c.name != "agent" {
+			var err error
+			if env, err = newEnv(ctx); err != nil {
+				fmt.Fprintln(os.Stderr, "plum:", err)
+				return 1
+			}
 		}
 		if err := c.run(ctx, env, args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, "plum:", err)

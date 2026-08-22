@@ -30,10 +30,14 @@ func cmdInit(ctx context.Context, env *Env, args []string) error {
 	}
 	cfgPath := filepath.Join(dir, "config.toml")
 	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
-		if err := os.WriteFile(cfgPath, []byte(config.DefaultTOML), 0o644); err != nil {
+		// Fit the config to the repository rather than assume Go: a Python repo
+		// gets `languages = ["python"]` and a pytest command, so `plum trace`
+		// instruments something on the first run instead of reporting nothing.
+		langs, cmd := config.Detect(env.Cfg.Root)
+		if err := os.WriteFile(cfgPath, []byte(config.InitTOML(env.Cfg.Root)), 0o644); err != nil {
 			return err
 		}
-		fmt.Println("wrote", rel(env, cfgPath))
+		fmt.Printf("wrote %s — detected %s, test command %q\n", rel(env, cfgPath), strings.Join(langs, ", "), cmd)
 	} else {
 		fmt.Println("kept", rel(env, cfgPath), "(already present)")
 	}

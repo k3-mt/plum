@@ -171,8 +171,20 @@ func New(cfg *config.Config, b *bundle.Bundle, l trace.Landscape, ev []trace.Eve
 		// is selected showed the reader the wrong page and hid the picker that
 		// would have fixed it.
 		if (s.Probe != nil || s.Discover != nil) && r.URL.Path == "/" {
+			// Install page or test window, decided by a fact on disk rather than
+			// by anything the browser reports: is plum installed for this
+			// window's address? The browser cannot be trusted to say — its
+			// profile calls an uninstalled app installed, and an installed app in
+			// standalone is indistinguishable from a shortcut — but the app
+			// bundle is deleted on uninstall, so its presence is the honest
+			// signal. Installed → the test window, no offer to install what is
+			// already installed. Not installed → the invitation.
 			r = r.Clone(r.Context())
-			r.URL.Path = "/probe.html"
+			if IsInstalled("http://" + r.Host) {
+				r.URL.Path = "/probe.html"
+			} else {
+				r.URL.Path = "/install.html"
+			}
 		}
 		files.ServeHTTP(w, r)
 	})
@@ -347,8 +359,15 @@ func (s *Server) Serve(ctx context.Context, addr string, open bool) error {
 	srv := &http.Server{Handler: s.mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() { _ = srv.Serve(ln) }()
 	if open {
-		// A frame if one can be had, a tab if not. Never nothing.
-		if !s.window || !openWindow(url, s.profileDir) {
+		// The installed application first, if there is one; then the shortcut
+		// frame; then a tab. Never nothing. The installed app is checked here
+		// too — not only in OpenWindow — because this is the path the first
+		// `plum watch` in a repository takes, and it is the one most likely to
+		// run just after an install.
+		switch {
+		case s.window && openInstalledApp(url):
+		case s.window && openWindow(url, s.profileDir):
+		default:
 			openBrowser(url)
 		}
 	}

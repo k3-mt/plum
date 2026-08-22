@@ -32,14 +32,14 @@ curl -fsSL https://raw.githubusercontent.com/k3-mt/plum/main/install.sh | sh
 git clone https://github.com/k3-mt/plum && cd plum && make install
 ```
 
-All three give you the current release — **v0.1.1** at the time of writing;
+All three give you the current release — **v0.2.0** at the time of writing;
 `plum version` tells you what you actually have. Binaries for macOS, Linux and
 Windows on amd64 and arm64, with `checksums.txt`, are attached to every
 [release](https://github.com/k3-mt/plum/releases). To pin one:
 
 ```sh
-go install github.com/k3-mt/plum/cmd/plum@v0.1.1
-VERSION=v0.1.1 sh install.sh
+go install github.com/k3-mt/plum/cmd/plum@v0.2.0
+VERSION=v0.2.0 sh install.sh
 ```
 
 **Setting it up in a repository?** [`SETUP.md`](SETUP.md) is a runbook written to
@@ -200,7 +200,15 @@ made-up Ruby adapter end to end to keep that honest.
 ```sh
 plum hooks install     # Claude Code Stop hook + git post-commit
 plum hooks status
+plum agent install     # teach Claude Code and Codex to offer plum, in every repo
 ```
+
+`plum hooks` is per repository. `plum agent` is per machine: it adds one marked
+block to `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md` telling the agent to
+offer `plum init` in a repository that lacks it, to ask *"want to see what
+changed, visualised?"* when it finishes work, and never to run anything slow
+unprompted. Your own text in those files is kept as it is; `plum agent
+uninstall` removes the block exactly.
 
 Two attachment points, because a session ends in two different ways:
 

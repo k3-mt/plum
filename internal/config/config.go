@@ -1,8 +1,10 @@
 package config
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -314,3 +316,142 @@ route = "tmux"
 tmux_target     = ""
 timeout_seconds = 300
 `
+
+// Detect works out what a repository is, so `plum init` fits the repo it runs in
+// rather than assuming Go. It reports the languages present and a test command
+// that suits the first of them. A repo with none of the markers falls back to
+// Go — which is what plum itself is, and the safe default for the tool's own
+// tree.
+//
+// Marker files are checked first because they are cheap and definitive; only a
+// repo that carries none of them is scanned by file extension, and that scan is
+// bounded so init stays fast on a large tree.
+func Detect(root string) (languages []string, testCommand string) {
+	has := func(names ...string) bool {
+		for _, n := range names {
+			if _, err := os.Stat(filepath.Join(root, n)); err == nil {
+				return true
+			}
+		}
+		return false
+	}
+	seen := map[string]bool{}
+	add := func(lang string) {
+		if !seen[lang] {
+			seen[lang] = true
+			languages = append(languages, lang)
+		}
+	}
+
+	if has("go.mod") {
+		add("go")
+	}
+	if has("pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile") {
+		add("python")
+	}
+	if has("dbt_project.yml", "dbt_project.yaml") {
+		add("dbt")
+	}
+	if has("tsconfig.json") {
+		add("typescript")
+	} else if has("package.json") {
+		add("javascript")
+	}
+
+	// Nothing declared itself. Look at what files are actually here.
+	if len(languages) == 0 {
+		ext := scanExtensions(root)
+		if ext[".go"] {
+			add("go")
+		}
+		if ext[".py"] {
+			add("python")
+		}
+		if ext[".ts"] || ext[".tsx"] {
+			add("typescript")
+		} else if ext[".js"] {
+			add("javascript")
+		}
+	}
+	if len(languages) == 0 {
+		add("go")
+	}
+	return languages, testCommandFor(languages[0])
+}
+
+// testCommandFor is the command each kind of project is most often tested with.
+// It is a starting point the config comment already tells the reader to tune,
+// not a guarantee the command exists — a Python repo without pytest still gets
+// the pytest line, because it is the right thing to change rather than to guess
+// around.
+func testCommandFor(lang string) string {
+	switch lang {
+	case "python":
+		return "python3 -m pytest"
+	case "typescript", "javascript":
+		return "npm test"
+	case "dbt":
+		return "dbt build"
+	default:
+		return "go test ./..."
+	}
+}
+
+// scanExtensions notes which source extensions appear in the tree, skipping the
+// directories that never hold the repo's own surface and stopping after enough
+// files to answer the question — init must not walk a monorepo end to end.
+func scanExtensions(root string) map[string]bool {
+	found := map[string]bool{}
+	skip := map[string]bool{
+		".git": true, ".plum": true, "vendor": true,
+		"node_modules": true, "dist": true, "build": true,
+	}
+	const budget = 5000
+	seen := 0
+	_ = filepath.WalkDir(root, func(_ string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if skip[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if seen++; seen > budget {
+			return filepath.SkipAll
+		}
+		switch filepath.Ext(d.Name()) {
+		case ".go":
+			found[".go"] = true
+		case ".py":
+			found[".py"] = true
+		case ".ts":
+			found[".ts"] = true
+		case ".tsx":
+			found[".tsx"] = true
+		case ".js":
+			found[".js"] = true
+		}
+		return nil
+	})
+	return found
+}
+
+// InitTOML is the config `plum init` writes: the default template with the
+// languages and test command set to what the repository actually is.
+func InitTOML(root string) string {
+	langs, cmd := Detect(root)
+	s := DefaultTOML
+	s = strings.Replace(s, `languages    = ["go"]`, "languages    = "+tomlList(langs), 1)
+	s = strings.Replace(s, `test_command = "go test ./..."`, "test_command = "+strconv.Quote(cmd), 1)
+	return s
+}
+
+func tomlList(xs []string) string {
+	q := make([]string, len(xs))
+	for i, x := range xs {
+		q[i] = strconv.Quote(x)
+	}
+	return "[" + strings.Join(q, ", ") + "]"
+}

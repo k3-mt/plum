@@ -105,6 +105,10 @@ function draw() {
 
   if (RUN.error) {
     verdict('fail', '● could not run');
+  } else if (RUN.why === 'nothing chosen yet') {
+    // Not a verdict. Red "did not run" before anything was asked to run reads
+    // as something having gone wrong, on the one screen where nothing has.
+    verdict('', '');
   } else if (RUN.why === 'not run yet') {
     verdict('running', '\u25cb not run yet');
   } else if (RUN.why === 'running') {
@@ -122,7 +126,9 @@ function draw() {
 
   $('why').innerHTML = '';
   if (RUN.why === 'nothing chosen yet') {
-    $('why').textContent = 'choose a test above and it runs';
+    // The welcome, when it is showing, says this at length; the strip saying
+    // it again in short is the same sentence twice on one screen.
+    $('why').textContent = wantsWelcome() ? '' : 'choose a test above and it runs';
   } else if (RUN.why === 'running') {
     $('why').textContent = 'running ' + (RUN.test || '') + '\u2026';
   } else if (RUN.why && RUN.why !== 'not run yet') {
@@ -146,6 +152,7 @@ function draw() {
     $('why').textContent = 'press run, or save a file it touches';
   }
 
+  drawWelcome();
   drawTrace();
 
   // The test's own output only earns space when something went wrong. When it
@@ -802,6 +809,8 @@ function openList(open) {
 async function pick(name) {
   openList(false);
   $('filter').value = name;
+  // Choosing a test is the thing the welcome was there to get you to do.
+  welcomed();
   if (RUN && name === RUN.test) return;
   verdict('running', '\u25cb running ' + name + '\u2026');
   const res = await fetch('/api/probe/select', {
@@ -820,6 +829,32 @@ async function pick(name) {
   RUN = await res.json();
   draw();
   loadTests(); // the chosen test now has a handle, and the list should say so
+}
+
+// First run, once.
+// The welcome stands in for the journey the first time the application opens
+// with nothing chosen, and never again after a test has been picked. Kept in
+// localStorage because it is a fact about this reader on this machine — the
+// same place Chrome keeps the window position — and not about any session.
+const WELCOME_KEY = 'plum-welcomed';
+
+function wantsWelcome() {
+  if (!RUN || RUN.why !== 'nothing chosen yet') return false;
+  try { return localStorage.getItem(WELCOME_KEY) !== '1'; } catch (_) { return false; }
+}
+
+function welcomed() {
+  try { localStorage.setItem(WELCOME_KEY, '1'); } catch (_) {}
+  $('welcome').hidden = true;
+}
+
+function drawWelcome() {
+  const w = $('welcome');
+  const show = wantsWelcome();
+  w.hidden = !show;
+  if (show) {
+    $('welcome-go').onclick = () => { $('filter').focus(); };
+  }
 }
 
 function drawStepper() {

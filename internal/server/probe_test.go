@@ -91,13 +91,27 @@ func TestASessionWindowHasNoProbeEndpoints(t *testing.T) {
 // A window that can choose a test is a test window before anything is chosen.
 // Serving the session page until a selection was made showed the reader the
 // wrong page and hid the picker that would have fixed it.
+//
+// The root of such a window is now the invitation to install rather than the
+// picker itself: the picker lives in a title bar that only the installed
+// application has, so it is reached through install.html, which stands aside
+// the moment the window is that application. What must not happen — then or
+// now — is the session page.
 func TestAPickerWindowIsATestWindowBeforeAnythingIsChosen(t *testing.T) {
 	s, _ := testServer(t)
 	s.Discover = func() ([]probe.Test, error) { return nil, nil }
 
 	rec := recorderFor(s, "/")
+	if !strings.Contains(rec.Body.String(), "id=\"go\"") {
+		t.Error("/ served something other than the install page")
+	}
+	if strings.Contains(rec.Body.String(), "id=\"svgwrap\"") {
+		t.Error("/ served the session page; a window that can pick tests must not")
+	}
+
+	rec = recorderFor(s, "/probe.html")
 	if !strings.Contains(rec.Body.String(), "id=\"testlist\"") {
-		t.Error("/ served the session page; a window that can pick tests must show the picker")
+		t.Error("/probe.html did not serve the picker")
 	}
 
 	run := decodeProbe(t, s, "/api/probe")

@@ -235,6 +235,32 @@ header, .why, .output, #fixture { flex: none; }
 .trace .cost { flex: none; width: 3.4rem; text-align: right; color: var(--p-dim); font-size: .72rem; }
 .trace .empty { color: var(--p-dim); }
 
+/* The welcome. It takes the journey's place, so it is laid out like a thing to
+   read rather than a dialog: the same column, the same left edge, a little
+   more air. It is gone the moment there is a journey to draw instead. */
+.welcome { padding: 1.6rem 1.2rem 1.2rem; max-width: 38rem; }
+.welcome[hidden] { display: none; }
+.welcome .eyebrow {
+  margin: 0 0 .4rem; font-size: .66rem; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--p-good); font-weight: 600;
+}
+.welcome h2 {
+  margin: 0 0 1.1rem; font-size: 1.05rem; font-weight: 600;
+  color: var(--p-fg); line-height: 1.3; letter-spacing: -.005em;
+  text-transform: none;
+}
+.welcome ol { margin: 0 0 1.3rem; padding-left: 1.5rem; display: grid; gap: .8rem; }
+.welcome li { font-size: .8rem; line-height: 1.55; color: var(--p-dim); }
+.welcome li::marker { color: var(--p-good); font-weight: 600; }
+.welcome b { display: block; color: var(--p-fg); font-weight: 600; margin-bottom: .1rem; }
+.welcome button {
+  background: var(--p-good); color: #14180d; border-color: var(--p-good);
+  font-weight: 600; padding: .45rem 1rem;
+}
+.welcome button:hover { filter: brightness(1.08); color: #14180d; }
+/* The journey's own empty line says the same thing the welcome does, and once. */
+.welcome:not([hidden]) + .trace .empty { display: none; }
+
 /* The compression ladder. Each rung removes the least load-bearing thing left.
    The leg prose goes first because its cost is kept beside it, and the cost is
    the part you cannot reconstruct by looking at the stations. */

@@ -1,4 +1,9 @@
+/* Tell the browser this is a dark surface, not just a page painted dark. It is
+   what decides the colour of the scrollbars, the form controls, and the frame
+   the window is drawn in before any of our own CSS has arrived — all of which
+   would otherwise be light-mode furniture sitting in a near-black room. */
 :root {
+  color-scheme: dark;
   --bg: #0f1113; --fg: #e6e3dd; --dim: #8b8b86; --line: #2a2d31;
   --enter: #7fb5d5; --resume: #43596b; --risk: #d98b6a; --accent: #b6d97f;
   --unwind: #d9666a; --context: #4a4f55; --join: #9d8ec9;
@@ -83,6 +88,46 @@ body.peripheral .debt .count { font-size: clamp(3rem, 22vw, 6rem); }
 body.peripheral .debt .trend { font-size: 1.4rem; }
 body.peripheral .debt .meter { width: 100%; height: 10px; }
 body.peripheral .debt .what { font-size: .8rem; line-height: 1.4; }
+
+/* The window's own title bar, drawn by us — when the browser lets us have it.
+   Window controls overlay removes the title bar and hands the page the whole
+   frame, leaving only the OS buttons floating on top, so the header below IS
+   the title bar, in this palette rather than the browser's.
+   Measured, not assumed: a --app= shortcut window does NOT get this. Chrome
+   reads `display: standalone` from the manifest and ignores display_override
+   there, reporting display-mode: standalone and a zero-size titlebar area, so
+   everything below stays inert and the header keeps its ordinary padding. It
+   takes effect only when plum has actually been installed as an app, which is
+   a thing the reader does, not a thing `plum watch` can do for them.
+   The cost of taking the frame is having to keep out of the buttons' way. The
+   titlebar-area-* variables are the browser telling us where they are: on macOS
+   an inset on the left, on Windows and Linux one on the right. We pad by
+   whichever it turns out to be rather than assuming a side.
+   `body header` rather than `header` on purpose — probe.css loads after this
+   file and sets padding as a shorthand, which would otherwise win the tie. */
+@media (display-mode: window-controls-overlay) {
+  body header {
+    -webkit-app-region: drag; app-region: drag;
+    min-height: env(titlebar-area-height, 33px);
+    background: var(--bg);
+    padding-left: calc(env(titlebar-area-x, 0px) + 1rem);
+    padding-right: calc(100% - env(titlebar-area-width, 100%) - env(titlebar-area-x, 0px) + 1rem);
+  }
+  /* Dragging a window by its furniture is not a gesture anyone expects to also
+     press a button, so everything that responds to a click opts back out. */
+  body header button, body header input, body header select, body header a,
+  body header .picker, body header .testlist, body header .debt {
+    -webkit-app-region: no-drag; app-region: no-drag;
+  }
+  /* Narrow and parked on a second screen, the header is a column filling the
+     window and there is nothing to its right to shift, so the clearance goes
+     above the number instead of beside it. */
+  body.peripheral header {
+    padding-left: 1rem;
+    padding-right: 1rem;
+    padding-top: calc(env(titlebar-area-height, 33px) + .4rem);
+  }
+}
 button {
   background: transparent; color: var(--fg); border: 1px solid var(--line);
   padding: .35rem .7rem; border-radius: 3px; cursor: pointer; font: inherit; font-size: .8rem;

@@ -3,8 +3,10 @@
   "short_name": "plum",
   "description": "Comprehension debt for agent-written code, while it is being written.",
   "start_url": "/",
+  "id": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
   "background_color": "#0f1113",
   "theme_color": "#0f1113",
   "icons": [

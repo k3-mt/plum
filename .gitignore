@@ -3,3 +3,4 @@ dist/
 .plum/sessions/*/traces/
 .plum/current-session.json
 .plum/journal/
+.claude/

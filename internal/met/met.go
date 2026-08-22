@@ -138,18 +138,22 @@ func rank(b *bundle.Bundle, sym bundle.Symbol) (int, string) {
 		// Test code is changed code and belongs on the list, but it is never
 		// what breaks somebody else. An exported Test function outranking a
 		// changed signature would be the order backwards.
-		return 5, "test code"
+		return 5, "a test"
 
+	// The reasons are written for the person who has to act on them, not for
+	// the tool. "Signature changed on an existing export" is exact and means
+	// nothing to most of the people the list is for; "other code calls this,
+	// and it changed" is what they need to know.
 	case sym.Exported && sym.Change == "modified":
 		// The highest-signal event the tool produces: it breaks callers nobody
 		// looked at.
-		return 0, "signature changed on an existing export"
+		return 0, "other code calls this, and it changed"
 	case risky:
-		return 1, "risk marker"
+		return 1, "flagged as risky"
 	case sym.Exported:
-		return 2, "new public surface"
+		return 2, "new, and other code can call it"
 	case !sym.Tested:
-		return 3, "no test execution entered it"
+		return 3, "no test runs through it"
 	default:
 		return 4, "changed"
 	}

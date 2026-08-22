@@ -1,0 +1,225 @@
+/* The front door.
+   Built from the design canvas "Plum Install" (artboard 1a at 1440, 1b at 900,
+   1c at 420, and the state sheet): its measurements are used as given, in px
+   where it gave px. The palette is the application's own, so the thing being
+   asked for looks like the page that asks.
+   Stated here rather than pulled from app.css: that file dresses the session and
+   probe pages, and `main`, `.gate`, `.debt` all already mean something there. */
+:root {
+  color-scheme: dark;
+  --bg: #0f1113; --panel: #15181b; --deep: #0b0d0f;
+  --fg: #e6e3dd; --dim: #8b8b86; --faint: #5c5c58; --line: #2a2d31;
+  --enter: #7fb5d5; --accent: #b6d97f; --risk: #d98b6a; --context: #4a4f55;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 14px/1.5 ui-monospace, "SF Mono", Menlo, "JetBrains Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+h1, h2, p, ol, ul, figure, pre { margin: 0; }
+button { font: inherit; cursor: pointer; }
+code { font: inherit; }
+.small { font-size: 12px; line-height: 1.7; color: var(--faint); }
+
+/* The masthead stays. The button is the one thing to do and it is never more
+   than a glance away, whatever part of the page is being read. */
+.mast {
+  position: sticky; top: 0; z-index: 2;
+  height: 56px; display: flex; align-items: center; gap: 24px; padding: 0 32px;
+  background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.mark { border-radius: 6px; flex: none; }
+.name { font-weight: 600; font-size: 14px; margin-left: -14px; }
+.repo { font-size: 12px; color: var(--dim); margin-left: -14px; }
+.repo:empty { display: none; }
+.jump { display: flex; align-items: center; gap: 10px; font-size: 12px; white-space: nowrap; }
+.jump a { color: var(--dim); text-decoration: none; }
+.jump a:hover { color: var(--fg); }
+.jump i { color: var(--faint); font-style: normal; }
+.cta { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+.note { font-size: 12px; color: var(--faint); white-space: nowrap; }
+.note.warn { color: var(--risk); }
+/* Dim until the browser has actually offered, because a button that looks
+   ready and is not is worse than one that says it is waiting. */
+#go {
+  background: var(--accent); color: var(--bg); border: 1px solid var(--accent);
+  border-radius: 6px; padding: 7px 16px; font-weight: 600; font-size: 13px; white-space: nowrap;
+}
+#go:hover:not(:disabled) { background: #c7e592; border-color: #c7e592; }
+#go:disabled { background: transparent; color: var(--dim); border-color: var(--line); cursor: default; font-weight: 400; }
+
+.page { max-width: 1152px; margin: 0 auto; padding: 72px 32px 0; }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) 460px; gap: 64px; align-items: start; }
+.row + .row, .setup { margin-top: 96px; }
+
+h2 {
+  font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--accent); font-weight: 600; margin: 0 0 14px;
+}
+section > p, aside > p { font-size: 13px; line-height: 1.7; color: var(--dim); max-width: 60ch; }
+#what > p + h2, #what > ol + h2 { margin-top: 44px; }
+#what > .lede + h2 { margin-top: 52px; }
+#what > h2 + p { font-size: 14px; max-width: 58ch; }
+#where > h2 + p { margin-bottom: 24px; }
+#where > .ways + p { margin-top: 24px; }
+
+/* The opening is the number. Set large and in the meter's orange so that it
+   reads before anything else on the page, the way it is meant to from across
+   a room once the window exists. */
+h1 { font-size: 25px; font-weight: 600; letter-spacing: -.01em; line-height: 1.45; max-width: 36ch; }
+h1 .n { font-size: 44px; color: var(--risk); line-height: 1; vertical-align: -5px; margin-right: 12px; }
+#what.clear h1 .n { color: var(--accent); }
+.lede { margin-top: 18px !important; }
+
+/* Numbered with quiet digits, not bold markers: the lead of each line is the
+   emphasis, and two emphases on one line is none. */
+.loop { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 15px; max-width: 60ch; }
+.loop li { display: flex; gap: 14px; font-size: 13px; line-height: 1.7; color: var(--dim); }
+.loop li i { color: var(--faint); font-style: normal; min-width: 14px; }
+.loop b { color: var(--fg); font-weight: 600; }
+
+/* The specimen: a real miniature of the application rather than a screenshot,
+   drawn from the same data the window would be. */
+.frame {
+  background: linear-gradient(#17191c, #131518); border: 1px solid var(--line);
+  border-radius: 10px; box-shadow: 0 24px 48px rgba(0, 0, 0, .45); overflow: hidden;
+}
+.bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.lights { display: flex; gap: 6px; }
+.lights i { width: 8px; height: 8px; border-radius: 50%; }
+.lights i:first-child { background: #d9666a; }
+.lights i:nth-child(2) { background: #d9b36a; }
+.lights i:last-child { background: var(--accent); }
+.bar-name { font-size: 12px; font-weight: 600; }
+.bar-pick {
+  flex: 1; min-width: 0; background: var(--deep); border: 1px solid var(--line);
+  border-radius: 6px; padding: 5px 10px; font-size: 12px; color: var(--faint);
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.bar-n { font-size: 12px; color: var(--dim); white-space: nowrap; }
+.debt { display: flex; align-items: center; gap: 14px; padding: 16px; border-bottom: 1px solid var(--line); }
+.debt .count { font-size: 28px; font-weight: 600; color: var(--risk); line-height: 1; }
+.frame.clear .count { color: var(--accent); }
+.track { flex: 1; min-width: 0; }
+.meter { display: block; height: 4px; background: var(--context); border-radius: 2px; overflow: hidden; }
+.meter i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 2px; transition: width .9s cubic-bezier(.2, .7, .2, 1); }
+.of { display: block; font-size: 11px; color: var(--dim); margin-top: 7px; }
+.owed { list-style: none; padding: 0; }
+.owed li {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
+  padding: 13px 16px; border-bottom: 1px solid var(--line);
+}
+.owed li > span:first-child { min-width: 0; }
+.owed .sym { display: block; font-size: 13px; color: var(--enter); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.owed .file { display: block; font-size: 11px; color: var(--faint); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.owed .why { font-size: 11px; color: var(--risk); text-align: right; line-height: 1.5; max-width: 44%; flex-shrink: 0; }
+.owed li.none { display: block; font-size: 12px; color: var(--dim); }
+.more { padding: 12px 16px; font-size: 12px; color: var(--faint); }
+.more:empty { display: none; }
+figcaption { font-size: 12px; line-height: 1.7; color: var(--dim); margin: 16px 4px 0; }
+
+/* Each way of keeping it, as a small picture of the desk: an editor (grey
+   lines of text) and plum (the number), at the proportions they would be. */
+.ways { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+.way { display: grid; align-content: start; font-size: 13px; line-height: 1.7; color: var(--dim); }
+.way b { color: var(--fg); font-weight: 600; margin-bottom: 6px; }
+.way-pic { display: flex; gap: 6px; height: 64px; margin-bottom: 14px; }
+.scr {
+  display: flex; flex-direction: column; gap: 6px; padding: 9px 8px;
+  background: var(--deep); border: 1px solid var(--line); border-radius: 4px; font-style: normal;
+}
+.scr u { display: block; height: 3px; border-radius: 2px; background: var(--context); }
+.scr u:nth-of-type(1) { width: 70%; } .scr u:nth-of-type(2) { width: 50%; }
+.scr u:nth-of-type(3) { width: 62%; } .scr u:nth-of-type(4) { width: 40%; }
+.scr em { font-size: 12px; font-weight: 600; color: var(--risk); line-height: 1; font-style: normal; }
+.editor { width: 80px; } .editor.wide { width: 130px; }
+.plum { width: 80px; padding: 8px; }
+.strip { width: 26px; padding: 8px 0 0; align-items: center; }
+.strip em { font-size: 9px; }
+
+/* Things to type. */
+.cmd {
+  background: var(--deep); border: 1px solid var(--line); border-radius: 8px;
+  padding: 12px 14px; font-size: 13px; line-height: 1.6; color: var(--fg);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.cmd.ask { position: relative; padding: 18px 96px 18px 20px; line-height: 1.8; margin-top: 18px; }
+.copy {
+  position: absolute; top: 10px; right: 10px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 5px;
+  color: var(--dim); font-size: 11px; padding: 4px 12px;
+}
+.copy:hover, .copy.did { color: var(--accent); border-color: var(--accent); }
+#agent > .cmd { margin-top: 16px; }
+#agent > .small, .setup > .small { margin-top: 10px; }
+.from { margin: 22px 0 10px !important; }
+.will { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 9px; font-size: 13px; line-height: 1.6; color: var(--dim); }
+.will li { display: flex; gap: 10px; }
+.will li::before { content: '—'; color: var(--context); }
+
+/* By hand, folded. Present for the reader who wants to see every command; out
+   of the way for the one who just pasted the line above into their agent. */
+.setup > p:first-of-type { max-width: 70ch; }
+.setup > .small { max-width: none; }
+.byhand { margin-top: 32px; }
+.byhand > summary { cursor: pointer; font-size: 13px; color: var(--dim); list-style: none; }
+.byhand > summary::-webkit-details-marker { display: none; }
+.byhand > summary::before { content: '▸ '; }
+.byhand[open] > summary::before { content: '▾ '; }
+.byhand > summary:hover { color: var(--fg); }
+.steps { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 24px; }
+.lead { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 13px; }
+.lead i {
+  width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 50%;
+  color: var(--accent); font-size: 11px; font-style: normal;
+  display: flex; align-items: center; justify-content: center;
+}
+.lead b { font-weight: 600; }
+.step pre {
+  background: var(--deep); border: 1px solid var(--line); border-radius: 8px;
+  padding: 12px 14px; font-size: 13px; overflow-wrap: anywhere; white-space: pre-wrap;
+}
+.hint { display: block; font-size: 12px; line-height: 1.6; color: var(--dim); margin-top: 8px; overflow-wrap: anywhere; }
+
+.fine {
+  max-width: 1152px; margin: 96px auto 0; padding: 20px 32px 28px;
+  border-top: 1px solid var(--line);
+  display: flex; align-items: baseline; gap: 24px; font-size: 12px;
+}
+.host { color: var(--faint); white-space: nowrap; }
+.about { color: var(--dim); flex: 1; }
+/* Present, not offered. It exists so that a browser which cannot install
+   anything is a detour rather than a dead end. */
+.fine a { color: var(--faint); text-decoration: underline; text-decoration-color: var(--line); white-space: nowrap; }
+.fine a:hover { color: var(--dim); }
+
+/* Installed. The ask is gone; the page stays as a reference. */
+.door.done .cta { display: none; }
+.door.done h1 { color: var(--accent); }
+.door.done h1 .n { display: none; }
+
+/* 900: one column, the specimen under the opener; the masthead keeps the ask
+   and drops the links. */
+@media (max-width: 1000px) {
+  .mast { gap: 16px; padding: 0 24px; }
+  .jump, .note { display: none; }
+  .page { padding: 48px 24px 0; }
+  .row { grid-template-columns: 1fr; gap: 48px; }
+  .row + .row, .setup { margin-top: 64px; }
+  .steps { grid-template-columns: 1fr; }
+  .fine { padding: 20px 24px 28px; flex-wrap: wrap; }
+}
+/* 420: everything stacks; the number stays the largest thing on the page. */
+@media (max-width: 520px) {
+  .mast { padding: 0 16px; }
+  .page { padding: 32px 16px 0; }
+  h1 { font-size: 20px; }
+  h1 .n { font-size: 36px; }
+  .ways { grid-template-columns: 1fr; }
+  .owed li { flex-direction: column; gap: 4px; }
+  .owed .why { text-align: left; max-width: none; }
+  .cmd.ask { padding: 14px 16px 44px; }
+  .copy { top: auto; bottom: 10px; }
+  .fine { flex-direction: column; gap: 10px; }
+}
